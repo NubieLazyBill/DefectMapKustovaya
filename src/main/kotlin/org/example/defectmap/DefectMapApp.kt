@@ -8,9 +8,11 @@ import javafx.stage.Stage
 class HelloApplication : Application() {
     override fun start(stage: Stage) {
         val fxmlLoader = FXMLLoader(HelloApplication::class.java.getResource("hello-view.fxml"))
-        val scene = Scene(fxmlLoader.load(), 320.0, 240.0)
-        stage.title = "Hello!"
+        val scene = Scene(fxmlLoader.load())
+
+        stage.title = "ДефектыПС - Карта дефектов"
         stage.scene = scene
+        stage.isMaximized = true  // Открыть на весь экран
         stage.show()
     }
 }

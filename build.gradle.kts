@@ -2,7 +2,7 @@ plugins {
     java
     application
     id("org.jetbrains.kotlin.jvm") version "2.1.0"
-    //id("org.openjfx.javafxplugin") version "0.2.0"
+    id("org.openjfx.javafxplugin") version "0.1.0"  // <-- Добавить эту строку
 }
 
 group = "org.example"
@@ -12,14 +12,14 @@ repositories {
     mavenCentral()
 }
 
-val junitVersion = "5.10.2"
-
-tasks.withType<JavaCompile> {
-    options.encoding = "UTF-8"
+javafx {
+    version = "21"
+    modules = listOf("javafx.controls", "javafx.fxml", "javafx.web", "javafx.media", "javafx.swing")
 }
 
 application {
-    mainClass.set("org.example.defectmap.HelloApplication")
+    mainClass.set("org.example.defectmap.DefectMapApp")
+    applicationDefaultJvmArgs = listOf("-Djavafx.verbose=false")
 }
 
 kotlin {
@@ -27,16 +27,10 @@ kotlin {
 }
 
 dependencies {
-    implementation("org.openjfx:javafx-base:21:win")
-    implementation("org.openjfx:javafx-graphics:21:win")
-    implementation("org.openjfx:javafx-controls:21:win")
-    implementation("org.openjfx:javafx-fxml:21:win")
-    implementation("org.openjfx:javafx-web:21:win")
-    implementation("org.openjfx:javafx-swing:21:win")
-    implementation("org.openjfx:javafx-media:21:win")
+    // Удалить все строки с org.openjfx:javafx-*:21:win
+    // Они больше не нужны, так как плагин добавляет их автоматически
 
     implementation("de.codecentric.centerdevice:javafxsvg:1.2.0")
-
     implementation("org.xerial:sqlite-jdbc:3.42.0.0")
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
