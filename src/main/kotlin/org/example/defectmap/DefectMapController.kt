@@ -3,6 +3,7 @@ package org.example.defectmap
 import javafx.fxml.FXML
 import javafx.scene.web.WebView
 import javafx.scene.input.ScrollEvent
+import javafx.scene.input.MouseEvent
 import javafx.concurrent.Worker
 import javafx.application.Platform
 
@@ -16,6 +17,13 @@ class DefectMapController {
     private val MAX_ZOOM = 5.0
     private val ZOOM_STEP = 0.1
 
+    // Для перетаскивания
+    private var isDragging = false
+    private var lastMouseX = 0.0
+    private var lastMouseY = 0.0
+    private var currentTranslateX = 0.0
+    private var currentTranslateY = 0.0
+
     @FXML
     private fun initialize() {
         loadSvgIntoWebView()
@@ -24,6 +32,7 @@ class DefectMapController {
             if (newState == Worker.State.SUCCEEDED) {
                 Platform.runLater {
                     setupZoom()
+                    setupPan()
                 }
             }
         }
@@ -51,6 +60,10 @@ class DefectMapController {
                     justify-content: center;
                     align-items: center;
                     overflow: hidden;
+                    cursor: grab;
+                  }
+                  #container.dragging {
+                    cursor: grabbing;
                   }
                   #image {
                     max-width: 100%;
@@ -58,6 +71,7 @@ class DefectMapController {
                     object-fit: contain;
                     transition: transform 0.15s ease;
                     transform-origin: center center;
+                    will-change: transform;
                   }
                 </style>
               </head>
@@ -85,12 +99,86 @@ class DefectMapController {
 
                 // Масштабируем через CSS
                 webView.engine.executeScript("""
-                    document.getElementById('image').style.transform = 'scale($zoomLevel)';
+                    document.getElementById('image').style.transform = 'scale($zoomLevel) translate(${currentTranslateX}px, ${currentTranslateY}px)';
                     document.getElementById('image').style.transformOrigin = '${event.x / webView.width * 100}% ${event.y / webView.height * 100}%';
                 """.trimIndent())
             }
 
             event.consume()
+        }
+    }
+
+    private fun setupPan() {
+        webView.setOnMousePressed { event: MouseEvent ->
+            if (event.isPrimaryButtonDown) {
+                isDragging = true
+                lastMouseX = event.x
+                lastMouseY = event.y
+
+                webView.engine.executeScript("""
+                    document.getElementById('container').classList.add('dragging');
+                """.trimIndent())
+            }
+        }
+
+        webView.setOnMouseDragged { event: MouseEvent ->
+            if (isDragging) {
+                val deltaX = event.x - lastMouseX
+                val deltaY = event.y - lastMouseY
+
+                currentTranslateX += deltaX
+                currentTranslateY += deltaY
+
+                lastMouseX = event.x
+                lastMouseY = event.y
+
+                webView.engine.executeScript("""
+                    (function() {
+                        var img = document.getElementById('image');
+                        var translateX = ${currentTranslateX};
+                        var translateY = ${currentTranslateY};
+                        var zoom = ${zoomLevel};
+                        
+                        img.style.transform = 'scale(' + zoom + ') translate(' + translateX + 'px, ' + translateY + 'px)';
+                        img.style.transformOrigin = 'center center';
+                    })();
+                """.trimIndent())
+            }
+        }
+
+        webView.setOnMouseReleased { event: MouseEvent ->
+            if (isDragging) {
+                isDragging = false
+                webView.engine.executeScript("""
+                    document.getElementById('container').classList.remove('dragging');
+                """.trimIndent())
+            }
+        }
+
+        webView.setOnMouseExited {
+            if (isDragging) {
+                isDragging = false
+                webView.engine.executeScript("""
+                    document.getElementById('container').classList.remove('dragging');
+                """.trimIndent())
+            }
+        }
+
+        // Сброс позиции двойным кликом
+        webView.setOnMouseClicked { event: MouseEvent ->
+            if (event.clickCount == 2) {
+                zoomLevel = 1.0
+                currentTranslateX = 0.0
+                currentTranslateY = 0.0
+
+                webView.engine.executeScript("""
+                    (function() {
+                        var img = document.getElementById('image');
+                        img.style.transform = 'scale(1) translate(0px, 0px)';
+                        img.style.transformOrigin = 'center center';
+                    })();
+                """.trimIndent())
+            }
         }
     }
 }
