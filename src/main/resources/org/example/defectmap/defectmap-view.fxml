@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.web.WebView?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.geometry.Insets?>
+
+<AnchorPane prefHeight="800.0" prefWidth="1200.0"
+            xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="org.example.defectmap.DefectMapController">
+
+    <WebView fx:id="webView"
+             AnchorPane.topAnchor="0.0"
+             AnchorPane.bottomAnchor="50.0"
+             AnchorPane.leftAnchor="0.0"
+             AnchorPane.rightAnchor="0.0"/>
+
+    <!-- Панель управления -->
+    <HBox spacing="10.0"
+          alignment="CENTER"
+          AnchorPane.bottomAnchor="10.0"
+          AnchorPane.leftAnchor="0.0"
+          AnchorPane.rightAnchor="0.0">
+        <padding>
+            <Insets top="5.0" right="10.0" bottom="5.0" left="10.0"/>
+        </padding>
+
+        <Button fx:id="addMarkerBtn" text="➕ Добавить метку"
+                style="-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
+
+        <Button fx:id="editModeBtn" text="✏️ Режим редактирования"
+                style="-fx-background-color: #2196F3; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
+
+        <Button fx:id="saveMarkersBtn" text="💾 Сохранить метки"
+                style="-fx-background-color: #FF9800; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
+
+        <Button fx:id="cancelEditBtn" text="❌ Отмена"
+                style="-fx-background-color: #f44336; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"
+                visible="false" managed="false"/>
+    </HBox>
+
+</AnchorPane>

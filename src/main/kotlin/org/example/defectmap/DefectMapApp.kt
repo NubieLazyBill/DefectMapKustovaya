@@ -7,7 +7,7 @@ import javafx.stage.Stage
 
 class HelloApplication : Application() {
     override fun start(stage: Stage) {
-        val fxmlLoader = FXMLLoader(HelloApplication::class.java.getResource("hello-view.fxml"))
+        val fxmlLoader = FXMLLoader(HelloApplication::class.java.getResource("defectmap-view.fxml"))
         val scene = Scene(fxmlLoader.load())
 
         stage.title = "ДефектыПС - Карта дефектов"
