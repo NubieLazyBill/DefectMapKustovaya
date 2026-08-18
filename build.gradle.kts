@@ -27,11 +27,11 @@ kotlin {
 }
 
 dependencies {
-    // Удалить все строки с org.openjfx:javafx-*:21:win
-    // Они больше не нужны, так как плагин добавляет их автоматически
-
     implementation("de.codecentric.centerdevice:javafxsvg:1.2.0")
     implementation("org.xerial:sqlite-jdbc:3.42.0.0")
+
+    // Добавьте Gson для работы с JSON
+    implementation("com.google.code.gson:gson:2.10.1")
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")

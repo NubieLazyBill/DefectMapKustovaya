@@ -18,6 +18,10 @@ import javafx.geometry.Pos
 import javafx.scene.input.KeyCode
 import javafx.scene.control.TextInputDialog
 import javafx.scene.control.ChoiceDialog
+import java.io.File
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.reflect.TypeToken
 
 class DefectMapController {
 
@@ -50,12 +54,18 @@ class DefectMapController {
     private var isEditMode = false
     private var markerCounter = 0
 
-    // Для рисования прямоугольника
-    private var isDrawing = false
-    private var drawStartX = 0.0
-    private var drawStartY = 0.0
-    private var drawEndX = 0.0
-    private var drawEndY = 0.0
+    private val markersFile: File by lazy {
+        val userHome = System.getProperty("user.home")
+        val appDir = File(userHome, ".defectmap")
+        if (!appDir.exists()) {
+            appDir.mkdirs()
+        }
+        File(appDir, "markers.json")
+    }
+
+    private val gson: Gson by lazy {
+        GsonBuilder().setPrettyPrinting().create()
+    }
 
     @FXML
     private fun initialize() {
@@ -208,18 +218,56 @@ class DefectMapController {
     }
 
     private fun initMarkers() {
-        webView.engine.executeScript("""
-            window.markers = [];
-            window.markerIdCounter = 0;
-            window.editMode = false;
-            console.log('✅ Режим меток инициализирован');
-        """.trimIndent())
+        val savedMarkers = loadMarkers()
+
+        if (savedMarkers.isNotEmpty()) {
+            val markersJson = gson.toJson(savedMarkers)
+            webView.engine.executeScript("""
+                window.markers = [];
+                window.markerIdCounter = 0;
+                
+                var savedData = $markersJson;
+                savedData.forEach(function(item) {
+                    var container = document.getElementById('markers-container');
+                    var marker = document.createElement('div');
+                    marker.className = 'marker ' + item.type;
+                    marker.id = item.id;
+                    marker.dataset.id = item.id;
+                    marker.style.left = item.left + '%';
+                    marker.style.top = item.top + '%';
+                    
+                    marker.innerHTML = '<div class=\"dot\">' + item.letter + '</div><span class=\"tooltip-text\">' + item.name + '</span>';
+                    
+                    container.appendChild(marker);
+                    
+                    window.markers.push({
+                        id: item.id,
+                        left: item.left,
+                        top: item.top,
+                        type: item.type,
+                        name: item.name,
+                        letter: item.letter
+                    });
+                    window.markerIdCounter = Math.max(window.markerIdCounter, parseInt(item.id.split('-')[1]) + 1);
+                });
+                
+                console.log('✅ Загружено меток: ' + savedData.length);
+            """.trimIndent())
+
+            markerCounter = savedMarkers.size
+        } else {
+            webView.engine.executeScript("""
+                window.markers = [];
+                window.markerIdCounter = 0;
+                console.log('✅ Режим меток инициализирован');
+            """.trimIndent())
+        }
     }
 
     private fun setupButtons() {
         addMarkerBtn.setOnAction {
             toggleEditMode(true)
-            showInfo("Кликните на схеме, чтобы добавить метку")
+            //showInfo("Кликните на схеме, чтобы добавить метку")
         }
 
         editModeBtn.setOnAction {
@@ -248,8 +296,6 @@ class DefectMapController {
             } else {
                 container.classList.remove('edit-mode');
                 window.editMode = false;
-                document.getElementById('selection-box').style.display = 'none';
-                document.getElementById('draw-indicator').style.display = 'none';
             }
         """.trimIndent())
 
@@ -283,8 +329,8 @@ class DefectMapController {
                     lastMouseX = event.x
                     lastMouseY = event.y
                     webView.engine.executeScript("""
-                    document.getElementById('container').classList.add('dragging');
-                """.trimIndent())
+                        document.getElementById('container').classList.add('dragging');
+                    """.trimIndent())
                 }
             }
         }
@@ -299,10 +345,10 @@ class DefectMapController {
                 lastMouseY = event.y
 
                 webView.engine.executeScript("""
-                var wrapper = document.getElementById('image-wrapper');
-                wrapper.style.transform = 'translate(${currentTranslateX}px, ${currentTranslateY}px) scale($zoomLevel)';
-                wrapper.style.transformOrigin = 'center center';
-            """.trimIndent())
+                    var wrapper = document.getElementById('image-wrapper');
+                    wrapper.style.transform = 'translate(${currentTranslateX}px, ${currentTranslateY}px) scale($zoomLevel)';
+                    wrapper.style.transformOrigin = 'center center';
+                """.trimIndent())
             }
         }
 
@@ -310,10 +356,9 @@ class DefectMapController {
             if (isDragging) {
                 isDragging = false
                 webView.engine.executeScript("""
-                document.getElementById('container').classList.remove('dragging');
-            """.trimIndent())
+                    document.getElementById('container').classList.remove('dragging');
+                """.trimIndent())
             } else if (isEditMode) {
-                // Добавляем метку по клику
                 addMarkerAtPosition(event.x, event.y)
             }
         }
@@ -322,8 +367,8 @@ class DefectMapController {
             if (isDragging) {
                 isDragging = false
                 webView.engine.executeScript("""
-                document.getElementById('container').classList.remove('dragging');
-            """.trimIndent())
+                    document.getElementById('container').classList.remove('dragging');
+                """.trimIndent())
             }
         }
 
@@ -333,9 +378,9 @@ class DefectMapController {
                 currentTranslateX = 0.0
                 currentTranslateY = 0.0
                 webView.engine.executeScript("""
-                document.getElementById('image-wrapper').style.transform = 'translate(0px, 0px) scale(1)';
-                document.getElementById('image-wrapper').style.transformOrigin = 'center center';
-            """.trimIndent())
+                    document.getElementById('image-wrapper').style.transform = 'translate(0px, 0px) scale(1)';
+                    document.getElementById('image-wrapper').style.transformOrigin = 'center center';
+                """.trimIndent())
             }
         }
     }
@@ -351,7 +396,6 @@ class DefectMapController {
     private fun addMarkerAtPosition(x: Double, y: Double) {
         println("📍 Добавление метки: x=$x, y=$y")
 
-        // Упрощенный JavaScript - используем только то, что точно есть
         val result = webView.engine.executeScript("""
         (function() {
             var wrapper = document.getElementById('image-wrapper');
@@ -379,13 +423,69 @@ class DefectMapController {
                 if (result2.isPresent) {
                     val name = result2.get()
                     if (name.isNotEmpty()) {
+                        // ПОЛНЫЙ СПИСОК ТИПОВ ОБОРУДОВАНИЯ
+// ============================================================
                         val typeDialog = ChoiceDialog("breaker", listOf(
-                            "breaker" to "Выключатель (В)",
-                            "disconnector" to "Разъединитель (Р)",
-                            "transformer" to "Трансформатор (Т)",
+                            // --- 500 кВ ---
+                            "v_500" to "Выключатель 500 кВ (В-500)",
+                            "r_500" to "Разъединитель 500 кВ (Р-500)",
+                            "autotransformer" to "Автотрансформатор 500 кВ (АТ)",
+                            "tn_500" to "ТН_500",
+                            "tt_500" to "ТТ_500",
+                            "ks_500" to "КС_500",
+                            "opn_500" to "ОПН-500",
+                            "reactor_500" to "Реактор 500 кВ (Р-500)",
+
+
+
+                            // --- 220 кВ ---
+                            "v_220" to "Выключатель 220 кВ (В-220)",
+                            "r_220" to "Разъединитель 220 кВ (Р-220)",
+                            "opn_220" to "ОПН 220 кВ",
+                            "tn_220" to "ТН 220 кВ",
+                            "tt_220" to "ТТ 220 кВ",
+                            "ks_220" to "КС 220 кВ",
+                            "line_220" to "Линия 220 кВ (Л-220)",
+
+
+
+                            // --- 35 кВ ---
+                            "v_35" to "Выключатель 35 кВ (В-35)",
+                            "r_35" to "Разъединитель 35 кВ (Р-35)",
+                            "tn_35" to "ТН 35 кВ",
+                            "tt_35" to "ТТ 35 кВ",
+
+
+
+                            // --- Молниеотводы ---
                             "lightning" to "Молниеотвод (М)",
+
+
+
+                            // --- Другое оборудование ---
+                            "capacitor" to "Конденсатор (К)",
+                            "arrester" to "Разрядник (РВ)",
+                            "line_trap" to "Заградитель (З)",
+                            "coupling_capacitor" to "Конденсатор связи (КС)",
+                            "earthing_switch" to "Заземляющий нож (ЗН)",
+                            "load_switch" to "Нагрузочный выключатель (ВН)",
+                            "fuse" to "Предохранитель (Пр)",
+                            "sf6_breaker" to "Элегазовый выключатель (ВЭ)",
+                            "vacuum_breaker" to "Вакуумный выключатель (ВВ)",
+
+
+                            // --- Вспомогательное ---
+                            "compressor" to "Компрессорная (К)",
+                            "pump" to "Насос (Н)",
+                            "generator" to "Генератор (Г)",
+                            "motor" to "Электродвигатель (М)",
+
+
+                            // --- Прочее ---
                             "other" to "Другое (О)"
                         ))
+// ============================================================
+
                         typeDialog.title = "Тип оборудования"
                         typeDialog.headerText = "Выберите тип"
                         typeDialog.contentText = "Тип:"
@@ -400,7 +500,9 @@ class DefectMapController {
                                 "lightning" -> "М"
                                 else -> "О"
                             }
+
                             val id = "marker-${System.currentTimeMillis()}"
+                            markerCounter++
 
                             webView.engine.executeScript("""
                             (function() {
@@ -408,14 +510,11 @@ class DefectMapController {
                                 var marker = document.createElement('div');
                                 marker.className = 'marker $type';
                                 marker.id = '$id';
-                                marker.dataset.id = '${++markerCounter}';
+                                marker.dataset.id = '${markerCounter}';
                                 marker.style.left = '${left}%';
                                 marker.style.top = '${top}%';
                                 
-                                marker.innerHTML = `
-                                    <div class="dot">${typeLabel}</div>
-                                    <span class="tooltip-text">${name}</span>
-                                `;
+                                marker.innerHTML = '<div class=\"dot\">${typeLabel}</div><span class=\"tooltip-text\">${name}</span>';
                                 
                                 container.appendChild(marker);
                                 
@@ -433,47 +532,78 @@ class DefectMapController {
                             })();
                         """.trimIndent())
 
-                            showInfo("Метка добавлена: $name")
+                            saveMarkers()
+                            // Убираем showInfo - тихо сохраняем
+                            // showInfo("Метка добавлена: $name")
                         }
                     }
                 }
             }
         } else {
             println("❌ Ошибка: результат null")
-            showInfo("Не удалось определить координаты. Попробуйте еще раз.")
+            // showInfo("Не удалось определить координаты. Попробуйте еще раз.")
         }
     }
 
     private fun saveMarkers() {
-        val result = webView.engine.executeScript("JSON.stringify(window.markers || [])") as? String
+        val result = webView.engine.executeScript("""
+            JSON.stringify(window.markers || [])
+        """.trimIndent()) as? String
+
         if (result != null) {
-            println("💾 Сохраненные метки: $result")
-            showInfo("Метки сохранены!")
+            try {
+                val type = object : TypeToken<List<MarkerData>>() {}.type
+                val markers: List<MarkerData> = gson.fromJson(result, type)
+                val json = gson.toJson(markers)
+                markersFile.writeText(json)
+                println("💾 Сохранено меток: ${markers.size}")
+                //showInfo("Метки сохранены! (${markers.size} шт.)")
+            } catch (e: Exception) {
+                println("❌ Ошибка сохранения: ${e.message}")
+                showError("Ошибка сохранения: ${e.message}")
+            }
+        } else {
+            showError("Нет данных для сохранения")
+        }
+    }
+
+    private fun loadMarkers(): List<MarkerData> {
+        return try {
+            if (markersFile.exists()) {
+                val json = markersFile.readText()
+                val type = object : TypeToken<List<MarkerData>>() {}.type
+                gson.fromJson(json, type)
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            println("❌ Ошибка загрузки: ${e.message}")
+            emptyList()
         }
     }
 
     private fun handleMarkerClick(x: Double, y: Double) {
         val result = webView.engine.executeScript("""
-            (function() {
-                var container = document.getElementById('container');
-                var rect = container.getBoundingClientRect();
-                var markers = document.querySelectorAll('.marker');
-                var clickX = $x;
-                var clickY = $y;
-                
-                for (var i = 0; i < markers.length; i++) {
-                    var marker = markers[i];
-                    var markerRect = marker.getBoundingClientRect();
-                    if (clickX >= markerRect.left - rect.left - 15 &&
-                        clickX <= markerRect.right - rect.left + 15 &&
-                        clickY >= markerRect.top - rect.top - 15 &&
-                        clickY <= markerRect.bottom - rect.top + 15) {
-                        return marker.id;
-                    }
+        (function() {
+            var container = document.getElementById('container');
+            var rect = container.getBoundingClientRect();
+            var markers = document.querySelectorAll('.marker');
+            var clickX = $x;
+            var clickY = $y;
+            
+            for (var i = 0; i < markers.length; i++) {
+                var marker = markers[i];
+                var markerRect = marker.getBoundingClientRect();
+                if (clickX >= markerRect.left - rect.left - 15 &&
+                    clickX <= markerRect.right - rect.left + 15 &&
+                    clickY >= markerRect.top - rect.top - 15 &&
+                    clickY <= markerRect.bottom - rect.top + 15) {
+                    return marker.id;
                 }
-                return null;
-            })();
-        """.trimIndent())
+            }
+            return null;
+        })();
+    """.trimIndent())
 
         val markerId = result as? String
         if (markerId != null) {
@@ -482,7 +612,79 @@ class DefectMapController {
     }
 
     private fun showBreakerImage(markerId: String) {
-        val imageUrl = javaClass.getResource("/org/example/defectmap/breaker_500kv.jpg")
+        // Получаем информацию о метке
+        val markerInfo = webView.engine.executeScript("""
+        (function() {
+            var markers = window.markers || [];
+            for (var i = 0; i < markers.length; i++) {
+                if (markers[i].id === '$markerId') {
+                    return markers[i];
+                }
+            }
+            return null;
+        })();
+    """.trimIndent()) as? Map<*, *>
+
+        // Определяем путь к картинке в зависимости от типа и названия
+        var imagePath = "/org/example/defectmap/ВВБК-500.jfif" // по умолчанию
+
+        if (markerInfo != null) {
+            val type = markerInfo["type"] as? String ?: ""
+            val name = markerInfo["name"] as? String ?: ""
+
+            // Определяем картинку по типу
+            imagePath = when {
+                // Выключатели
+                type == "breaker" || type == "breaker_500" || type == "breaker_220" || type == "breaker_110" ||
+                        type == "breaker_35" || type == "breaker_10" || type == "sf6_breaker" || type == "vacuum_breaker" -> {
+                    "/org/example/defectmap/breaker_500kv.jpg"
+                }
+                /*// Разъединители
+                type == "disconnector" || type == "disconnector_500" || type == "disconnector_220" ||
+                        type == "disconnector_110" || type == "disconnector_35" || type == "disconnector_10" -> {
+                    "/org/example/defectmap/disconnector.jpg"
+                }
+                // Трансформаторы
+                type == "transformer" || type == "transformer_500" || type == "transformer_220" ||
+                        type == "transformer_110" || type == "transformer_35" || type == "transformer_10" ||
+                        type == "autotransformer" || type == "autotransformer_500" || type == "autotransformer_220" -> {
+                    "/org/example/defectmap/transformer.jpg"
+                }
+                // Молниеотводы
+                type == "lightning" || type == "lightning_rod" -> {
+                    "/org/example/defectmap/lightning_rod.jpg"
+                }
+                // ОПН
+                type == "opn_500" || type == "opn_220" || type == "opn_110" || type == "opn_35" || type == "opn_10" -> {
+                    "/org/example/defectmap/opn.jpg"
+                }
+                // ТН
+                type == "tn_500" || type == "tn_220" || type == "tn_110" || type == "tn_35" || type == "tn_10" -> {
+                    "/org/example/defectmap/tn.jpg"
+                }
+                // ТТ
+                type == "tt_500" || type == "tt_220" || type == "tt_110" || type == "tt_35" || type == "tt_10" -> {
+                    "/org/example/defectmap/tt.jpg"
+                }
+                // АТГ
+                type == "atg_500" || type == "atg_220" -> {
+                    "/org/example/defectmap/atg.jpg"
+                }
+                // Реакторы
+                type == "reactor_500" || type == "reactor_220" || type == "shunt_500" || type == "shunt_220" -> {
+                    "/org/example/defectmap/reactor.jpg"
+                }
+                // Конденсаторы
+                type == "capacitor" || type == "coupling_capacitor" || type == "ks_500" || type == "ks_220" -> {
+                    "/org/example/defectmap/capacitor.jpg"
+                }*/
+                // Другое
+                else -> "/org/example/defectmap/equipment.jpg"
+            }
+        }
+
+        // Загружаем картинку
+        val imageUrl = javaClass.getResource(imagePath)
         if (imageUrl != null) {
             try {
                 val image = Image(imageUrl.toExternalForm())
@@ -491,16 +693,31 @@ class DefectMapController {
                 imageView.fitWidth = 600.0
                 imageView.fitHeight = 400.0
 
+                // Информация об оборудовании
+                val infoLabel = javafx.scene.control.Label()
+                if (markerInfo != null) {
+                    val name = markerInfo["name"] as? String ?: "Оборудование"
+                    val type = markerInfo["type"] as? String ?: ""
+                    infoLabel.text = "📌 $name\nТип: $type"
+                    infoLabel.style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #333; -fx-text-alignment: center;"
+                    infoLabel.isWrapText = true
+                    infoLabel.maxWidth = 600.0
+                    infoLabel.alignment = Pos.CENTER
+                } else {
+                    infoLabel.text = "Оборудование"
+                    infoLabel.style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #333;"
+                }
+
                 val closeButton = Button("✕ Закрыть")
                 closeButton.style = "-fx-font-size: 14px; -fx-background-color: #ff4444; -fx-text-fill: white; -fx-padding: 8px 20px; -fx-background-radius: 6px;"
 
-                val layout = VBox(15.0, imageView, closeButton)
+                val layout = VBox(15.0, imageView, infoLabel, closeButton)
                 layout.alignment = Pos.CENTER
                 layout.style = "-fx-background-color: white; -fx-padding: 20px; -fx-background-radius: 12px; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 20, 0, 0, 0);"
 
                 val popupStage = Stage()
-                popupStage.title = "Информация об оборудовании"
-                popupStage.scene = Scene(layout, 680.0, 520.0)
+                popupStage.title = markerInfo?.let { it["name"] as? String } ?: "Информация об оборудовании"
+                popupStage.scene = Scene(layout, 680.0, 560.0)
                 popupStage.isResizable = false
 
                 closeButton.setOnAction { popupStage.close() }
@@ -510,8 +727,11 @@ class DefectMapController {
 
                 popupStage.showAndWait()
             } catch (e: Exception) {
+                println("❌ Ошибка загрузки изображения: ${e.message}")
                 showError("Не удалось загрузить изображение")
             }
+        } else {
+            showError("Изображение не найдено: $imagePath")
         }
     }
 
@@ -535,3 +755,12 @@ class DefectMapController {
         }
     }
 }
+
+data class MarkerData(
+    val id: String,
+    val left: Double,
+    val top: Double,
+    val type: String,
+    val name: String,
+    val letter: String
+)
