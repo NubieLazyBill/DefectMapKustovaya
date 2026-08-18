@@ -27,14 +27,17 @@
             <Insets top="5.0" right="10.0" bottom="5.0" left="10.0"/>
         </padding>
 
-        <Button fx:id="addMarkerBtn" text="➕ Добавить метку"
+        <Button fx:id="addEquipmentBtn" text="➕ Добавить оборудование"
                 style="-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
 
         <Button fx:id="editModeBtn" text="✏️ Режим редактирования"
                 style="-fx-background-color: #2196F3; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
 
-        <Button fx:id="saveMarkersBtn" text="💾 Сохранить метки"
+        <Button fx:id="saveEquipmentBtn" text="💾 Сохранить оборудование"
                 style="-fx-background-color: #FF9800; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
+
+        <Button fx:id="viewEquipmentBtn" text="📋 Список оборудования"
+                style="-fx-background-color: #9C27B0; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
 
         <Button fx:id="cancelEditBtn" text="❌ Отмена"
                 style="-fx-background-color: #f44336; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"
