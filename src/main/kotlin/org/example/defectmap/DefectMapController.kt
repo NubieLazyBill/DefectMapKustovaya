@@ -105,12 +105,19 @@ class DefectMapController {
         <html>
           <head>
             <style>
-              * { margin: 0; padding: 0; }
+              * { 
+                  margin: 0; 
+                  padding: 0; 
+                  user-select: none;
+                  -webkit-user-select: none;
+                  -moz-user-select: none;
+                  -ms-user-select: none;
+              }
               html, body { 
-                width: 100%; 
-                height: 100%; 
-                overflow: hidden;
-                background: white;
+                  width: 100%; 
+                  height: 100%; 
+                  overflow: hidden;
+                  background: white;
               }
               #container {
                 width: 100%;
@@ -267,7 +274,7 @@ class DefectMapController {
         val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
         val exportFile = File(System.getProperty("user.home"), ".defectmap/equipment_export.json")
 
-        // Если БД пустая или не существует
+        // 1. Если БД НЕ существует или ПУСТАЯ — пробуем импортировать
         if (!dbFile.exists() || database.getCount() == 0) {
             if (exportFile.exists()) {
                 Platform.runLater {
@@ -278,9 +285,7 @@ class DefectMapController {
                     Обнаружен файл с экспортированными данными:
                     ${exportFile.absolutePath}
                     
-                    Хотите импортировать данные из этого файла?
-                    
-                    ВНИМАНИЕ: Будут добавлены все записи из экспорта.
+                    База данных пуста. Хотите импортировать данные?
                 """.trimIndent()
 
                     val result = alert.showAndWait()
@@ -292,54 +297,67 @@ class DefectMapController {
             return
         }
 
-        // Если БД есть, но экспорт новее — предложить обновить
-        val dbLastModified = dbFile.lastModified()
-        val exportLastModified = exportFile.lastModified()
+        // 2. Если БД есть — проверяем, есть ли реальные изменения
+        if (exportFile.exists()) {
+            val dbData = database.loadAllEquipment()
+            val jsonData = database.importFromJson()
 
-        if (exportFile.exists() && exportLastModified > dbLastModified) {
+            if (jsonData == null || jsonData.isEmpty()) {
+                return // JSON пустой — ничего не делаем
+            }
+
+            // Находим различия
+            val added = jsonData.filter { new -> dbData.none { it.id == new.id } }
+            val removed = dbData.filter { old -> jsonData.none { it.id == old.id } }
+            val changed = jsonData.filter { new ->
+                dbData.find { it.id == new.id }?.let { old ->
+                    // Сравниваем все поля (кроме created_at)
+                    old.name != new.name ||
+                            old.type != new.type ||
+                            old.letter != new.letter ||
+                            old.cell != new.cell ||
+                            old.size != new.size ||
+                            old.left != new.left ||
+                            old.top != new.top
+                } ?: false
+            }
+
+            // Если изменений нет — ничего не делаем
+            if (added.isEmpty() && removed.isEmpty() && changed.isEmpty()) {
+                println("✅ Данные синхронизированы, изменений нет")
+                return
+            }
+
+            // 3. Есть изменения — показываем диалог
             Platform.runLater {
-                val oldData = database.loadAllEquipment()
-                val newData = database.importFromJson()
-
-                if (newData != null) {
-                    val added = newData.filter { new -> oldData.none { it.id == new.id } }
-                    val removed = oldData.filter { old -> newData.none { it.id == old.id } }
-                    val changed = newData.filter { new ->
-                        oldData.find { it.id == new.id }?.let { old ->
-                            old != new
-                        } ?: false
+                val message = buildString {
+                    append("📊 Обнаружены изменения в экспортированных данных:\n\n")
+                    if (added.isNotEmpty()) {
+                        append("✅ Добавлено: ${added.size} записей\n")
+                        added.take(5).forEach { append("   - ${it.name}\n") }
+                        if (added.size > 5) append("   ... и еще ${added.size - 5}\n")
                     }
-
-                    val message = buildString {
-                        append("📊 Обнаружены изменения в экспортированных данных:\n\n")
-                        if (added.isNotEmpty()) {
-                            append("✅ Добавлено: ${added.size} записей\n")
-                            added.take(5).forEach { append("   - ${it.name}\n") }
-                            if (added.size > 5) append("   ... и еще ${added.size - 5}\n")
-                        }
-                        if (removed.isNotEmpty()) {
-                            append("❌ Удалено: ${removed.size} записей\n")
-                            removed.take(5).forEach { append("   - ${it.name}\n") }
-                            if (removed.size > 5) append("   ... и еще ${removed.size - 5}\n")
-                        }
-                        if (changed.isNotEmpty()) {
-                            append("🔄 Изменено: ${changed.size} записей\n")
-                            changed.take(5).forEach { append("   - ${it.name}\n") }
-                            if (changed.size > 5) append("   ... и еще ${changed.size - 5}\n")
-                        }
-                        append("\nИмпортировать изменения?")
+                    if (removed.isNotEmpty()) {
+                        append("❌ Удалено: ${removed.size} записей\n")
+                        removed.take(5).forEach { append("   - ${it.name}\n") }
+                        if (removed.size > 5) append("   ... и еще ${removed.size - 5}\n")
                     }
-
-                    val alert = Alert(AlertType.CONFIRMATION)
-                    alert.title = "Обновление данных"
-                    alert.headerText = "📥 Найдены новые данные для импорта"
-                    alert.contentText = message
-                    // alert.resizeAndWait() - УДАЛЕНО!
-
-                    val result = alert.showAndWait()
-                    if (result.isPresent && result.get() == ButtonType.OK) {
-                        importData()
+                    if (changed.isNotEmpty()) {
+                        append("🔄 Изменено: ${changed.size} записей\n")
+                        changed.take(5).forEach { append("   - ${it.name}\n") }
+                        if (changed.size > 5) append("   ... и еще ${changed.size - 5}\n")
                     }
+                    append("\nИмпортировать изменения?")
+                }
+
+                val alert = Alert(AlertType.CONFIRMATION)
+                alert.title = "Обновление данных"
+                alert.headerText = "📥 Найдены новые данные для импорта"
+                alert.contentText = message
+
+                val result = alert.showAndWait()
+                if (result.isPresent && result.get() == ButtonType.OK) {
+                    importData()
                 }
             }
         }
@@ -921,11 +939,78 @@ class DefectMapController {
 
                             equipmentCounter = updatedList.size
                             showInfo("Оборудование обновлено: $newName (размер: $newSize)")
+
+                            // ===== ОБНОВЛЯЕМ ОКНО СПИСКА (без перезакрытия) =====
+                            Platform.runLater {
+                                val stages = Stage.getWindows()
+                                for (window in stages) {
+                                    if (window is Stage && window.title == "📋 Список оборудования") {
+                                        val root = window.scene?.root
+                                        if (root is VBox) {
+                                            // Ищем TableView среди детей
+                                            val tableView = findTableView(root)
+                                            if (tableView != null) {
+                                                // Обновляем данные с использованием raw type
+                                                @Suppress("UNCHECKED_CAST")
+                                                val table = tableView as javafx.scene.control.TableView<EquipmentTableItem>
+
+                                                val updatedData = loadEquipment()
+                                                val items = updatedData.mapIndexed { index, eq ->
+                                                    val typeDisplayName = EquipmentTypes.ALL_TYPES.toMap()[eq.type] ?: eq.type
+                                                    EquipmentTableItem(
+                                                        number = index + 1,
+                                                        id = eq.id,
+                                                        name = eq.name,
+                                                        type = typeDisplayName,
+                                                        cell = eq.cell,
+                                                        left = eq.left,
+                                                        top = eq.top
+                                                    )
+                                                }
+                                                table.items = javafx.collections.FXCollections.observableArrayList(items)
+
+                                                // Обновляем countLabel
+                                                val label = findCountLabel(root)
+                                                label?.text = "Показано: ${updatedData.size} из ${updatedData.size}"
+                                            }
+                                        }
+                                        break
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+// ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ПОИСКА В ОКНЕ =====
+
+    private fun findTableView(node: javafx.scene.Node): javafx.scene.control.TableView<*>? {
+        if (node is javafx.scene.control.TableView<*>) {
+            return node
+        }
+        if (node is javafx.scene.layout.Pane) {
+            for (child in node.children) {
+                val result = findTableView(child)
+                if (result != null) return result
+            }
+        }
+        return null
+    }
+
+    private fun findCountLabel(node: javafx.scene.Node): Label? {
+        if (node is Label && node.text?.startsWith("Показано:") == true) {
+            return node
+        }
+        if (node is javafx.scene.layout.Pane) {
+            for (child in node.children) {
+                val result = findCountLabel(child)
+                if (result != null) return result
+            }
+        }
+        return null
     }
 
     private fun loadEquipment(): List<EquipmentData> {
@@ -1013,7 +1098,8 @@ class DefectMapController {
                 val tableView = javafx.scene.control.TableView<EquipmentTableItem>()
                 tableView.style = "-fx-font-size: 13px; -fx-border-color: #dee2e6;"
 
-                // Колонки
+                // ======================== КОЛОНКИ ТАБЛИЦЫ ========================
+
                 val colNumber = javafx.scene.control.TableColumn<EquipmentTableItem, Int>("№")
                 colNumber.cellValueFactory = javafx.scene.control.cell.PropertyValueFactory("number")
                 colNumber.prefWidth = 45.0
@@ -1046,9 +1132,99 @@ class DefectMapController {
                 colId.cellValueFactory = javafx.scene.control.cell.PropertyValueFactory("id")
                 colId.prefWidth = 120.0
 
-                tableView.columns.addAll(colNumber, colName, colType, colCell, colX, colY, colId)
+                // ======================== КОЛОНКА: ДЕЙСТВИЯ (С КНОПКАМИ) ========================
 
-                // Преобразование EquipmentData в EquipmentTableItem
+                val colActions = javafx.scene.control.TableColumn<EquipmentTableItem, Void>("Действие")
+                colActions.prefWidth = 120.0
+                colActions.style = "-fx-alignment: CENTER;"
+
+                colActions.setCellFactory {
+                    object : javafx.scene.control.TableCell<EquipmentTableItem, Void>() {
+                        private val editBtn = Button("✏️")
+                        private val deleteBtn = Button("🗑️")
+                        private val hbox = HBox(5.0, editBtn, deleteBtn)
+
+                        init {
+                            hbox.alignment = Pos.CENTER
+
+                            editBtn.style = "-fx-background-color: #007bff; -fx-text-fill: white; -fx-font-size: 11px; -fx-padding: 2px 8px; -fx-background-radius: 4px;"
+                            deleteBtn.style = "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-font-size: 11px; -fx-padding: 2px 8px; -fx-background-radius: 4px;"
+
+                            editBtn.setOnAction {
+                                val item = tableItem
+                                if (item != null) {
+                                    editEquipmentFromList(item.id)
+                                }
+                            }
+
+                            deleteBtn.setOnAction {
+                                val item = tableItem
+                                if (item != null) {
+                                    val confirm = Alert(AlertType.CONFIRMATION)
+                                    confirm.title = "Удаление оборудования"
+                                    confirm.headerText = "Удалить оборудование?"
+                                    confirm.contentText = "Вы уверены, что хотите удалить '${item.name}'?"
+
+                                    val result = confirm.showAndWait()
+                                    if (result.isPresent && result.get() == ButtonType.OK) {
+                                        deleteEquipment(item.id)
+                                        // Обновляем таблицу через перезагрузку данных из БД
+                                        val updatedData = loadEquipment()
+                                        val updatedItems = updatedData.mapIndexed { index, eq ->
+                                            val typeDisplayName = EquipmentTypes.ALL_TYPES.toMap()[eq.type] ?: eq.type
+                                            EquipmentTableItem(
+                                                number = index + 1,
+                                                id = eq.id,
+                                                name = eq.name,
+                                                type = typeDisplayName,
+                                                cell = eq.cell,
+                                                left = eq.left,
+                                                top = eq.top
+                                            )
+                                        }
+                                        tableView.items = javafx.collections.FXCollections.observableArrayList(updatedItems)
+                                        countLabel.text = "Показано: ${updatedData.size} из ${updatedData.size}"
+                                    }
+                                }
+                            }
+
+                            editBtn.hoverProperty().addListener { _, _, hovered ->
+                                editBtn.style = if (hovered)
+                                    "-fx-background-color: #0056b3; -fx-text-fill: white; -fx-font-size: 11px; -fx-padding: 2px 8px; -fx-background-radius: 4px;"
+                                else
+                                    "-fx-background-color: #007bff; -fx-text-fill: white; -fx-font-size: 11px; -fx-padding: 2px 8px; -fx-background-radius: 4px;"
+                            }
+
+                            deleteBtn.hoverProperty().addListener { _, _, hovered ->
+                                deleteBtn.style = if (hovered)
+                                    "-fx-background-color: #c82333; -fx-text-fill: white; -fx-font-size: 11px; -fx-padding: 2px 8px; -fx-background-radius: 4px;"
+                                else
+                                    "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-font-size: 11px; -fx-padding: 2px 8px; -fx-background-radius: 4px;"
+                            }
+                        }
+
+                        override fun updateItem(item: Void?, empty: Boolean) {
+                            super.updateItem(item, empty)
+                            if (empty) {
+                                graphic = null
+                            } else {
+                                graphic = hbox
+                            }
+                        }
+
+                        private val tableItem: EquipmentTableItem?
+                            get() = tableRow?.item
+                    }
+                }
+
+                // ======================== ДОБАВЛЯЕМ ВСЕ КОЛОНКИ ========================
+
+                tableView.columns.addAll(
+                    colNumber, colName, colType, colCell, colX, colY, colId, colActions
+                )
+
+                // ======================== ПРЕОБРАЗОВАНИЕ ДАННЫХ ========================
+
                 fun toTableItems(data: List<EquipmentData>): List<EquipmentTableItem> {
                     return data.mapIndexed { index, item ->
                         val typeDisplayName = EquipmentTypes.ALL_TYPES.toMap()[item.type] ?: item.type
@@ -1064,16 +1240,16 @@ class DefectMapController {
                     }
                 }
 
-                // Функция обновления таблицы
+                // ======================== ФУНКЦИЯ ОБНОВЛЕНИЯ ТАБЛИЦЫ ========================
+
                 fun updateTable(data: List<EquipmentData>) {
                     val items = toTableItems(data)
                     tableView.items = javafx.collections.FXCollections.observableArrayList(items)
                     countLabel.text = "Показано: ${data.size} из ${allEquipment.size}"
                 }
 
-                // Функция применения фильтров
-                // Функция применения фильтров
-                // Функция применения фильтров
+                // ======================== ФУНКЦИЯ ПРИМЕНЕНИЯ ФИЛЬТРОВ ========================
+
                 fun applyFilter() {
                     val selectedType = typeFilter.value
                     println("🔍 Выбран тип: $selectedType")
@@ -1089,7 +1265,6 @@ class DefectMapController {
                         typeMatch
                     }
 
-                    // Поиск по названию или ID
                     val searchText = searchField.text
                     if (searchText.isNotEmpty()) {
                         filtered = filtered.filter {
@@ -1099,7 +1274,6 @@ class DefectMapController {
                         }
                     }
 
-                    // НОВОЕ: Поиск по ячейкам (отдельно)
                     val cellSearchText = cellSearchField.text
                     if (cellSearchText.isNotEmpty()) {
                         filtered = filtered.filter {
@@ -1111,18 +1285,17 @@ class DefectMapController {
                     updateTable(filtered)
                 }
 
-                searchField.textProperty().addListener { _, _, _ ->
-                    applyFilter()
-                }
+                // ======================== СЛУШАТЕЛИ ========================
 
                 searchField.textProperty().addListener { _, _, _ ->
                     applyFilter()
                 }
 
-// НОВОЕ: Слушатель для поля поиска по ячейкам
                 cellSearchField.textProperty().addListener { _, _, _ ->
                     applyFilter()
                 }
+
+                // ======================== КНОПКИ ========================
 
                 val applyBtn = Button("Применить")
                 applyBtn.style = "-fx-background-color: #007bff; -fx-text-fill: white; -fx-font-size: 13px; -fx-padding: 4px 16px; -fx-background-radius: 4px;"
@@ -1133,9 +1306,11 @@ class DefectMapController {
                 resetBtn.setOnAction {
                     typeFilter.value = "Все типы"
                     searchField.clear()
-                    cellSearchField.clear()  // <-- ДОБАВЛЕНО
+                    cellSearchField.clear()
                     applyFilter()
                 }
+
+                // ======================== ДВОЙНОЙ КЛИК ПО СТРОКЕ ========================
 
                 tableView.setOnMouseClicked { event ->
                     if (event.clickCount == 2) {
@@ -1147,6 +1322,8 @@ class DefectMapController {
                     }
                 }
 
+                // ======================== СТИЛЬ СТРОК ========================
+
                 tableView.setRowFactory {
                     val row = javafx.scene.control.TableRow<EquipmentTableItem>()
                     row.styleProperty().bind(
@@ -1157,7 +1334,55 @@ class DefectMapController {
                     row
                 }
 
+                // ======================== КОНТЕКСТНОЕ МЕНЮ ========================
+
+                val contextMenu = ContextMenu()
+                val editMenuItem = MenuItem("✏️ Редактировать")
+                val deleteMenuItem = MenuItem("🗑️ Удалить")
+                val showMenuItem = MenuItem("📍 Показать на карте")
+
+                editMenuItem.setOnAction {
+                    val selected = tableView.selectionModel.selectedItem
+                    if (selected != null) {
+                        editEquipmentFromList(selected.id)
+                    }
+                }
+
+                deleteMenuItem.setOnAction {
+                    val selected = tableView.selectionModel.selectedItem
+                    if (selected != null) {
+                        val confirm = Alert(AlertType.CONFIRMATION)
+                        confirm.title = "Удаление оборудования"
+                        confirm.headerText = "Удалить оборудование?"
+                        confirm.contentText = "Вы уверены, что хотите удалить '${selected.name}'?"
+                        val result = confirm.showAndWait()
+                        if (result.isPresent && result.get() == ButtonType.OK) {
+                            deleteEquipment(selected.id)
+                            // Обновляем таблицу через перезагрузку данных из БД
+                            val updatedData = loadEquipment()
+                            val updatedItems = toTableItems(updatedData)
+                            tableView.items = javafx.collections.FXCollections.observableArrayList(updatedItems)
+                            countLabel.text = "Показано: ${updatedData.size} из ${allEquipment.size}"
+                        }
+                    }
+                }
+
+                showMenuItem.setOnAction {
+                    val selected = tableView.selectionModel.selectedItem
+                    if (selected != null) {
+                        showEquipmentOnMap(selected.id)
+                        (tableView.scene.window as Stage).close()
+                    }
+                }
+
+                contextMenu.items.addAll(editMenuItem, deleteMenuItem, showMenuItem)
+                tableView.contextMenu = contextMenu
+
+                // ======================== ПРИМЕНЯЕМ ФИЛЬТРЫ ПРИ ЗАПУСКЕ ========================
+
                 applyFilter()
+
+                // ======================== ПАНЕЛЬ КНОПОК ========================
 
                 val buttonPanel = HBox(10.0)
                 buttonPanel.alignment = Pos.CENTER_RIGHT
@@ -1171,9 +1396,11 @@ class DefectMapController {
                 closeBtn.style = "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-font-size: 13px; -fx-padding: 6px 20px; -fx-background-radius: 4px;"
                 closeBtn.setOnAction { (closeBtn.scene.window as Stage).close() }
 
+                // ======================== СБОРКА ОКНА ========================
+
                 filterPanel.children.addAll(
                     filterLabel, typeFilter, applyBtn, resetBtn, countLabel,
-                    searchField, cellSearchField  // <-- ДОБАВЛЕНО cellSearchField
+                    searchField, cellSearchField
                 )
 
                 buttonPanel.children.addAll(exportBtn, closeBtn)
@@ -1193,6 +1420,21 @@ class DefectMapController {
         } else {
             showInfo("📋 Нет сохраненного оборудования")
         }
+    }
+
+    private fun editEquipmentFromList(equipmentId: String) {
+        println("✏️ Редактирование из списка: $equipmentId")
+
+        val allEquipment = loadEquipment()
+        val equipment = allEquipment.find { it.id == equipmentId }
+
+        if (equipment == null) {
+            showError("Оборудование не найдено. ID: $equipmentId")
+            return
+        }
+
+        // Просто открываем диалог редактирования, НЕ закрывая окно списка
+        editEquipment(equipmentId)
     }
 
     private fun getVoltageFromType(type: String): String {
