@@ -29,6 +29,7 @@ import java.io.File
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
+import javafx.scene.control.ButtonType
 
 class DefectMapController {
 
@@ -77,6 +78,9 @@ class DefectMapController {
     @FXML
     private fun initialize() {
         loadSvgIntoWebView()
+
+        // Проверка импорта при запуске
+        checkAndImportData()
 
         webView.engine.getLoadWorker().stateProperty().addListener { _, _, newState ->
             if (newState == Worker.State.SUCCEEDED) {
@@ -256,6 +260,148 @@ class DefectMapController {
             webView.engine.loadContent(html)
         } else {
             println("SVG file not found!")
+        }
+    }
+
+    private fun checkAndImportData() {
+        val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
+        val exportFile = File(System.getProperty("user.home"), ".defectmap/equipment_export.json")
+
+        // Если БД пустая или не существует
+        if (!dbFile.exists() || database.getCount() == 0) {
+            if (exportFile.exists()) {
+                Platform.runLater {
+                    val alert = Alert(AlertType.CONFIRMATION)
+                    alert.title = "Импорт данных"
+                    alert.headerText = "📥 Найдены экспортированные данные"
+                    alert.contentText = """
+                    Обнаружен файл с экспортированными данными:
+                    ${exportFile.absolutePath}
+                    
+                    Хотите импортировать данные из этого файла?
+                    
+                    ВНИМАНИЕ: Будут добавлены все записи из экспорта.
+                """.trimIndent()
+
+                    val result = alert.showAndWait()
+                    if (result.isPresent && result.get() == ButtonType.OK) {
+                        importData()
+                    }
+                }
+            }
+            return
+        }
+
+        // Если БД есть, но экспорт новее — предложить обновить
+        val dbLastModified = dbFile.lastModified()
+        val exportLastModified = exportFile.lastModified()
+
+        if (exportFile.exists() && exportLastModified > dbLastModified) {
+            Platform.runLater {
+                val oldData = database.loadAllEquipment()
+                val newData = database.importFromJson()
+
+                if (newData != null) {
+                    val added = newData.filter { new -> oldData.none { it.id == new.id } }
+                    val removed = oldData.filter { old -> newData.none { it.id == old.id } }
+                    val changed = newData.filter { new ->
+                        oldData.find { it.id == new.id }?.let { old ->
+                            old != new
+                        } ?: false
+                    }
+
+                    val message = buildString {
+                        append("📊 Обнаружены изменения в экспортированных данных:\n\n")
+                        if (added.isNotEmpty()) {
+                            append("✅ Добавлено: ${added.size} записей\n")
+                            added.take(5).forEach { append("   - ${it.name}\n") }
+                            if (added.size > 5) append("   ... и еще ${added.size - 5}\n")
+                        }
+                        if (removed.isNotEmpty()) {
+                            append("❌ Удалено: ${removed.size} записей\n")
+                            removed.take(5).forEach { append("   - ${it.name}\n") }
+                            if (removed.size > 5) append("   ... и еще ${removed.size - 5}\n")
+                        }
+                        if (changed.isNotEmpty()) {
+                            append("🔄 Изменено: ${changed.size} записей\n")
+                            changed.take(5).forEach { append("   - ${it.name}\n") }
+                            if (changed.size > 5) append("   ... и еще ${changed.size - 5}\n")
+                        }
+                        append("\nИмпортировать изменения?")
+                    }
+
+                    val alert = Alert(AlertType.CONFIRMATION)
+                    alert.title = "Обновление данных"
+                    alert.headerText = "📥 Найдены новые данные для импорта"
+                    alert.contentText = message
+                    // alert.resizeAndWait() - УДАЛЕНО!
+
+                    val result = alert.showAndWait()
+                    if (result.isPresent && result.get() == ButtonType.OK) {
+                        importData()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun importData() {
+        val imported = database.importFromJson()
+        if (imported != null && imported.isNotEmpty()) {
+            database.saveEquipment(imported)
+            Platform.runLater {
+                val alert = Alert(AlertType.INFORMATION)
+                alert.title = "Импорт завершен"
+                alert.headerText = "✅ Данные успешно импортированы"
+                alert.contentText = """
+                Импортировано ${imported.size} записей.
+                
+                📊 Статистика:
+                - small: ${imported.count { it.size == "small" }}
+                - normal: ${imported.count { it.size == "normal" }}
+                - large: ${imported.count { it.size == "large" }}
+                
+                Нажмите "OK" для обновления отображения.
+            """.trimIndent()
+                alert.showAndWait()
+
+                // Перезагружаем метки
+                initEquipment()
+            }
+        } else {
+            Platform.runLater {
+                Alert(AlertType.WARNING).apply {
+                    title = "Импорт данных"
+                    headerText = "⚠️ Данные для импорта не найдены"
+                    contentText = "Файл экспорта пуст или отсутствует."
+                    showAndWait()
+                }
+            }
+        }
+    }
+
+    private fun showExportNotification(count: Int, message: String = "") {
+        Platform.runLater {
+            val alert = Alert(AlertType.INFORMATION)
+            alert.title = "💾 Автосохранение"
+            alert.headerText = "Данные автоматически сохранены"
+            alert.contentText = """
+            Экспортировано $count записей в JSON.
+            ${if (message.isNotEmpty()) "\n$message" else ""}
+            Файл: ~/.defectmap/equipment_export.json
+        """.trimIndent()
+
+            // Автоматически закрывается через 2 секунды
+            // Используем таймер для автоматического закрытия
+            val timer = javafx.animation.Timeline(
+                javafx.animation.KeyFrame(
+                    javafx.util.Duration.seconds(2.0),
+                    { alert.close() }
+                )
+            )
+            timer.play()
+
+            alert.showAndWait()
         }
     }
 
@@ -831,6 +977,10 @@ class DefectMapController {
                     return
                 }
 
+                val cellSearchField = TextField()
+                cellSearchField.promptText = "🔍 Поиск по ячейке..."
+                cellSearchField.style = "-fx-pref-width: 180px; -fx-font-size: 13px; -fx-padding: 6px 10px; -fx-background-radius: 4px; -fx-border-color: #ced4da; -fx-border-radius: 4px;"
+
                 val mainLayout = VBox(15.0)
                 mainLayout.style = "-fx-background-color: white; -fx-padding: 20px;"
                 mainLayout.prefWidth = 850.0
@@ -922,6 +1072,8 @@ class DefectMapController {
                 }
 
                 // Функция применения фильтров
+                // Функция применения фильтров
+                // Функция применения фильтров
                 fun applyFilter() {
                     val selectedType = typeFilter.value
                     println("🔍 Выбран тип: $selectedType")
@@ -937,13 +1089,21 @@ class DefectMapController {
                         typeMatch
                     }
 
+                    // Поиск по названию или ID
                     val searchText = searchField.text
                     if (searchText.isNotEmpty()) {
                         filtered = filtered.filter {
                             it.name.contains(searchText, ignoreCase = true) ||
                                     it.id.contains(searchText, ignoreCase = true) ||
-                                    it.type.contains(searchText, ignoreCase = true) ||
-                                    it.cell.contains(searchText, ignoreCase = true)
+                                    it.type.contains(searchText, ignoreCase = true)
+                        }
+                    }
+
+                    // НОВОЕ: Поиск по ячейкам (отдельно)
+                    val cellSearchText = cellSearchField.text
+                    if (cellSearchText.isNotEmpty()) {
+                        filtered = filtered.filter {
+                            it.cell.contains(cellSearchText, ignoreCase = true)
                         }
                     }
 
@@ -952,6 +1112,15 @@ class DefectMapController {
                 }
 
                 searchField.textProperty().addListener { _, _, _ ->
+                    applyFilter()
+                }
+
+                searchField.textProperty().addListener { _, _, _ ->
+                    applyFilter()
+                }
+
+// НОВОЕ: Слушатель для поля поиска по ячейкам
+                cellSearchField.textProperty().addListener { _, _, _ ->
                     applyFilter()
                 }
 
@@ -964,6 +1133,7 @@ class DefectMapController {
                 resetBtn.setOnAction {
                     typeFilter.value = "Все типы"
                     searchField.clear()
+                    cellSearchField.clear()  // <-- ДОБАВЛЕНО
                     applyFilter()
                 }
 
@@ -1002,7 +1172,8 @@ class DefectMapController {
                 closeBtn.setOnAction { (closeBtn.scene.window as Stage).close() }
 
                 filterPanel.children.addAll(
-                    filterLabel, typeFilter, applyBtn, resetBtn, countLabel, searchField
+                    filterLabel, typeFilter, applyBtn, resetBtn, countLabel,
+                    searchField, cellSearchField  // <-- ДОБАВЛЕНО cellSearchField
                 )
 
                 buttonPanel.children.addAll(exportBtn, closeBtn)
@@ -1216,6 +1387,9 @@ class DefectMapController {
                 val equipment: List<EquipmentData> = gson.fromJson(result, type)
                 database.saveEquipment(equipment)
                 println("💾 Сохранено в БД: ${equipment.size} шт.")
+
+                // Показываем уведомление об автоэкспорте
+                showExportNotification(equipment.size)
             } catch (e: Exception) {
                 showError("Ошибка сохранения: ${e.message}")
             }

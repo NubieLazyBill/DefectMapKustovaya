@@ -1,5 +1,7 @@
 package org.example.defectmap
 
+import com.google.gson.GsonBuilder
+import com.google.gson.reflect.TypeToken
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.ResultSet
@@ -54,6 +56,12 @@ class Database {
 
     // ======================== СОХРАНЕНИЕ ========================
 
+    private val exportFile: File by lazy {
+        val dir = File(System.getProperty("user.home"), ".defectmap")
+        if (!dir.exists()) dir.mkdirs()
+        File(dir, "equipment_export.json")
+    }
+
     fun saveEquipment(equipment: List<EquipmentData>) {
         if (equipment.isEmpty()) {
             println("⚠️ Нет данных для сохранения")
@@ -61,10 +69,10 @@ class Database {
         }
 
         val sql = """
-            INSERT OR REPLACE INTO equipment 
-            (id, left_pos, top_pos, type, name, letter, cell, size, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
-        """.trimIndent()
+        INSERT OR REPLACE INTO equipment 
+        (id, left_pos, top_pos, type, name, letter, cell, size, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+    """.trimIndent()
 
         connection?.prepareStatement(sql)?.use { stmt ->
             equipment.forEach { item ->
@@ -81,6 +89,10 @@ class Database {
             stmt.executeBatch()
         }
         println("💾 Сохранено ${equipment.size} записей в БД")
+
+        // АВТОМАТИЧЕСКИЙ ЭКСПОРТ
+        exportToJson(equipment)
+        println("📤 Автоэкспорт в JSON выполнен")
     }
 
     // ======================== ЗАГРУЗКА ========================
@@ -219,6 +231,63 @@ class Database {
     fun close() {
         connection?.close()
         println("🔒 База данных закрыта")
+    }
+
+    // ======================== ЭКСПОРТ/ИМПОРТ ========================
+
+    fun getLastExportTimestamp(): Long {
+        return if (exportFile.exists()) {
+            exportFile.lastModified()
+        } else {
+            0L
+        }
+    }
+
+    fun getLastDbUpdate(): Long {
+        val sql = "SELECT MAX(updated_at) as max_updated FROM equipment"
+        connection?.prepareStatement(sql)?.use { stmt ->
+            val rs = stmt.executeQuery()
+            if (rs.next()) {
+                return rs.getLong("max_updated") * 1000 // Unix timestamp в миллисекунды
+            }
+        }
+        return 0L
+    }
+
+    fun exportToJson(equipment: List<EquipmentData>) {
+        try {
+            val gson = GsonBuilder().setPrettyPrinting().create()
+            val json = gson.toJson(equipment)
+
+            val exportFile = File(System.getProperty("user.home"), ".defectmap/equipment_export.json")
+            exportFile.parentFile?.mkdirs()
+            exportFile.writeText(json, Charsets.UTF_8)
+
+            println("📤 Экспортировано ${equipment.size} записей в JSON")
+        } catch (e: Exception) {
+            println("❌ Ошибка экспорта: ${e.message}")
+        }
+    }
+
+    fun importFromJson(): List<EquipmentData>? {
+        try {
+            val importFile = File(System.getProperty("user.home"), ".defectmap/equipment_export.json")
+            if (!importFile.exists()) {
+                println("⚠️ Файл экспорта не найден")
+                return null
+            }
+
+            val json = importFile.readText(Charsets.UTF_8)
+            val gson = GsonBuilder().create()
+            val type = object : TypeToken<List<EquipmentData>>() {}.type
+            val data: List<EquipmentData> = gson.fromJson(json, type)
+
+            println("📥 Импортировано ${data.size} записей из JSON")
+            return data
+        } catch (e: Exception) {
+            println("❌ Ошибка импорта: ${e.message}")
+            return null
+        }
     }
 }
 
