@@ -206,6 +206,40 @@ class DefectMapController {
                 visibility: visible;
                 opacity: 1;
               }
+              /* Размеры меток */
+              .equipment-marker.small {
+                  width: 20px;
+                  height: 20px;
+              }
+              .equipment-marker.small .dot {
+                  width: 16px;
+                  height: 16px;
+                  font-size: 8px;
+              }
+
+              .equipment-marker.normal {
+                  width: 28px;
+                  height: 28px;
+              }
+              .equipment-marker.normal .dot {
+                  width: 24px;
+                  height: 24px;
+                  font-size: 11px;
+              }
+
+              .equipment-marker.large {
+                  width: 36px;
+                  height: 36px;
+              }
+              .equipment-marker.large .dot {
+                  width: 32px;
+                  height: 32px;
+                  font-size: 14px;
+              }
+
+              .equipment-marker:hover {
+                  transform: translate(-50%, -50%) scale(1.2);
+              }
               .edit-mode #container { cursor: crosshair; }
             </style>
           </head>
@@ -251,54 +285,58 @@ class DefectMapController {
         if (savedEquipment.isNotEmpty()) {
             val equipmentJson = gson.toJson(savedEquipment)
             webView.engine.executeScript("""
-            (function() {
-                window.equipment = [];
-                window.equipmentIdCounter = 0;
-                var savedData = $equipmentJson;
-                var container = document.getElementById('equipment-container');
-                if (!container) {
-                    var wrapper = document.getElementById('image-wrapper');
-                    if (wrapper) {
-                        container = document.createElement('div');
-                        container.id = 'equipment-container';
-                        wrapper.appendChild(container);
-                    }
+        (function() {
+            window.equipment = [];
+            window.equipmentIdCounter = 0;
+            var savedData = $equipmentJson;
+            var container = document.getElementById('equipment-container');
+            if (!container) {
+                var wrapper = document.getElementById('image-wrapper');
+                if (wrapper) {
+                    container = document.createElement('div');
+                    container.id = 'equipment-container';
+                    wrapper.appendChild(container);
                 }
-                if (container) container.innerHTML = '';
-                if (!container) return;
-                savedData.forEach(function(item) {
-                    var marker = document.createElement('div');
-                    marker.className = 'equipment-marker ' + item.type;
-                    marker.id = item.id;
-                    marker.style.left = item.left + '%';
-                    marker.style.top = item.top + '%';
-                    // Добавляем ячейку в тултип
-                    var tooltipText = item.name;
-                    if (item.cell && item.cell.length > 0) {
-                        tooltipText = item.name + ' (яч.' + item.cell + ')';
-                    }
-                    marker.innerHTML = '<div class="dot">' + item.letter + '</div><span class="tooltip-text">' + tooltipText + '</span>';
-                    container.appendChild(marker);
-                    window.equipment.push({
-                        id: item.id,
-                        left: item.left,
-                        top: item.top,
-                        type: item.type,
-                        name: item.name,
-                        letter: item.letter,
-                        cell: item.cell || ''
-                    });
+            }
+            if (container) container.innerHTML = '';
+            if (!container) return;
+            
+            savedData.forEach(function(item) {
+                var marker = document.createElement('div');
+                var sizeClass = item.size || 'normal';
+                marker.className = 'equipment-marker ' + item.type + ' ' + sizeClass;
+                marker.id = item.id;
+                marker.style.left = item.left + '%';
+                marker.style.top = item.top + '%';
+                
+                var tooltipText = item.name;
+                if (item.cell && item.cell.length > 0) {
+                    tooltipText = item.name + ' (яч.' + item.cell + ')';
+                }
+                marker.innerHTML = '<div class="dot">' + item.letter + '</div><span class="tooltip-text">' + tooltipText + '</span>';
+                container.appendChild(marker);
+                
+                window.equipment.push({
+                    id: item.id,
+                    left: item.left,
+                    top: item.top,
+                    type: item.type,
+                    name: item.name,
+                    letter: item.letter,
+                    cell: item.cell || '',
+                    size: item.size || 'normal'
                 });
-                console.log('✅ Загружено: ' + savedData.length);
-            })();
+            });
+            console.log('✅ Загружено: ' + savedData.length);
+        })();
         """.trimIndent())
             equipmentCounter = savedEquipment.size
         } else {
             webView.engine.executeScript("""
-            (function() {
-                window.equipment = [];
-                window.equipmentIdCounter = 0;
-            })();
+        (function() {
+            window.equipment = [];
+            window.equipmentIdCounter = 0;
+        })();
         """.trimIndent())
         }
     }
@@ -483,13 +521,13 @@ class DefectMapController {
         println("📍 Добавление оборудования: x=$x, y=$y")
 
         val result = webView.engine.executeScript("""
-        (function() {
-            var wrapper = document.getElementById('image-wrapper');
-            var rect = wrapper.getBoundingClientRect();
-            var cx = (($x - rect.left) / rect.width * 100).toFixed(1);
-            var cy = (($y - rect.top) / rect.height * 100).toFixed(1);
-            return cx + ',' + cy;
-        })();
+    (function() {
+        var wrapper = document.getElementById('image-wrapper');
+        var rect = wrapper.getBoundingClientRect();
+        var cx = (($x - rect.left) / rect.width * 100).toFixed(1);
+        var cy = (($y - rect.top) / rect.height * 100).toFixed(1);
+        return cx + ',' + cy;
+    })();
     """.trimIndent()) as? String
 
         if (result != null && result.contains(",")) {
@@ -499,26 +537,31 @@ class DefectMapController {
 
             Platform.runLater {
                 // Диалог для названия
-                val nameDialog = TextInputDialog("Введите название")
+                val nameDialog = TextInputDialog()
                 nameDialog.title = "Новое оборудование"
                 nameDialog.headerText = "Введите диспетчерское наименование"
                 nameDialog.contentText = "Наименование:"
+                nameDialog.editor?.text = ""
 
                 val nameResult = nameDialog.showAndWait()
                 if (nameResult.isPresent) {
-                    val name = nameResult.get()
+                    val name = nameResult.get().trim()
                     if (name.isNotEmpty()) {
                         // Диалог для ячейки
-                        val cellDialog = TextInputDialog("")
+                        val cellDialog = TextInputDialog()
                         cellDialog.title = "Номер ячейки"
                         cellDialog.headerText = "Введите номер ячейки (опционально)"
                         cellDialog.contentText = "Ячейка:"
+                        cellDialog.editor?.text = ""
 
                         val cellResult = cellDialog.showAndWait()
-                        val cell = cellResult.orElse("")
+                        val cell = cellResult.orElse("").trim()
 
                         // Диалог для типа
-                        val typeDialog = ChoiceDialog("v_500", EquipmentTypes.ALL_TYPES.map { it.second })
+                        val typeDialog = ChoiceDialog(
+                            EquipmentTypes.ALL_TYPES.find { it.first == "v_500" }?.second ?: "Выключатель 500 кВ",
+                            EquipmentTypes.ALL_TYPES.map { it.second }
+                        )
                         typeDialog.title = "Тип оборудования"
                         typeDialog.headerText = "Выберите тип"
                         typeDialog.contentText = "Тип:"
@@ -529,40 +572,73 @@ class DefectMapController {
                             val type = EquipmentTypes.ALL_TYPES.find { it.second == typeName }?.first ?: "other"
                             val typeLabel = EquipmentTypes.getLetter(type)
 
-                            val id = "equipment-${System.currentTimeMillis()}"
-                            equipmentCounter++
+                            // Диалог для выбора размера
+                            val sizeDialog = ChoiceDialog("normal", listOf("small", "normal", "large"))
+                            sizeDialog.title = "Размер метки"
+                            sizeDialog.headerText = "Выберите размер метки на схеме"
+                            sizeDialog.contentText = "Размер (small - для ОРУ-220/35, large - для 500 кВ):"
 
-                            webView.engine.executeScript("""
+                            val sizeResult = sizeDialog.showAndWait()
+                            if (sizeResult.isPresent) {
+                                val size = sizeResult.get()
+
+                                val id = "equipment-${System.currentTimeMillis()}"
+                                equipmentCounter++
+
+                                // Экранируем строки для JavaScript
+                                val escapedName = name.replace("'", "\\'")
+                                val escapedCell = cell.replace("'", "\\'")
+
+                                webView.engine.executeScript("""
                             (function() {
                                 var container = document.getElementById('equipment-container');
+                                if (!container) {
+                                    var wrapper = document.getElementById('image-wrapper');
+                                    if (wrapper) {
+                                        container = document.createElement('div');
+                                        container.id = 'equipment-container';
+                                        wrapper.appendChild(container);
+                                    }
+                                }
+                                if (!container) return;
+                                
                                 var marker = document.createElement('div');
-                                marker.className = 'equipment-marker $type';
+                                marker.className = 'equipment-marker $type $size';
                                 marker.id = '$id';
-                                marker.dataset.id = '${equipmentCounter}';
                                 marker.style.left = '${left}%';
                                 marker.style.top = '${top}%';
-                                marker.innerHTML = '<div class="dot">${typeLabel}</div><span class="tooltip-text">${name}</span>';
+                                
+                                var tooltipText = '$escapedName';
+                                if ('$escapedCell'.length > 0) {
+                                    tooltipText = '$escapedName (яч.$escapedCell)';
+                                }
+                                
+                                marker.innerHTML = '<div class="dot">$typeLabel</div><span class="tooltip-text">' + tooltipText + '</span>';
                                 container.appendChild(marker);
+                                
                                 if (!window.equipment) window.equipment = [];
                                 window.equipment.push({
                                     id: '$id',
                                     left: parseFloat('${left}'),
                                     top: parseFloat('${top}'),
                                     type: '$type',
-                                    name: '${name}',
+                                    name: '$escapedName',
                                     letter: '$typeLabel',
-                                    cell: '$cell'
+                                    cell: '$escapedCell',
+                                    size: '$size'
                                 });
-                                console.log('✅ Добавлено оборудование: ${name} (ячейка: $cell)');
+                                console.log('✅ Добавлено оборудование: $escapedName (размер: $size)');
                             })();
-                        """.trimIndent())
-                            saveEquipment()
+                            """.trimIndent())
+                                saveEquipment()
+                            }
                         }
                     }
                 }
             }
         } else {
             println("❌ Ошибка: результат null")
+            showError("Не удалось определить позицию на схеме")
         }
     }
 
@@ -585,26 +661,36 @@ class DefectMapController {
         val currentName = equipment.name
         val currentType = equipment.type
         val currentCell = equipment.cell
+        val currentSize = equipment.size
 
         Platform.runLater {
-            val nameDialog = TextInputDialog(currentName)
+            // 1. Диалог для названия
+            val nameDialog = TextInputDialog()
             nameDialog.title = "Редактирование оборудования"
             nameDialog.headerText = "Введите новое название"
             nameDialog.contentText = "Наименование:"
+            nameDialog.editor?.text = currentName
 
             val nameResult = nameDialog.showAndWait()
             if (nameResult.isPresent) {
-                val newName = nameResult.get().toString()
+                val newName = nameResult.get().trim()
                 if (newName.isNotEmpty()) {
-                    val cellDialog = TextInputDialog(currentCell)
+
+                    // 2. Диалог для ячейки
+                    val cellDialog = TextInputDialog()
                     cellDialog.title = "Номер ячейки"
                     cellDialog.headerText = "Введите номер ячейки"
                     cellDialog.contentText = "Ячейка:"
+                    cellDialog.editor?.text = currentCell
 
                     val cellResult = cellDialog.showAndWait()
-                    val newCell = cellResult.orElse("")
+                    val newCell = cellResult.orElse("").trim()
 
-                    val typeDialog = ChoiceDialog(currentType, EquipmentTypes.ALL_TYPES.map { it.second })
+                    // 3. Диалог для типа
+                    val typeDialog = ChoiceDialog(
+                        EquipmentTypes.ALL_TYPES.find { it.first == currentType }?.second ?: currentType,
+                        EquipmentTypes.ALL_TYPES.map { it.second }
+                    )
                     typeDialog.title = "Тип оборудования"
                     typeDialog.headerText = "Выберите тип"
                     typeDialog.contentText = "Тип:"
@@ -615,50 +701,81 @@ class DefectMapController {
                         val newType = EquipmentTypes.ALL_TYPES.find { it.second == typeName }?.first ?: "other"
                         val newLetter = EquipmentTypes.getLetter(newType)
 
-                        val updatedList = allEquipment.map { item ->
-                            if (item.id == equipmentId) {
-                                item.copy(name = newName, type = newType, letter = newLetter, cell = newCell)
-                            } else {
-                                item
-                            }
-                        }
+                        // 4. Диалог для размера
+                        val sizeDialog = ChoiceDialog(currentSize, listOf("small", "normal", "large"))
+                        sizeDialog.title = "Размер метки"
+                        sizeDialog.headerText = "Выберите размер метки на схеме"
+                        sizeDialog.contentText = "Размер (small - для ОРУ-220/35, large - для 500 кВ):"
 
-                        database.saveEquipment(updatedList)
-                        println("✅ База данных обновлена")
+                        val sizeResult = sizeDialog.showAndWait()
+                        if (sizeResult.isPresent) {
+                            val newSize = sizeResult.get()
 
-                        webView.engine.executeScript("""
-                        (function() {
-                            var id = '$equipmentId';
-                            var newName = '$newName';
-                            var newType = '$newType';
-                            var newLetter = '$newLetter';
-                            var newCell = '$newCell';
-                            var marker = document.getElementById(id);
-                            if (marker) {
-                                marker.className = 'equipment-marker ' + newType;
-                                var dot = marker.querySelector('.dot');
-                                if (dot) dot.textContent = newLetter;
-                                var tooltip = marker.querySelector('.tooltip-text');
-                                if (tooltip) {
-                                    tooltip.textContent = newName + (newCell ? ' (яч.' + newCell + ')' : '');
+                            // Обновляем список
+                            val updatedList = allEquipment.map { item ->
+                                if (item.id == equipmentId) {
+                                    item.copy(
+                                        name = newName,
+                                        type = newType,
+                                        letter = newLetter,
+                                        cell = newCell,
+                                        size = newSize
+                                    )
+                                } else {
+                                    item
                                 }
                             }
+
+                            database.saveEquipment(updatedList)
+                            println("✅ База данных обновлена")
+
+                            // Экранируем строки для JavaScript
+                            val escapedName = newName.replace("'", "\\'")
+                            val escapedType = newType.replace("'", "\\'")
+                            val escapedLetter = newLetter.replace("'", "\\'")
+                            val escapedCell = newCell.replace("'", "\\'")
+                            val escapedSize = newSize.replace("'", "\\'")
+
+                            // Обновляем в DOM
+                            webView.engine.executeScript("""
+                        (function() {
+                            var id = '$equipmentId';
+                            var marker = document.getElementById(id);
+                            if (marker) {
+                                // Обновляем классы (тип + размер)
+                                marker.className = 'equipment-marker $escapedType $escapedSize';
+                                
+                                var dot = marker.querySelector('.dot');
+                                if (dot) dot.textContent = '$escapedLetter';
+                                
+                                var tooltip = marker.querySelector('.tooltip-text');
+                                if (tooltip) {
+                                    var text = '$escapedName';
+                                    if ('$escapedCell'.length > 0) {
+                                        text = '$escapedName (яч.$escapedCell)';
+                                    }
+                                    tooltip.textContent = text;
+                                }
+                            }
+                            
                             if (window.equipment) {
                                 for (var i = 0; i < window.equipment.length; i++) {
                                     if (window.equipment[i].id === id) {
-                                        window.equipment[i].name = newName;
-                                        window.equipment[i].type = newType;
-                                        window.equipment[i].letter = newLetter;
-                                        window.equipment[i].cell = newCell;
+                                        window.equipment[i].name = '$escapedName';
+                                        window.equipment[i].type = '$escapedType';
+                                        window.equipment[i].letter = '$escapedLetter';
+                                        window.equipment[i].cell = '$escapedCell';
+                                        window.equipment[i].size = '$escapedSize';
                                         break;
                                     }
                                 }
                             }
                         })();
-                    """.trimIndent())
+                        """.trimIndent())
 
-                        equipmentCounter = updatedList.size
-                        showInfo("Оборудование обновлено: $newName")
+                            equipmentCounter = updatedList.size
+                            showInfo("Оборудование обновлено: $newName (размер: $newSize)")
+                        }
                     }
                 }
             }
@@ -1129,23 +1246,3 @@ class DefectMapController {
         }
     }
 }
-
-data class EquipmentData(
-    val id: String,
-    val left: Double,
-    val top: Double,
-    val type: String,
-    val name: String,
-    val letter: String,
-    val cell: String = ""
-)
-
-class EquipmentTableItem(
-    val number: Int,
-    val id: String,
-    val name: String,
-    val type: String,
-    val left: Double,
-    val top: Double,
-    val cell: String,
-)

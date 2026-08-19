@@ -2,7 +2,6 @@ package org.example.defectmap
 
 import java.sql.Connection
 import java.sql.DriverManager
-import java.sql.Statement
 import java.sql.ResultSet
 import java.io.File
 
@@ -10,10 +9,10 @@ class Database {
     private var connection: Connection? = null
 
     init {
-        // Загружаем драйвер SQLite
         Class.forName("org.sqlite.JDBC")
         connect()
         createTable()
+        addSizeColumnIfNotExists()
     }
 
     private fun connect() {
@@ -34,20 +33,37 @@ class Database {
                 name TEXT NOT NULL,
                 letter TEXT NOT NULL,
                 cell TEXT DEFAULT '',
+                size TEXT DEFAULT 'normal',
                 created_at INTEGER DEFAULT (strftime('%s', 'now')),
                 updated_at INTEGER DEFAULT (strftime('%s', 'now'))
             )
         """.trimIndent()
-
         executeUpdate(sql)
         println("✅ Таблица equipment создана")
     }
 
-    // Сохранение оборудования
+    private fun addSizeColumnIfNotExists() {
+        try {
+            executeUpdate("ALTER TABLE equipment ADD COLUMN size TEXT DEFAULT 'normal'")
+            println("✅ Колонка size добавлена")
+        } catch (e: Exception) {
+            // Колонка уже существует — ничего не делаем
+            println("ℹ️ Колонка size уже существует")
+        }
+    }
+
+    // ======================== СОХРАНЕНИЕ ========================
+
     fun saveEquipment(equipment: List<EquipmentData>) {
+        if (equipment.isEmpty()) {
+            println("⚠️ Нет данных для сохранения")
+            return
+        }
+
         val sql = """
-            INSERT OR REPLACE INTO equipment (id, left_pos, top_pos, type, name, letter, cell, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+            INSERT OR REPLACE INTO equipment 
+            (id, left_pos, top_pos, type, name, letter, cell, size, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
         """.trimIndent()
 
         connection?.prepareStatement(sql)?.use { stmt ->
@@ -59,6 +75,7 @@ class Database {
                 stmt.setString(5, item.name)
                 stmt.setString(6, item.letter)
                 stmt.setString(7, item.cell)
+                stmt.setString(8, item.size)
                 stmt.addBatch()
             }
             stmt.executeBatch()
@@ -66,7 +83,8 @@ class Database {
         println("💾 Сохранено ${equipment.size} записей в БД")
     }
 
-    // Загрузка всего оборудования
+    // ======================== ЗАГРУЗКА ========================
+
     fun loadAllEquipment(): List<EquipmentData> {
         val result = mutableListOf<EquipmentData>()
         val sql = "SELECT * FROM equipment ORDER BY name"
@@ -77,10 +95,10 @@ class Database {
                 result.add(mapRowToEquipment(rs))
             }
         }
+        println("📂 Загружено ${result.size} записей из БД")
         return result
     }
 
-    // Поиск по типу
     fun findByType(type: String): List<EquipmentData> {
         val result = mutableListOf<EquipmentData>()
         val sql = "SELECT * FROM equipment WHERE type = ? ORDER BY name"
@@ -95,7 +113,6 @@ class Database {
         return result
     }
 
-    // Поиск по названию (содержит)
     fun searchByName(query: String): List<EquipmentData> {
         val result = mutableListOf<EquipmentData>()
         val sql = "SELECT * FROM equipment WHERE name LIKE ? ORDER BY name"
@@ -110,7 +127,6 @@ class Database {
         return result
     }
 
-    // Поиск по ячейке
     fun findByCell(cell: String): List<EquipmentData> {
         val result = mutableListOf<EquipmentData>()
         val sql = "SELECT * FROM equipment WHERE cell = ? ORDER BY name"
@@ -125,7 +141,8 @@ class Database {
         return result
     }
 
-    // Удаление одной записи
+    // ======================== УДАЛЕНИЕ ========================
+
     fun deleteById(id: String): Boolean {
         val sql = "DELETE FROM equipment WHERE id = ?"
         return connection?.prepareStatement(sql)?.use { stmt ->
@@ -134,7 +151,15 @@ class Database {
         } ?: false
     }
 
-    // Получение статистики
+    fun deleteAll(): Boolean {
+        val sql = "DELETE FROM equipment"
+        return connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.executeUpdate() > 0
+        } ?: false
+    }
+
+    // ======================== СТАТИСТИКА ========================
+
     fun getStatistics(): Map<String, Int> {
         val stats = mutableMapOf<String, Int>()
         val sql = "SELECT type, COUNT(*) as count FROM equipment GROUP BY type ORDER BY count DESC"
@@ -144,14 +169,13 @@ class Database {
             while (rs.next()) {
                 val type = rs.getString("type")
                 val count = rs.getInt("count")
-                val typeName = EquipmentTypes.getTypeName(type) // преобразуем ключ в название
+                val typeName = EquipmentTypes.getTypeName(type)
                 stats[typeName] = count
             }
         }
         return stats
     }
 
-    // Получение количества записей
     fun getCount(): Int {
         val sql = "SELECT COUNT(*) as count FROM equipment"
         connection?.prepareStatement(sql)?.use { stmt ->
@@ -161,6 +185,18 @@ class Database {
         return 0
     }
 
+    fun getCountBySize(size: String): Int {
+        val sql = "SELECT COUNT(*) as count FROM equipment WHERE size = ?"
+        connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.setString(1, size)
+            val rs = stmt.executeQuery()
+            return rs.getInt("count")
+        }
+        return 0
+    }
+
+    // ======================== ВСПОМОГАТЕЛЬНЫЕ ========================
+
     private fun mapRowToEquipment(rs: ResultSet): EquipmentData {
         return EquipmentData(
             id = rs.getString("id"),
@@ -169,7 +205,8 @@ class Database {
             type = rs.getString("type"),
             name = rs.getString("name"),
             letter = rs.getString("letter"),
-            cell = rs.getString("cell") ?: ""
+            cell = rs.getString("cell") ?: "",
+            size = rs.getString("size") ?: "normal"
         )
     }
 
@@ -184,3 +221,27 @@ class Database {
         println("🔒 База данных закрыта")
     }
 }
+
+// ======================== DATA CLASSES ========================
+
+data class EquipmentData(
+    val id: String,
+    val left: Double,
+    val top: Double,
+    val type: String,
+    val name: String,
+    val letter: String,
+    val cell: String = "",
+    val size: String = "normal"  // small, normal, large
+)
+
+data class EquipmentTableItem(
+    val number: Int,
+    val id: String,
+    val name: String,
+    val type: String,
+    val left: Double,
+    val top: Double,
+    val cell: String,
+    val size: String = "normal"
+)
