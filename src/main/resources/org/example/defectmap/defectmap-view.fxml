@@ -42,6 +42,9 @@
         <Button fx:id="cancelEditBtn" text="❌ Отмена"
                 style="-fx-background-color: #f44336; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"
                 visible="false" managed="false"/>
+
+        <Button fx:id="statsBtn" text="📊 Статистика"
+                style="-fx-background-color: #17a2b8; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
     </HBox>
 
 </AnchorPane>

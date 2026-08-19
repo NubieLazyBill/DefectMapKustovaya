@@ -33,6 +33,9 @@ import com.google.gson.reflect.TypeToken
 class DefectMapController {
 
     @FXML
+    private lateinit var statsBtn: Button
+
+    @FXML
     private lateinit var webView: WebView
 
     @FXML
@@ -65,11 +68,7 @@ class DefectMapController {
     private var isEditMode = false
     private var equipmentCounter = 0
 
-    private val equipmentFile: File by lazy {
-        val appDir = File(System.getProperty("user.home"), ".defectmap")
-        if (!appDir.exists()) appDir.mkdirs()
-        File(appDir, "equipment.json")
-    }
+    private val database: Database by lazy { Database() }
 
     private val gson: Gson by lazy {
         GsonBuilder().setPrettyPrinting().create()
@@ -226,6 +225,23 @@ class DefectMapController {
         }
     }
 
+    private fun showStatistics() {
+        val stats = database.getStatistics()
+        val total = database.getCount()
+
+        val sb = StringBuilder()
+        sb.append("📊 СТАТИСТИКА ОБОРУДОВАНИЯ\n")
+        sb.append("=".repeat(40) + "\n")
+        sb.append("Всего: $total шт.\n\n")
+
+        // stats уже содержит typeName -> count
+        stats.forEach { (typeName, count) ->
+            sb.append("  $typeName: $count шт.\n")
+        }
+
+        showInfo(sb.toString())
+    }
+
     // ======================== ИНИЦИАЛИЗАЦИЯ ========================
 
     private fun initEquipment() {
@@ -235,52 +251,57 @@ class DefectMapController {
         if (savedEquipment.isNotEmpty()) {
             val equipmentJson = gson.toJson(savedEquipment)
             webView.engine.executeScript("""
-                (function() {
-                    window.equipment = [];
-                    window.equipmentIdCounter = 0;
-                    var savedData = $equipmentJson;
-                    var container = document.getElementById('equipment-container');
-                    if (!container) {
-                        var wrapper = document.getElementById('image-wrapper');
-                        if (wrapper) {
-                            container = document.createElement('div');
-                            container.id = 'equipment-container';
-                            wrapper.appendChild(container);
-                        }
+            (function() {
+                window.equipment = [];
+                window.equipmentIdCounter = 0;
+                var savedData = $equipmentJson;
+                var container = document.getElementById('equipment-container');
+                if (!container) {
+                    var wrapper = document.getElementById('image-wrapper');
+                    if (wrapper) {
+                        container = document.createElement('div');
+                        container.id = 'equipment-container';
+                        wrapper.appendChild(container);
                     }
-                    if (container) container.innerHTML = '';
-                    if (!container) return;
-                    savedData.forEach(function(item) {
-                        var marker = document.createElement('div');
-                        marker.className = 'equipment-marker ' + item.type;
-                        marker.id = item.id;
-                        marker.style.left = item.left + '%';
-                        marker.style.top = item.top + '%';
-                        marker.innerHTML = '<div class="dot">' + item.letter + '</div><span class="tooltip-text">' + item.name + '</span>';
-                        container.appendChild(marker);
-                        window.equipment.push({
-                            id: item.id,
-                            left: item.left,
-                            top: item.top,
-                            type: item.type,
-                            name: item.name,
-                            letter: item.letter
-                        });
+                }
+                if (container) container.innerHTML = '';
+                if (!container) return;
+                savedData.forEach(function(item) {
+                    var marker = document.createElement('div');
+                    marker.className = 'equipment-marker ' + item.type;
+                    marker.id = item.id;
+                    marker.style.left = item.left + '%';
+                    marker.style.top = item.top + '%';
+                    // Добавляем ячейку в тултип
+                    var tooltipText = item.name;
+                    if (item.cell && item.cell.length > 0) {
+                        tooltipText = item.name + ' (яч.' + item.cell + ')';
+                    }
+                    marker.innerHTML = '<div class="dot">' + item.letter + '</div><span class="tooltip-text">' + tooltipText + '</span>';
+                    container.appendChild(marker);
+                    window.equipment.push({
+                        id: item.id,
+                        left: item.left,
+                        top: item.top,
+                        type: item.type,
+                        name: item.name,
+                        letter: item.letter,
+                        cell: item.cell || ''
                     });
-                    console.log('✅ Загружено: ' + savedData.length);
-                })();
-            """.trimIndent())
+                });
+                console.log('✅ Загружено: ' + savedData.length);
+            })();
+        """.trimIndent())
             equipmentCounter = savedEquipment.size
         } else {
             webView.engine.executeScript("""
-                (function() {
-                    window.equipment = [];
-                    window.equipmentIdCounter = 0;
-                })();
-            """.trimIndent())
+            (function() {
+                window.equipment = [];
+                window.equipmentIdCounter = 0;
+            })();
+        """.trimIndent())
         }
     }
-
     // ======================== КНОПКИ ========================
 
     private fun setupButtons() {
@@ -289,6 +310,7 @@ class DefectMapController {
         saveEquipmentBtn.setOnAction { saveEquipment() }
         viewEquipmentBtn.setOnAction { viewEquipmentList() }
         cancelEditBtn.setOnAction { toggleEditMode(false) }
+        statsBtn.setOnAction { showStatistics() }
     }
 
     private fun toggleEditMode(enable: Boolean) {
@@ -470,23 +492,32 @@ class DefectMapController {
         })();
     """.trimIndent()) as? String
 
-        println("📐 Результат: $result")
-
         if (result != null && result.contains(",")) {
             val parts = result.split(",")
             val left = parts[0]
             val top = parts[1]
 
             Platform.runLater {
-                val dialog = TextInputDialog("Введите название")
-                dialog.title = "Новое оборудование"
-                dialog.headerText = "Введите диспетчерское наименование"
-                dialog.contentText = "Наименование:"
+                // Диалог для названия
+                val nameDialog = TextInputDialog("Введите название")
+                nameDialog.title = "Новое оборудование"
+                nameDialog.headerText = "Введите диспетчерское наименование"
+                nameDialog.contentText = "Наименование:"
 
-                val nameResult = dialog.showAndWait()
+                val nameResult = nameDialog.showAndWait()
                 if (nameResult.isPresent) {
                     val name = nameResult.get()
                     if (name.isNotEmpty()) {
+                        // Диалог для ячейки
+                        val cellDialog = TextInputDialog("")
+                        cellDialog.title = "Номер ячейки"
+                        cellDialog.headerText = "Введите номер ячейки (опционально)"
+                        cellDialog.contentText = "Ячейка:"
+
+                        val cellResult = cellDialog.showAndWait()
+                        val cell = cellResult.orElse("")
+
+                        // Диалог для типа
                         val typeDialog = ChoiceDialog("v_500", EquipmentTypes.ALL_TYPES.map { it.second })
                         typeDialog.title = "Тип оборудования"
                         typeDialog.headerText = "Выберите тип"
@@ -519,9 +550,10 @@ class DefectMapController {
                                     top: parseFloat('${top}'),
                                     type: '$type',
                                     name: '${name}',
-                                    letter: '$typeLabel'
+                                    letter: '$typeLabel',
+                                    cell: '$cell'
                                 });
-                                console.log('✅ Добавлено оборудование: ${name}');
+                                console.log('✅ Добавлено оборудование: ${name} (ячейка: $cell)');
                             })();
                         """.trimIndent())
                             saveEquipment()
@@ -552,6 +584,7 @@ class DefectMapController {
 
         val currentName = equipment.name
         val currentType = equipment.type
+        val currentCell = equipment.cell
 
         Platform.runLater {
             val nameDialog = TextInputDialog(currentName)
@@ -563,6 +596,14 @@ class DefectMapController {
             if (nameResult.isPresent) {
                 val newName = nameResult.get().toString()
                 if (newName.isNotEmpty()) {
+                    val cellDialog = TextInputDialog(currentCell)
+                    cellDialog.title = "Номер ячейки"
+                    cellDialog.headerText = "Введите номер ячейки"
+                    cellDialog.contentText = "Ячейка:"
+
+                    val cellResult = cellDialog.showAndWait()
+                    val newCell = cellResult.orElse("")
+
                     val typeDialog = ChoiceDialog(currentType, EquipmentTypes.ALL_TYPES.map { it.second })
                     typeDialog.title = "Тип оборудования"
                     typeDialog.headerText = "Выберите тип"
@@ -574,44 +615,47 @@ class DefectMapController {
                         val newType = EquipmentTypes.ALL_TYPES.find { it.second == typeName }?.first ?: "other"
                         val newLetter = EquipmentTypes.getLetter(newType)
 
-                        val updatedList = allEquipment.map {
-                            if (it.id == equipmentId) {
-                                it.copy(name = newName, type = newType, letter = newLetter)
+                        val updatedList = allEquipment.map { item ->
+                            if (item.id == equipmentId) {
+                                item.copy(name = newName, type = newType, letter = newLetter, cell = newCell)
                             } else {
-                                it
+                                item
                             }
                         }
 
-                        val json = gson.toJson(updatedList)
-                        equipmentFile.writeText(json)
-                        println("✅ Файл обновлен")
+                        database.saveEquipment(updatedList)
+                        println("✅ База данных обновлена")
 
                         webView.engine.executeScript("""
-                            (function() {
-                                var id = '$equipmentId';
-                                var newName = '$newName';
-                                var newType = '$newType';
-                                var newLetter = '$newLetter';
-                                var marker = document.getElementById(id);
-                                if (marker) {
-                                    marker.className = 'equipment-marker ' + newType;
-                                    var dot = marker.querySelector('.dot');
-                                    if (dot) dot.textContent = newLetter;
-                                    var tooltip = marker.querySelector('.tooltip-text');
-                                    if (tooltip) tooltip.textContent = newName;
+                        (function() {
+                            var id = '$equipmentId';
+                            var newName = '$newName';
+                            var newType = '$newType';
+                            var newLetter = '$newLetter';
+                            var newCell = '$newCell';
+                            var marker = document.getElementById(id);
+                            if (marker) {
+                                marker.className = 'equipment-marker ' + newType;
+                                var dot = marker.querySelector('.dot');
+                                if (dot) dot.textContent = newLetter;
+                                var tooltip = marker.querySelector('.tooltip-text');
+                                if (tooltip) {
+                                    tooltip.textContent = newName + (newCell ? ' (яч.' + newCell + ')' : '');
                                 }
-                                if (window.equipment) {
-                                    for (var i = 0; i < window.equipment.length; i++) {
-                                        if (window.equipment[i].id === id) {
-                                            window.equipment[i].name = newName;
-                                            window.equipment[i].type = newType;
-                                            window.equipment[i].letter = newLetter;
-                                            break;
-                                        }
+                            }
+                            if (window.equipment) {
+                                for (var i = 0; i < window.equipment.length; i++) {
+                                    if (window.equipment[i].id === id) {
+                                        window.equipment[i].name = newName;
+                                        window.equipment[i].type = newType;
+                                        window.equipment[i].letter = newLetter;
+                                        window.equipment[i].cell = newCell;
+                                        break;
                                     }
                                 }
-                            })();
-                        """.trimIndent())
+                            }
+                        })();
+                    """.trimIndent())
 
                         equipmentCounter = updatedList.size
                         showInfo("Оборудование обновлено: $newName")
@@ -621,32 +665,35 @@ class DefectMapController {
         }
     }
 
+    private fun loadEquipment(): List<EquipmentData> {
+        return database.loadAllEquipment()
+    }
+
+    // Вместо deleteEquipment()
     private fun deleteEquipment(equipmentId: String) {
-        val allEquipment = loadEquipment()
-        val updatedList = allEquipment.filter { it.id != equipmentId }
-        val json = gson.toJson(updatedList)
-        equipmentFile.writeText(json)
-        println("🗑️ Удалено: $equipmentId, осталось: ${updatedList.size}")
+        // Удаляем из БД
+        database.deleteById(equipmentId)
 
+        // Удаляем из DOM и window.equipment
         webView.engine.executeScript("""
-            (function() {
-                var id = '$equipmentId';
-                var marker = document.getElementById(id);
-                if (marker) marker.remove();
-                if (window.equipment) {
-                    var index = -1;
-                    for (var i = 0; i < window.equipment.length; i++) {
-                        if (window.equipment[i].id === id) {
-                            index = i;
-                            break;
-                        }
+        (function() {
+            var id = '$equipmentId';
+            var marker = document.getElementById(id);
+            if (marker) marker.remove();
+            if (window.equipment) {
+                var index = -1;
+                for (var i = 0; i < window.equipment.length; i++) {
+                    if (window.equipment[i].id === id) {
+                        index = i;
+                        break;
                     }
-                    if (index !== -1) window.equipment.splice(index, 1);
                 }
-            })();
-        """.trimIndent())
+                if (index !== -1) window.equipment.splice(index, 1);
+            }
+        })();
+    """.trimIndent())
 
-        equipmentCounter = updatedList.size
+        equipmentCounter = loadEquipment().size
         showInfo("Оборудование удалено")
     }
 
@@ -685,7 +732,6 @@ class DefectMapController {
                 val typeFilter = ComboBox<String>()
                 typeFilter.promptText = "Все типы"
                 typeFilter.style = "-fx-pref-width: 180px; -fx-font-size: 13px; -fx-padding: 4px;"
-                // В комбобоксе показываем человекочитаемые названия
                 typeFilter.items.addAll(listOf("Все типы") + EquipmentTypes.ALL_TYPES.map { it.second })
                 typeFilter.selectionModel.selectFirst()
 
@@ -714,6 +760,11 @@ class DefectMapController {
                 colType.cellValueFactory = javafx.scene.control.cell.PropertyValueFactory("type")
                 colType.prefWidth = 180.0
 
+                val colCell = javafx.scene.control.TableColumn<EquipmentTableItem, String>("Ячейка")
+                colCell.cellValueFactory = javafx.scene.control.cell.PropertyValueFactory("cell")
+                colCell.prefWidth = 70.0
+                colCell.style = "-fx-alignment: CENTER;"
+
                 val colX = javafx.scene.control.TableColumn<EquipmentTableItem, Double>("X%")
                 colX.cellValueFactory = javafx.scene.control.cell.PropertyValueFactory("left")
                 colX.prefWidth = 60.0
@@ -728,18 +779,18 @@ class DefectMapController {
                 colId.cellValueFactory = javafx.scene.control.cell.PropertyValueFactory("id")
                 colId.prefWidth = 120.0
 
-                tableView.columns.addAll(colNumber, colName, colType, colX, colY, colId)
+                tableView.columns.addAll(colNumber, colName, colType, colCell, colX, colY, colId)
 
                 // Преобразование EquipmentData в EquipmentTableItem
                 fun toTableItems(data: List<EquipmentData>): List<EquipmentTableItem> {
                     return data.mapIndexed { index, item ->
-                        // Получаем человекочитаемое название типа
                         val typeDisplayName = EquipmentTypes.ALL_TYPES.toMap()[item.type] ?: item.type
                         EquipmentTableItem(
                             number = index + 1,
                             id = item.id,
                             name = item.name,
-                            type = typeDisplayName,  // показываем название
+                            type = typeDisplayName,
+                            cell = item.cell,
                             left = item.left,
                             top = item.top
                         )
@@ -758,7 +809,6 @@ class DefectMapController {
                     val selectedType = typeFilter.value
                     println("🔍 Выбран тип: $selectedType")
 
-                    // Получаем ключ по выбранному названию
                     val typeKey = when (selectedType) {
                         "Все типы" -> "all"
                         else -> EquipmentTypes.ALL_TYPES.find { it.second == selectedType }?.first ?: "all"
@@ -775,7 +825,8 @@ class DefectMapController {
                         filtered = filtered.filter {
                             it.name.contains(searchText, ignoreCase = true) ||
                                     it.id.contains(searchText, ignoreCase = true) ||
-                                    it.type.contains(searchText, ignoreCase = true)
+                                    it.type.contains(searchText, ignoreCase = true) ||
+                                    it.cell.contains(searchText, ignoreCase = true)
                         }
                     }
 
@@ -900,8 +951,8 @@ class DefectMapController {
 
     private fun exportEquipmentToCsv() {
         val result = webView.engine.executeScript("""
-            JSON.stringify(window.equipment || [])
-        """.trimIndent()) as? String
+        JSON.stringify(window.equipment || [])
+    """.trimIndent()) as? String
 
         if (result != null) {
             try {
@@ -912,11 +963,11 @@ class DefectMapController {
                     return
                 }
                 val sb = StringBuilder()
-                sb.append("№;Наименование;Тип;X%;Y%;ID\n")
+                sb.append("№;Наименование;Тип;Ячейка;X%;Y%;ID\n")
                 equipment.forEachIndexed { index, item ->
-                    sb.append("${index + 1};${item.name};${item.type};${item.left};${item.top};${item.id}\n")
+                    sb.append("${index + 1};${item.name};${item.type};${item.cell};${item.left};${item.top};${item.id}\n")
                 }
-                val csvFile = File(equipmentFile.parent, "equipment_export.csv")
+                val csvFile = File(System.getProperty("user.home"), ".defectmap/equipment_export.csv")
                 csvFile.writeText(sb.toString(), Charsets.UTF_8)
                 showInfo("✅ Экспортировано ${equipment.size} единиц оборудования в файл:\n${csvFile.absolutePath}")
             } catch (e: Exception) {
@@ -1039,36 +1090,18 @@ class DefectMapController {
 
     private fun saveEquipment() {
         val result = webView.engine.executeScript("""
-            JSON.stringify(window.equipment || [])
-        """.trimIndent()) as? String
+        JSON.stringify(window.equipment || [])
+    """.trimIndent()) as? String
 
         if (result != null) {
             try {
                 val type = object : TypeToken<List<EquipmentData>>() {}.type
                 val equipment: List<EquipmentData> = gson.fromJson(result, type)
-                val json = gson.toJson(equipment)
-                equipmentFile.writeText(json)
-                println("💾 Сохранено оборудования: ${equipment.size}")
+                database.saveEquipment(equipment)
+                println("💾 Сохранено в БД: ${equipment.size} шт.")
             } catch (e: Exception) {
                 showError("Ошибка сохранения: ${e.message}")
             }
-        } else {
-            showError("Нет данных для сохранения")
-        }
-    }
-
-    private fun loadEquipment(): List<EquipmentData> {
-        return try {
-            if (equipmentFile.exists()) {
-                val json = equipmentFile.readText()
-                val type = object : TypeToken<List<EquipmentData>>() {}.type
-                gson.fromJson(json, type)
-            } else {
-                emptyList()
-            }
-        } catch (e: Exception) {
-            println("❌ Ошибка загрузки: ${e.message}")
-            emptyList()
         }
     }
 
@@ -1103,7 +1136,8 @@ data class EquipmentData(
     val top: Double,
     val type: String,
     val name: String,
-    val letter: String
+    val letter: String,
+    val cell: String = ""
 )
 
 class EquipmentTableItem(
@@ -1112,5 +1146,6 @@ class EquipmentTableItem(
     val name: String,
     val type: String,
     val left: Double,
-    val top: Double
+    val top: Double,
+    val cell: String,
 )
