@@ -1458,6 +1458,18 @@ class DefectMapController {
 
     // Вместо deleteEquipment()
     private fun deleteEquipment(equipmentId: String) {
+        // ===== ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ =====
+        val confirm = Alert(AlertType.CONFIRMATION)
+        confirm.title = "Удаление оборудования"
+        confirm.headerText = "🗑️ Вы уверены?"
+        confirm.contentText = "Вы действительно хотите удалить это оборудование и ВСЕ его маркеры?\n\nЭто действие НЕЛЬЗЯ будет отменить!"
+
+        val result = confirm.showAndWait()
+        if (result.isEmpty() || result.get() != ButtonType.OK) {
+            println("❌ Удаление отменено")
+            return
+        }
+
         // Удаляем из БД
         database.deleteById(equipmentId)
 
@@ -1483,7 +1495,7 @@ class DefectMapController {
     """.trimIndent())
 
         equipmentCounter = loadEquipment().size
-        showInfo("Оборудование удалено")
+        showToast("🗑️ Оборудование удалено")
     }
 
     // ======================== СПИСОК И ЭКСПОРТ ========================
