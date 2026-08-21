@@ -14,8 +14,104 @@ class Database {
         Class.forName("org.sqlite.JDBC")
         connect()
         createTable()
+        createDefectsTable()
         addSizeColumnIfNotExists()
         addMarkersColumnIfNotExists()
+    }
+
+    private fun createDefectsTable() {
+        val sql = """
+        CREATE TABLE IF NOT EXISTS defects (
+            id TEXT PRIMARY KEY,
+            equipment_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            severity TEXT DEFAULT 'medium',
+            status TEXT DEFAULT 'open',
+            detection_date INTEGER,
+            repair_date INTEGER,
+            photo_path TEXT,
+            notes TEXT,
+            marker_left REAL,
+            marker_top REAL,
+            created_at INTEGER DEFAULT (strftime('%s', 'now')),
+            updated_at INTEGER DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE
+        )
+    """.trimIndent()
+        executeUpdate(sql)
+        println("✅ Таблица defects создана")
+    }
+
+    // ======================== ДЕФЕКТЫ ========================
+
+    fun saveDefect(defect: DefectData) {
+        val sql = """
+        INSERT OR REPLACE INTO defects 
+        (id, equipment_id, name, description, severity, status, detection_date, repair_date, photo_path, notes, marker_left, marker_top, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+    """.trimIndent()
+
+        connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.setString(1, defect.id)
+            stmt.setString(2, defect.equipmentId)
+            stmt.setString(3, defect.name)
+            stmt.setString(4, defect.description)
+            stmt.setString(5, defect.severity)
+            stmt.setString(6, defect.status)
+            stmt.setLong(7, defect.detectionDate)
+            if (defect.repairDate != null) stmt.setLong(8, defect.repairDate) else stmt.setNull(8, java.sql.Types.INTEGER)
+            stmt.setString(9, defect.photoPath)
+            stmt.setString(10, defect.notes)
+            if (defect.markerLeft != null) stmt.setDouble(11, defect.markerLeft) else stmt.setNull(11, java.sql.Types.REAL)
+            if (defect.markerTop != null) stmt.setDouble(12, defect.markerTop) else stmt.setNull(12, java.sql.Types.REAL)
+            stmt.executeUpdate()
+        }
+        println("💾 Дефект сохранён: ${defect.name}")
+    }
+
+    fun getDefectsByEquipment(equipmentId: String): List<DefectData> {
+        val result = mutableListOf<DefectData>()
+        val sql = "SELECT * FROM defects WHERE equipment_id = ? ORDER BY severity DESC, detection_date DESC"
+
+        connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.setString(1, equipmentId)
+            val rs = stmt.executeQuery()
+            while (rs.next()) {
+                result.add(mapRowToDefect(rs))
+            }
+        }
+        return result
+    }
+
+    fun deleteDefect(defectId: String) {
+        val sql = "DELETE FROM defects WHERE id = ?"
+        connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.setString(1, defectId)
+            stmt.executeUpdate()
+        }
+        println("🗑️ Дефект удалён: $defectId")
+    }
+
+    fun updateDefect(defect: DefectData) {
+        saveDefect(defect)
+    }
+
+    private fun mapRowToDefect(rs: ResultSet): DefectData {
+        return DefectData(
+            id = rs.getString("id"),
+            equipmentId = rs.getString("equipment_id"),
+            name = rs.getString("name"),
+            description = rs.getString("description") ?: "",
+            severity = rs.getString("severity") ?: "medium",
+            status = rs.getString("status") ?: "open",
+            detectionDate = rs.getLong("detection_date"),
+            repairDate = if (rs.getObject("repair_date") != null) rs.getLong("repair_date") else null,
+            photoPath = rs.getString("photo_path"),
+            notes = rs.getString("notes") ?: "",
+            markerLeft = if (rs.getObject("marker_left") != null) rs.getDouble("marker_left") else null,
+            markerTop = if (rs.getObject("marker_top") != null) rs.getDouble("marker_top") else null
+        )
     }
 
     private fun addMarkersColumnIfNotExists() {

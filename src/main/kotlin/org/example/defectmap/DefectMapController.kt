@@ -35,7 +35,6 @@ import javafx.scene.control.ButtonType
 import javafx.scene.layout.StackPane
 import javafx.geometry.Insets
 import javafx.animation.PauseTransition
-import javafx.util.Duration
 
 class DefectMapController {
 
@@ -1097,7 +1096,7 @@ class DefectMapController {
 
     // ======================== ВСПЛЫВАЮЩАЯ ПОДСКАЗКА (TOAST) ========================
 
-    private fun showToast(message: String, duration: Duration = Duration.seconds(2.5)) {
+    private fun showToast(message: String, duration: javafx.util.Duration = javafx.util.Duration.seconds(2.5)) {
         Platform.runLater {
             val toast = Label(message)
             toast.style = """
@@ -1963,109 +1962,47 @@ class DefectMapController {
 
     private fun handleEquipmentClick(x: Double, y: Double) {
         val result = webView.engine.executeScript("""
-            (function() {
-                var container = document.getElementById('container');
-                var rect = container.getBoundingClientRect();
-                var markers = document.querySelectorAll('.equipment-marker');
-                var clickX = $x;
-                var clickY = $y;
-                for (var i = 0; i < markers.length; i++) {
-                    var marker = markers[i];
-                    var markerRect = marker.getBoundingClientRect();
-                    if (clickX >= markerRect.left - rect.left - 15 &&
-                        clickX <= markerRect.right - rect.left + 15 &&
-                        clickY >= markerRect.top - rect.top - 15 &&
-                        clickY <= markerRect.bottom - rect.top + 15) {
-                        return marker.id;
-                    }
+        (function() {
+            var container = document.getElementById('container');
+            var rect = container.getBoundingClientRect();
+            var markers = document.querySelectorAll('.equipment-marker');
+            var clickX = $x;
+            var clickY = $y;
+            for (var i = 0; i < markers.length; i++) {
+                var marker = markers[i];
+                var markerRect = marker.getBoundingClientRect();
+                if (clickX >= markerRect.left - rect.left - 15 &&
+                    clickX <= markerRect.right - rect.left + 15 &&
+                    clickY >= markerRect.top - rect.top - 15 &&
+                    clickY <= markerRect.bottom - rect.top + 15) {
+                    return marker.id;
                 }
-                return null;
+            }
+            return null;
+        })();
+    """.trimIndent()) as? String
+
+        if (result != null) {
+            // Ищем оборудование по ID маркера
+            val equipmentId = webView.engine.executeScript("""
+            (function() {
+                var marker = document.getElementById('$result');
+                if (!marker) return null;
+                return marker.dataset.equipmentId || marker.id;
             })();
         """.trimIndent()) as? String
 
-        if (result != null) {
-            showEquipmentImage(result)
-        }
-    }
-
-    private fun showEquipmentImage(equipmentId: String) {
-        val equipmentInfo = webView.engine.executeScript("""
-            (function() {
-                var equipment = window.equipment || [];
-                for (var i = 0; i < equipment.length; i++) {
-                    if (equipment[i].id === '$equipmentId') {
-                        return equipment[i];
+            if (equipmentId != null) {
+                val equipment = loadEquipment().find { it.id == equipmentId }
+                if (equipment != null) {
+                    val cardController = EquipmentCardController(equipment, database) {
+                        // Callback после изменения дефектов (обновляем схему при необходимости)
                     }
-                }
-                return null;
-            })();
-        """.trimIndent()) as? Map<*, *>
-
-        var imagePath = "/org/example/defectmap/ВВБК-500.jfif"
-
-        if (equipmentInfo != null) {
-            val type = equipmentInfo["type"] as? String ?: ""
-            imagePath = when {
-                type == "v_500" || type == "v_220" || type == "v_35" -> "/org/example/defectmap/breaker_500kv.jpg"
-                type == "r_500" || type == "r_220" || type == "r_35" -> "/org/example/defectmap/disconnector.jpg"
-                type == "autotransformer" -> "/org/example/defectmap/transformer.jpg"
-                type == "lightning" -> "/org/example/defectmap/lightning_rod.jpg"
-                type == "opn_500" || type == "opn_220" -> "/org/example/defectmap/opn.jpg"
-                type == "tn_500" || type == "tn_220" || type == "tn_35" -> "/org/example/defectmap/tn.jpg"
-                type == "tt_500" || type == "tt_220" || type == "tt_35" -> "/org/example/defectmap/tt.jpg"
-                type == "ks_500" || type == "ks_220" || type == "coupling_capacitor" -> "/org/example/defectmap/capacitor.jpg"
-                type == "reactor_500" -> "/org/example/defectmap/reactor.jpg"
-                type == "capacitor" -> "/org/example/defectmap/capacitor.jpg"
-                type == "compressor" -> "/org/example/defectmap/compressor.jpg"
-                else -> "/org/example/defectmap/equipment.jpg"
-            }
-        }
-
-        val imageUrl = javaClass.getResource(imagePath)
-        if (imageUrl != null) {
-            try {
-                val image = Image(imageUrl.toExternalForm())
-                val imageView = ImageView(image)
-                imageView.isPreserveRatio = true
-                imageView.fitWidth = 600.0
-                imageView.fitHeight = 400.0
-
-                val infoLabel = Label()
-                if (equipmentInfo != null) {
-                    val name = equipmentInfo["name"] as? String ?: "Оборудование"
-                    val type = equipmentInfo["type"] as? String ?: ""
-                    infoLabel.text = "📌 $name\nТип: $type"
-                    infoLabel.style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #333; -fx-text-alignment: center;"
-                    infoLabel.isWrapText = true
-                    infoLabel.maxWidth = 600.0
-                    infoLabel.alignment = Pos.CENTER
+                    cardController.show()
                 } else {
-                    infoLabel.text = "Оборудование"
-                    infoLabel.style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #333;"
+                    showError("Оборудование не найдено")
                 }
-
-                val closeButton = Button("✕ Закрыть")
-                closeButton.style = "-fx-font-size: 14px; -fx-background-color: #ff4444; -fx-text-fill: white; -fx-padding: 8px 20px; -fx-background-radius: 6px;"
-
-                val layout = VBox(15.0, imageView, infoLabel, closeButton)
-                layout.alignment = Pos.CENTER
-                layout.style = "-fx-background-color: white; -fx-padding: 20px; -fx-background-radius: 12px; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 20, 0, 0, 0);"
-
-                val popupStage = Stage()
-                popupStage.title = equipmentInfo?.let { it["name"] as? String } ?: "Информация об оборудовании"
-                popupStage.scene = Scene(layout, 680.0, 560.0)
-                popupStage.isResizable = false
-
-                closeButton.setOnAction { popupStage.close() }
-                popupStage.scene.setOnKeyPressed { event ->
-                    if (event.code == KeyCode.ESCAPE) popupStage.close()
-                }
-                popupStage.showAndWait()
-            } catch (e: Exception) {
-                showError("Не удалось загрузить изображение")
             }
-        } else {
-            showError("Изображение не найдено: $imagePath")
         }
     }
 
