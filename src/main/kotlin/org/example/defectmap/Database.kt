@@ -15,6 +15,16 @@ class Database {
         connect()
         createTable()
         addSizeColumnIfNotExists()
+        addMarkersColumnIfNotExists()
+    }
+
+    private fun addMarkersColumnIfNotExists() {
+        try {
+            executeUpdate("ALTER TABLE equipment ADD COLUMN markers TEXT DEFAULT '[]'")
+            println("✅ Колонка markers добавлена")
+        } catch (e: Exception) {
+            println("ℹ️ Колонка markers уже существует")
+        }
     }
 
     private fun connect() {
@@ -36,6 +46,7 @@ class Database {
                 letter TEXT NOT NULL,
                 cell TEXT DEFAULT '',
                 size TEXT DEFAULT 'normal',
+                markers TEXT DEFAULT '[]',  -- <-- НОВАЯ КОЛОНКА
                 created_at INTEGER DEFAULT (strftime('%s', 'now')),
                 updated_at INTEGER DEFAULT (strftime('%s', 'now'))
             )
@@ -68,29 +79,48 @@ class Database {
             return
         }
 
+        val gson = GsonBuilder().create()
         val sql = """
         INSERT OR REPLACE INTO equipment 
-        (id, left_pos, top_pos, type, name, letter, cell, size, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+        (id, left_pos, top_pos, type, name, letter, cell, size, markers, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
     """.trimIndent()
 
         connection?.prepareStatement(sql)?.use { stmt ->
             equipment.forEach { item ->
+                // ===== БЕЗОПАСНАЯ ПРОВЕРКА: если markers == null, создаём пустой список =====
+                val safeMarkers = item.markers ?: listOf()
+
+                // Сохраняем основной маркер (первый или isMain=true)
+                val mainMarker = if (safeMarkers.isNotEmpty()) {
+                    safeMarkers.firstOrNull { it.isMain } ?: safeMarkers.first()
+                } else {
+                    // Если маркеров нет — создаём из left/top
+                    MarkerPosition(item.left, item.top, true)
+                }
+
+                // Сохраняем все маркеры в JSON (если null — сохраняем пустой массив)
+                val markersJson = if (safeMarkers.isNotEmpty()) {
+                    gson.toJson(safeMarkers)
+                } else {
+                    // Если маркеров нет — сохраняем один из left/top
+                    gson.toJson(listOf(MarkerPosition(item.left, item.top, true)))
+                }
+
                 stmt.setString(1, item.id)
-                stmt.setDouble(2, item.left)
-                stmt.setDouble(3, item.top)
+                stmt.setDouble(2, mainMarker.left)
+                stmt.setDouble(3, mainMarker.top)
                 stmt.setString(4, item.type)
                 stmt.setString(5, item.name)
                 stmt.setString(6, item.letter)
                 stmt.setString(7, item.cell)
                 stmt.setString(8, item.size)
+                stmt.setString(9, markersJson)
                 stmt.addBatch()
             }
             stmt.executeBatch()
         }
         println("💾 Сохранено ${equipment.size} записей в БД")
-
-        // АВТОМАТИЧЕСКИЙ ЭКСПОРТ
         exportToJson(equipment)
         println("📤 Автоэкспорт в JSON выполнен")
     }
@@ -210,6 +240,16 @@ class Database {
     // ======================== ВСПОМОГАТЕЛЬНЫЕ ========================
 
     private fun mapRowToEquipment(rs: ResultSet): EquipmentData {
+        val gson = GsonBuilder().create()
+        val markersJson = rs.getString("markers") ?: "[]"
+        val markers: List<MarkerPosition> = try {
+            val type = object : TypeToken<List<MarkerPosition>>() {}.type
+            gson.fromJson(markersJson, type)
+        } catch (e: Exception) {
+            // Если не удалось распарсить — создаём из left/top
+            listOf(MarkerPosition(rs.getDouble("left_pos"), rs.getDouble("top_pos"), true))
+        }
+
         return EquipmentData(
             id = rs.getString("id"),
             left = rs.getDouble("left_pos"),
@@ -218,7 +258,8 @@ class Database {
             name = rs.getString("name"),
             letter = rs.getString("letter"),
             cell = rs.getString("cell") ?: "",
-            size = rs.getString("size") ?: "normal"
+            size = rs.getString("size") ?: "normal",
+            markers = markers  // <-- НОВОЕ!
         )
     }
 
@@ -257,12 +298,23 @@ class Database {
     fun exportToJson(equipment: List<EquipmentData>) {
         try {
             val gson = GsonBuilder().setPrettyPrinting().create()
-            val json = gson.toJson(equipment)
-
+            val exportData = equipment.map { eq ->
+                mapOf(
+                    "id" to eq.id,
+                    "left" to eq.left,
+                    "top" to eq.top,
+                    "type" to eq.type,
+                    "name" to eq.name,
+                    "letter" to eq.letter,
+                    "cell" to eq.cell,
+                    "size" to eq.size,
+                    "markers" to eq.markers  // <-- ЭТО ДОБАВЛЯЕТ markers!
+                )
+            }
+            val json = gson.toJson(exportData)
             val exportFile = File(System.getProperty("user.home"), ".defectmap/equipment_export.json")
             exportFile.parentFile?.mkdirs()
             exportFile.writeText(json, Charsets.UTF_8)
-
             println("📤 Экспортировано ${equipment.size} записей в JSON")
         } catch (e: Exception) {
             println("❌ Ошибка экспорта: ${e.message}")
@@ -279,11 +331,37 @@ class Database {
 
             val json = importFile.readText(Charsets.UTF_8)
             val gson = GsonBuilder().create()
-            val type = object : TypeToken<List<EquipmentData>>() {}.type
-            val data: List<EquipmentData> = gson.fromJson(json, type)
+            val type = object : TypeToken<List<Map<String, Any>>>() {}.type
+            val data: List<Map<String, Any>> = gson.fromJson(json, type)
 
-            println("📥 Импортировано ${data.size} записей из JSON")
-            return data
+            val result = data.map { map ->
+                val markersJson = map["markers"] as? String ?: "[]"
+                val markersType = object : TypeToken<List<MarkerPosition>>() {}.type
+                val markers: List<MarkerPosition> = try {
+                    gson.fromJson(markersJson, markersType)
+                } catch (e: Exception) {
+                    listOf(MarkerPosition(
+                        (map["left"] as? Double) ?: 0.0,
+                        (map["top"] as? Double) ?: 0.0,
+                        true
+                    ))
+                }
+
+                EquipmentData(
+                    id = map["id"] as? String ?: "",
+                    left = (map["left"] as? Double) ?: 0.0,
+                    top = (map["top"] as? Double) ?: 0.0,
+                    type = map["type"] as? String ?: "",
+                    name = map["name"] as? String ?: "",
+                    letter = map["letter"] as? String ?: "",
+                    cell = map["cell"] as? String ?: "",
+                    size = map["size"] as? String ?: "normal",
+                    markers = markers
+                )
+            }
+
+            println("📥 Импортировано ${result.size} записей из JSON")
+            return result
         } catch (e: Exception) {
             println("❌ Ошибка импорта: ${e.message}")
             return null
@@ -301,7 +379,14 @@ data class EquipmentData(
     val name: String,
     val letter: String,
     val cell: String = "",
-    val size: String = "normal"  // small, normal, large
+    val size: String = "normal",
+    val markers: List<MarkerPosition> = listOf()  // НОВОЕ ПОЛЕ
+)
+
+data class MarkerPosition(
+    val left: Double,
+    val top: Double,
+    val isMain: Boolean = false
 )
 
 data class EquipmentTableItem(

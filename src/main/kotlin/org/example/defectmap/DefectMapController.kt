@@ -29,7 +29,13 @@ import java.io.File
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
+import javafx.animation.KeyFrame
+import javafx.animation.Timeline
 import javafx.scene.control.ButtonType
+import javafx.scene.layout.StackPane
+import javafx.geometry.Insets
+import javafx.animation.PauseTransition
+import javafx.util.Duration
 
 class DefectMapController {
 
@@ -56,6 +62,8 @@ class DefectMapController {
 
     @FXML
     private lateinit var forceImportBtn: Button
+
+    private var currentEditingEquipmentId: String? = null  // Для добавления маркеров
 
 
     private var zoomLevel = 1.0
@@ -250,6 +258,14 @@ class DefectMapController {
                   height: 32px;
                   font-size: 14px;
               }
+              /* ===== СТИЛИ ДЛЯ ДОПОЛНИТЕЛЬНЫХ МАРКЕРОВ ===== */
+              .equipment-marker.marker-extra {
+                  border: 2px dashed rgba(255, 255, 255, 0.5);
+                  opacity: 0.85;
+              }
+              .equipment-marker.marker-extra .dot {
+                  border: 2px dashed rgba(255, 255, 255, 0.8);
+              }
 
               .equipment-marker:hover {
                   transform: translate(-50%, -50%) scale(1.2);
@@ -402,28 +418,12 @@ class DefectMapController {
     }
 
     private fun showExportNotification(count: Int, message: String = "") {
-        Platform.runLater {
-            val alert = Alert(AlertType.INFORMATION)
-            alert.title = "💾 Автосохранение"
-            alert.headerText = "Данные автоматически сохранены"
-            alert.contentText = """
-            Экспортировано $count записей в JSON.
-            ${if (message.isNotEmpty()) "\n$message" else ""}
-            Файл: ~/.defectmap/equipment_export.json
-        """.trimIndent()
-
-            // Автоматически закрывается через 2 секунды
-            // Используем таймер для автоматического закрытия
-            val timer = javafx.animation.Timeline(
-                javafx.animation.KeyFrame(
-                    javafx.util.Duration.seconds(2.0),
-                    { alert.close() }
-                )
-            )
-            timer.play()
-
-            alert.showAndWait()
+        val text = buildString {
+            append("💾 Экспортировано $count записей")
+            if (message.isNotEmpty()) append("\n$message")
+            append("\nФайл: ~/.defectmap/equipment_export.json")
         }
+        showToast(text, javafx.util.Duration.seconds(2.5))
     }
 
     private fun showStatistics() {
@@ -454,7 +454,6 @@ class DefectMapController {
             webView.engine.executeScript("""
         (function() {
             window.equipment = [];
-            window.equipmentIdCounter = 0;
             var savedData = $equipmentJson;
             var container = document.getElementById('equipment-container');
             if (!container) {
@@ -469,15 +468,32 @@ class DefectMapController {
             if (!container) return;
             
             savedData.forEach(function(item) {
-                var marker = document.createElement('div');
-                var sizeClass = item.size || 'normal';
-                marker.className = 'equipment-marker ' + item.type + ' ' + sizeClass;
-                marker.id = item.id;
-                marker.style.left = item.left + '%';
-                marker.style.top = item.top + '%';
+                // ===== ГЛАВНОЕ ИСПРАВЛЕНИЕ =====
+                // Если markers пустой массив или отсутствует — создаём из left/top
+                var markers = item.markers;
+                if (!markers || markers.length === 0) {
+                    markers = [{left: item.left, top: item.top, isMain: true}];
+                }
+                // ==================================
                 
-               marker.innerHTML = '<div class="dot">' + item.letter + '</div><span class="tooltip-text">' + item.name + '</span>';
-               container.appendChild(marker);
+                markers.forEach(function(markerPos, index) {
+                    var marker = document.createElement('div');
+                    var sizeClass = item.size || 'normal';
+                    marker.className = 'equipment-marker ' + item.type + ' ' + sizeClass;
+                    if (index > 0) marker.className += ' marker-extra';
+                    marker.id = item.id + '-marker-' + index;
+                    marker.style.left = markerPos.left + '%';
+                    marker.style.top = markerPos.top + '%';
+                    marker.dataset.equipmentId = item.id;
+                    marker.dataset.markerIndex = index;
+                    
+                    if (index > 0) {
+                        marker.style.border = '2px dashed rgba(255,255,255,0.5)';
+                    }
+                    
+                    marker.innerHTML = '<div class="dot">' + item.letter + '</div><span class="tooltip-text">' + item.name + '</span>';
+                    container.appendChild(marker);
+                });
                 
                 window.equipment.push({
                     id: item.id,
@@ -487,10 +503,14 @@ class DefectMapController {
                     name: item.name,
                     letter: item.letter,
                     cell: item.cell || '',
-                    size: item.size || 'normal'
+                    size: item.size || 'normal',
+                    markers: markers
                 });
             });
-            console.log('✅ Загружено: ' + savedData.length);
+            console.log('✅ Загружено: ' + savedData.length + ' единиц оборудования');
+            console.log('📊 Всего маркеров: ' + window.equipment.reduce(function(sum, eq) {
+                return sum + (eq.markers ? eq.markers.length : 1);
+            }, 0));
         })();
         """.trimIndent())
             equipmentCounter = savedEquipment.size
@@ -498,7 +518,6 @@ class DefectMapController {
             webView.engine.executeScript("""
         (function() {
             window.equipment = [];
-            window.equipmentIdCounter = 0;
         })();
         """.trimIndent())
         }
@@ -611,18 +630,23 @@ class DefectMapController {
         cancelEditBtn.isVisible = enable
         cancelEditBtn.isManaged = enable
 
-        // Добавляем/убираем класс edit-mode у контейнера
-        webView.engine.executeScript("""
-        var container = document.getElementById('container');
-        if (${enable}) {
-            container.classList.add('edit-mode');
-            window.editMode = true;
-            document.body.style.cursor = 'crosshair';
-        } else {
-            container.classList.remove('edit-mode');
-            window.editMode = false;
-            document.body.style.cursor = 'default';
+        // Если выходим из режима редактирования — сбрасываем ID
+        if (!enable) {
+            currentEditingEquipmentId = null
+            editModeBtn.text = "✏️ Режим редактирования"
         }
+
+        webView.engine.executeScript("""
+    var container = document.getElementById('container');
+    if (${enable}) {
+        container.classList.add('edit-mode');
+        window.editMode = true;
+        document.body.style.cursor = 'crosshair';
+    } else {
+        container.classList.remove('edit-mode');
+        window.editMode = false;
+        document.body.style.cursor = 'default';
+    }
     """.trimIndent())
 
         editModeBtn.text = if (enable) "🔒 Выйти из редактирования" else "✏️ Режим редактирования"
@@ -758,15 +782,123 @@ class DefectMapController {
     }
 
     private fun showContextMenu(x: Double, y: Double, equipmentId: String) {
+        println("🔍 showContextMenu: equipmentId = $equipmentId")
         val contextMenu = ContextMenu()
 
+        var equipment: EquipmentData? = null
+        var isExtraMarker = false
+        var markerId = equipmentId
+
+        // 1. Проверяем, есть ли data-equipment-id у маркера
+        val markerInfo = webView.engine.executeScript("""
+        (function() {
+            var marker = document.getElementById('$equipmentId');
+            if (!marker) return null;
+            
+            return {
+                equipmentId: marker.dataset.equipmentId || null,
+                isExtra: marker.classList.contains('marker-extra'),
+                markerId: marker.id
+            };
+        })();
+    """.trimIndent()) as? Map<*, *>
+
+        if (markerInfo != null) {
+            val realId = markerInfo["equipmentId"] as? String
+            isExtraMarker = markerInfo["isExtra"] as? Boolean ?: false
+            markerId = markerInfo["markerId"] as? String ?: equipmentId
+
+            if (realId != null) {
+                equipment = loadEquipment().find { it.id == realId }
+            }
+        }
+
+        // 2. Если не нашли — ищем по позиции
+        if (equipment == null) {
+            val foundId = webView.engine.executeScript("""
+            (function() {
+                var marker = document.getElementById('$equipmentId');
+                if (!marker) return null;
+                
+                var left = parseFloat(marker.style.left);
+                var top = parseFloat(marker.style.top);
+                
+                for (var i = 0; i < window.equipment.length; i++) {
+                    var eq = window.equipment[i];
+                    
+                    if (Math.abs(eq.left - left) < 0.1 && Math.abs(eq.top - top) < 0.1) {
+                        return eq.id;
+                    }
+                    if (eq.markers) {
+                        for (var j = 0; j < eq.markers.length; j++) {
+                            var m = eq.markers[j];
+                            if (Math.abs(m.left - left) < 0.1 && Math.abs(m.top - top) < 0.1) {
+                                return eq.id;
+                            }
+                        }
+                    }
+                }
+                return null;
+            })();
+        """.trimIndent()) as? String
+
+            if (foundId != null) {
+                equipment = loadEquipment().find { it.id == foundId }
+                // Проверяем, является ли маркер дополнительным
+                val isExtra = webView.engine.executeScript("""
+                (function() {
+                    var marker = document.getElementById('$equipmentId');
+                    return marker ? marker.classList.contains('marker-extra') : false;
+                })();
+            """.trimIndent()) as? Boolean ?: false
+                isExtraMarker = isExtra
+            }
+        }
+
+        if (equipment == null) {
+            showError("Оборудование не найдено. ID: $equipmentId")
+            return
+        }
+
+        val freshEquipment = loadEquipment().find { it.id == equipment.id }
+        val markersCount = freshEquipment?.markers?.size ?: 1
+
+        println("🔍 Найдено оборудование: ${equipment.name}, маркеров: $markersCount, isExtraMarker: $isExtraMarker")
+
+        // ===== ПУНКТЫ МЕНЮ =====
         val editItem = MenuItem("✏️ Редактировать")
-        editItem.setOnAction { editEquipment(equipmentId) }
+        editItem.setOnAction {
+            editEquipment(equipment.id)
+            contextMenu.hide()
+        }
 
-        val deleteItem = MenuItem("🗑️ Удалить")
-        deleteItem.setOnAction { deleteEquipment(equipmentId) }
+        val deleteItem = MenuItem("🗑️ Удалить оборудование")
+        deleteItem.setOnAction {
+            deleteEquipment(equipment.id)
+            contextMenu.hide()
+        }
 
-        contextMenu.items.addAll(editItem, deleteItem)
+        val addMarkerItem = MenuItem("➕ Добавить дополнительный маркер '${equipment.name}' на схему")
+        addMarkerItem.setOnAction {
+            addMarkerToEquipment(equipment.id)
+            contextMenu.hide()
+        }
+
+        contextMenu.items.addAll(editItem, deleteItem, addMarkerItem)
+
+        // ===== Показываем "Удалить маркер" ТОЛЬКО для дополнительных маркеров =====
+        if (isExtraMarker && markersCount > 1) {
+            val deleteMarkerItem = MenuItem("🗑️ Удалить маркер")
+            deleteMarkerItem.setOnAction {
+                deleteMarker(equipment.id, markerId)
+                contextMenu.hide()
+            }
+            contextMenu.items.add(deleteMarkerItem)
+            println("➕ Добавлен пункт 'Удалить маркер'")
+        } else {
+            println("ℹ️ Пункт 'Удалить маркер' НЕ добавлен: isExtraMarker=$isExtraMarker, markersCount=$markersCount")
+        }
+
         contextMenu.show(webView, x, y)
     }
 
@@ -774,6 +906,12 @@ class DefectMapController {
 
     private fun addEquipmentAtPosition(x: Double, y: Double) {
         println("📍 Добавление оборудования: x=$x, y=$y")
+
+        // Если мы в режиме добавления маркера к существующему оборудованию
+        if (currentEditingEquipmentId != null) {
+            addMarkerToExistingEquipment(x, y)
+            return
+        }
 
         val result = webView.engine.executeScript("""
     (function() {
@@ -887,6 +1025,183 @@ class DefectMapController {
             println("❌ Ошибка: результат null")
             showError("Не удалось определить позицию на схеме")
         }
+    }
+
+    private fun addMarkerToExistingEquipment(x: Double, y: Double) {
+        val equipmentId = currentEditingEquipmentId ?: return
+
+        val result = webView.engine.executeScript("""
+    (function() {
+        var wrapper = document.getElementById('image-wrapper');
+        var rect = wrapper.getBoundingClientRect();
+        var cx = (($x - rect.left) / rect.width * 100).toFixed(1);
+        var cy = (($y - rect.top) / rect.height * 100).toFixed(1);
+        return cx + ',' + cy;
+    })();
+    """.trimIndent()) as? String
+
+        if (result != null && result.contains(",")) {
+            val parts = result.split(",")
+            val left = parts[0].toDouble()
+            val top = parts[1].toDouble()
+
+            val allEquipment = loadEquipment()
+            val equipment = allEquipment.find { it.id == equipmentId }
+
+            if (equipment != null) {
+                val newMarkers = equipment.markers + MarkerPosition(left, top, isMain = false)
+                val updatedEquipment = equipment.copy(markers = newMarkers)
+
+                val updatedList = allEquipment.map {
+                    if (it.id == equipmentId) updatedEquipment else it
+                }
+                database.saveEquipment(updatedList)
+
+                webView.engine.executeScript("""
+            (function() {
+                var container = document.getElementById('equipment-container');
+                if (!container) return;
+                
+                var marker = document.createElement('div');
+                var sizeClass = '${equipment.size}' || 'normal';
+                marker.className = 'equipment-marker ${equipment.type} ' + sizeClass + ' marker-extra';
+                marker.id = '${equipmentId}-marker-' + Date.now();
+                marker.style.left = '$left%';
+                marker.style.top = '$top%';
+                marker.style.border = '2px dashed rgba(255,255,255,0.5)';
+                marker.dataset.equipmentId = '${equipment.id}';
+                marker.dataset.markerIndex = '${newMarkers.size - 1}';
+                
+                marker.innerHTML = '<div class="dot">${equipment.letter}</div><span class="tooltip-text">${equipment.name}</span>';
+                container.appendChild(marker);
+                console.log('✅ Добавлен доп. маркер для: ${equipment.name}');
+            })();
+            """.trimIndent())
+
+                println("✅ Добавлен маркер для: ${equipment.name}")
+                showToast("✅ Маркер добавлен. Кликните ещё раз для следующего.")
+
+                val updatedList2 = loadEquipment()
+                val equipmentJson = gson.toJson(updatedList2)
+                webView.engine.executeScript("""
+                window.equipment = $equipmentJson;
+                console.log('✅ window.equipment обновлён, маркеров: ' + window.equipment.length);
+            """.trimIndent())
+            } else {
+                showError("Оборудование не найдено. ID: $equipmentId")
+            }
+        } else {
+            showError("Не удалось определить позицию на схеме")
+        }
+    }
+
+    // ======================== ВСПЛЫВАЮЩАЯ ПОДСКАЗКА (TOAST) ========================
+
+    private fun showToast(message: String, duration: Duration = Duration.seconds(2.5)) {
+        Platform.runLater {
+            val toast = Label(message)
+            toast.style = """
+            -fx-background-color: rgba(0, 0, 0, 0.8);
+            -fx-text-fill: white;
+            -fx-font-size: 14px;
+            -fx-padding: 12px 24px;
+            -fx-background-radius: 8px;
+            -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 10, 0, 0, 0);
+        """.trimIndent()
+            toast.isWrapText = true
+            toast.maxWidth = 500.0
+            toast.alignment = Pos.CENTER
+
+            val scene = webView.scene
+            if (scene != null) {
+                val stackPane = StackPane()
+                stackPane.children.add(toast)
+                stackPane.isMouseTransparent = true
+
+                val root = scene.root as? javafx.scene.layout.Pane
+                if (root != null) {
+                    root.children.add(stackPane)
+                    StackPane.setAlignment(stackPane, Pos.TOP_CENTER)
+                    StackPane.setMargin(stackPane, Insets(60.0, 0.0, 0.0, 0.0))
+
+                    // PauseTransition — альтернатива Timeline
+                    val pause = PauseTransition(duration)
+                    pause.setOnFinished {
+                        root.children.remove(stackPane)
+                    }
+                    pause.play()
+                }
+            }
+        }
+    }
+
+    private fun deleteMarker(equipmentId: String, markerId: String) {
+        println("🗑️ Удаление маркера: $markerId для оборудования: $equipmentId")
+
+        // Загружаем оборудование
+        val allEquipment = loadEquipment()
+        val equipment = allEquipment.find { it.id == equipmentId }
+
+        if (equipment == null) {
+            showError("Оборудование не найдено")
+            return
+        }
+
+        // Проверяем, есть ли у оборудования несколько маркеров
+        if (equipment.markers.size <= 1) {
+            showInfo("⚠️ Нельзя удалить единственный маркер оборудования. Используйте 'Удалить оборудование'")
+            return
+        }
+
+        // Находим индекс маркера по ID (храним в data-marker-index)
+        val markerIndex = webView.engine.executeScript("""
+        (function() {
+            var marker = document.getElementById('$markerId');
+            if (marker && marker.dataset && marker.dataset.markerIndex) {
+                return parseInt(marker.dataset.markerIndex);
+            }
+            return -1;
+        })();
+    """.trimIndent()) as? Int ?: -1
+
+        if (markerIndex < 0 || markerIndex >= equipment.markers.size) {
+            showError("Маркер не найден")
+            return
+        }
+
+        // Удаляем маркер из списка
+        val newMarkers = equipment.markers.toMutableList()
+        newMarkers.removeAt(markerIndex)
+
+        // Если удалённый маркер был основным (isMain=true) — делаем первый маркер основным
+        val updatedMarkers = newMarkers.mapIndexed { index, pos ->
+            if (index == 0) pos.copy(isMain = true) else pos.copy(isMain = false)
+        }
+
+        val updatedEquipment = equipment.copy(markers = updatedMarkers)
+
+        // Сохраняем
+        val updatedList = allEquipment.map {
+            if (it.id == equipmentId) updatedEquipment else it
+        }
+        database.saveEquipment(updatedList)
+
+        // Удаляем маркер из DOM
+        webView.engine.executeScript("""
+        (function() {
+            var marker = document.getElementById('$markerId');
+            if (marker) marker.remove();
+            console.log('🗑️ Маркер удалён');
+        })();
+    """.trimIndent())
+
+        // Обновляем window.equipment
+        val updatedList2 = loadEquipment()
+        val equipmentJson = gson.toJson(updatedList2)
+        webView.engine.executeScript("window.equipment = $equipmentJson;")
+
+        equipmentCounter = updatedList2.size
+        showInfo("🗑️ Маркер удалён")
     }
 
     // ======================== РЕДАКТИРОВАНИЕ ========================
@@ -1146,16 +1461,18 @@ class DefectMapController {
         // Удаляем из БД
         database.deleteById(equipmentId)
 
-        // Удаляем из DOM и window.equipment
+        // Удаляем все маркеры из DOM (по data-equipment-id)
         webView.engine.executeScript("""
         (function() {
-            var id = '$equipmentId';
-            var marker = document.getElementById(id);
-            if (marker) marker.remove();
+            var markers = document.querySelectorAll('[data-equipment-id="$equipmentId"]');
+            markers.forEach(function(marker) {
+                marker.remove();
+            });
+            
             if (window.equipment) {
                 var index = -1;
                 for (var i = 0; i < window.equipment.length; i++) {
-                    if (window.equipment[i].id === id) {
+                    if (window.equipment[i].id === '$equipmentId') {
                         index = i;
                         break;
                     }
@@ -1738,6 +2055,25 @@ class DefectMapController {
         } else {
             showError("Изображение не найдено: $imagePath")
         }
+    }
+
+    private fun addMarkerToEquipment(equipmentId: String) {
+        println("➕ Добавление маркера для: $equipmentId")
+
+        val allEquipment = loadEquipment()
+        val equipment = allEquipment.find { it.id == equipmentId }
+
+        if (equipment == null) {
+            showError("Оборудование не найдено")
+            return
+        }
+
+        currentEditingEquipmentId = equipmentId
+        isEditMode = true
+        toggleEditMode(true)
+        editModeBtn.text = "🔒 Закончить добавление маркера"
+
+        showToast("Кликните на схеме, чтобы добавить маркер для '${equipment.name}'")
     }
 
     // ======================== СОХРАНЕНИЕ / ЗАГРУЗКА ========================
