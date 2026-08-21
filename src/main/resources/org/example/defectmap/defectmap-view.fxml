@@ -45,6 +45,9 @@
 
         <Button fx:id="statsBtn" text="📊 Статистика"
                 style="-fx-background-color: #17a2b8; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
+
+        <Button fx:id="forceImportBtn" text="📥 Принудительный импорт"
+                style="-fx-background-color: #6c757d; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
     </HBox>
 
 </AnchorPane>

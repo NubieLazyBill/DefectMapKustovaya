@@ -54,6 +54,9 @@ class DefectMapController {
     @FXML
     private lateinit var cancelEditBtn: Button
 
+    @FXML
+    private lateinit var forceImportBtn: Button
+
 
     private var zoomLevel = 1.0
     private val MIN_ZOOM = 0.5
@@ -506,6 +509,97 @@ class DefectMapController {
     }
     // ======================== КНОПКИ ========================
 
+    @FXML
+    private fun onForceImport() {
+        println("=".repeat(60))
+        println("📥 ПРИНУДИТЕЛЬНЫЙ ИМПОРТ")
+        println("=".repeat(60))
+
+        try {
+            // Проверяем, есть ли JSON файл
+            val exportFile = File(System.getProperty("user.home"), ".defectmap/equipment_export.json")
+            if (!exportFile.exists()) {
+                showError("⚠️ Файл экспорта не найден:\n${exportFile.absolutePath}")
+                return
+            }
+
+            // Загружаем данные из JSON
+            val imported = database.importFromJson()
+
+            if (imported == null || imported.isEmpty()) {
+                showError("⚠️ Данные для импорта не найдены или пустые")
+                return
+            }
+
+            // Текущие данные в БД
+            val currentData = database.loadAllEquipment()
+
+            // Анализируем изменения
+            val added = imported.filter { new -> currentData.none { it.id == new.id } }
+            val changed = imported.filter { new ->
+                currentData.find { it.id == new.id }?.let { old ->
+                    old.name != new.name ||
+                            old.type != new.type ||
+                            old.letter != new.letter ||
+                            old.cell != new.cell ||
+                            old.size != new.size ||
+                            old.left != new.left ||
+                            old.top != new.top
+                } ?: false
+            }
+            val removed = currentData.filter { old -> imported.none { it.id == old.id } }
+
+            // Формируем сообщение
+            val message = buildString {
+                append("📊 Найдено ${imported.size} записей в JSON\n")
+                append("📂 В БД: ${currentData.size} записей\n\n")
+                if (added.isNotEmpty()) append("✅ Добавлено: ${added.size}\n")
+                if (changed.isNotEmpty()) append("🔄 Изменено: ${changed.size}\n")
+                if (removed.isNotEmpty()) append("❌ Удалено: ${removed.size}\n")
+                if (added.isEmpty() && changed.isEmpty() && removed.isEmpty()) {
+                    append("⚠️ Изменений нет, данные уже синхронизированы")
+                }
+            }
+
+            // Показываем диалог подтверждения
+            val confirm = Alert(AlertType.CONFIRMATION)
+            confirm.title = "Принудительный импорт"
+            confirm.headerText = "📥 Импорт данных из JSON"
+            confirm.contentText = message + "\n\nПродолжить импорт?"
+
+            val result = confirm.showAndWait()
+            if (result.isPresent && result.get() == ButtonType.OK) {
+                // Сохраняем в БД
+                database.saveEquipment(imported)
+                println("✅ Импортировано ${imported.size} записей в БД")
+
+                // Показываем уведомление
+                Platform.runLater {
+                    Alert(AlertType.INFORMATION).apply {
+                        title = "Импорт завершен"
+                        headerText = "✅ Данные успешно импортированы"
+                        contentText = """
+                        Импортировано ${imported.size} записей.
+                        
+                        📊 Статистика:
+                        - small:  ${imported.count { it.size == "small" }}
+                        - normal: ${imported.count { it.size == "normal" }}
+                        - large:  ${imported.count { it.size == "large" }}
+                    """.trimIndent()
+                        showAndWait()
+                    }
+                }
+
+                // Перезагружаем метки
+                initEquipment()
+            }
+
+        } catch (e: Exception) {
+            showError("Ошибка импорта: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+
     private fun setupButtons() {
         addEquipmentBtn.setOnAction { toggleEditMode(true) }
         editModeBtn.setOnAction { toggleEditMode(!isEditMode) }
@@ -513,6 +607,7 @@ class DefectMapController {
         viewEquipmentBtn.setOnAction { viewEquipmentList() }
         cancelEditBtn.setOnAction { toggleEditMode(false) }
         statsBtn.setOnAction { showStatistics() }
+        forceImportBtn.setOnAction { onForceImport() }
     }
 
     private fun toggleEditMode(enable: Boolean) {

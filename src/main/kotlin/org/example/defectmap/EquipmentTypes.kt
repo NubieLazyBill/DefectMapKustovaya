@@ -27,7 +27,10 @@ object EquipmentTypes {
         "tt_35" to "ТТ-35 кВ",
         "tsn" to "ТСН",
         "opn_35" to "ОПН-35",
-        // --- Молниеотводы ---
+
+        // --- Здания ---
+        "Buildings" to "Здания",
+
         "lightning" to "Молниеотвод (М)",
         // --- Другое оборудование ---
         "capacitor" to "Конденсатор (К)",
@@ -68,6 +71,7 @@ object EquipmentTypes {
         "tt_35" to "ТТ",
         "tsn" to "ТСН",
         "opn_35" to "ОПН",
+        "Buildings" to "*",
         "lightning" to "М",
         "capacitor" to "К",
         "arrester" to "РВ",
