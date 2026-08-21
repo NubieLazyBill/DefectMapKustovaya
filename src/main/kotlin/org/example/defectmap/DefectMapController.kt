@@ -476,12 +476,8 @@ class DefectMapController {
                 marker.style.left = item.left + '%';
                 marker.style.top = item.top + '%';
                 
-                var tooltipText = item.name;
-                if (item.cell && item.cell.length > 0) {
-                    tooltipText = item.name + ' (яч.' + item.cell + ')';
-                }
-                marker.innerHTML = '<div class="dot">' + item.letter + '</div><span class="tooltip-text">' + tooltipText + '</span>';
-                container.appendChild(marker);
+               marker.innerHTML = '<div class="dot">' + item.letter + '</div><span class="tooltip-text">' + item.name + '</span>';
+               container.appendChild(marker);
                 
                 window.equipment.push({
                     id: item.id,
@@ -795,7 +791,7 @@ class DefectMapController {
             val top = parts[1]
 
             Platform.runLater {
-                // Диалог для названия
+                // 1. Диалог для названия
                 val nameDialog = TextInputDialog()
                 nameDialog.title = "Новое оборудование"
                 nameDialog.headerText = "Введите диспетчерское наименование"
@@ -806,17 +802,15 @@ class DefectMapController {
                 if (nameResult.isPresent) {
                     val name = nameResult.get().trim()
                     if (name.isNotEmpty()) {
-                        // Диалог для ячейки
-                        val cellDialog = TextInputDialog()
-                        cellDialog.title = "Номер ячейки"
-                        cellDialog.headerText = "Введите номер ячейки (опционально)"
-                        cellDialog.contentText = "Ячейка:"
-                        cellDialog.editor?.text = ""
 
-                        val cellResult = cellDialog.showAndWait()
-                        val cell = cellResult.orElse("").trim()
+                        // 2. Выбор ячейки (ОБЩАЯ ФУНКЦИЯ!)
+                        val cell = selectCell()
+                        if (cell == null) {
+                            println("❌ Выбор ячейки отменён")
+                            return@runLater
+                        }
 
-                        // Диалог для типа
+                        // 3. Диалог для типа
                         val typeDialog = ChoiceDialog(
                             EquipmentTypes.ALL_TYPES.find { it.first == "v_500" }?.second ?: "Выключатель 500 кВ",
                             EquipmentTypes.ALL_TYPES.map { it.second }
@@ -831,7 +825,7 @@ class DefectMapController {
                             val type = EquipmentTypes.ALL_TYPES.find { it.second == typeName }?.first ?: "other"
                             val typeLabel = EquipmentTypes.getLetter(type)
 
-                            // Диалог для выбора размера
+                            // 4. Диалог для размера
                             val sizeDialog = ChoiceDialog("normal", listOf("small", "normal", "large"))
                             sizeDialog.title = "Размер метки"
                             sizeDialog.headerText = "Выберите размер метки на схеме"
@@ -844,7 +838,6 @@ class DefectMapController {
                                 val id = "equipment-${System.currentTimeMillis()}"
                                 equipmentCounter++
 
-                                // Экранируем строки для JavaScript
                                 val escapedName = name.replace("'", "\\'")
                                 val escapedCell = cell.replace("'", "\\'")
 
@@ -867,12 +860,7 @@ class DefectMapController {
                                 marker.style.left = '${left}%';
                                 marker.style.top = '${top}%';
                                 
-                                var tooltipText = '$escapedName';
-                                if ('$escapedCell'.length > 0) {
-                                    tooltipText = '$escapedName (яч.$escapedCell)';
-                                }
-                                
-                                marker.innerHTML = '<div class="dot">$typeLabel</div><span class="tooltip-text">' + tooltipText + '</span>';
+                                marker.innerHTML = '<div class="dot">$typeLabel</div><span class="tooltip-text">$escapedName</span>';
                                 container.appendChild(marker);
                                 
                                 if (!window.equipment) window.equipment = [];
@@ -886,7 +874,7 @@ class DefectMapController {
                                     cell: '$escapedCell',
                                     size: '$size'
                                 });
-                                console.log('✅ Добавлено оборудование: $escapedName (размер: $size)');
+                                console.log('✅ Добавлено оборудование: $escapedName (ячейка: $escapedCell, размер: $size)');
                             })();
                             """.trimIndent())
                                 saveEquipment()
@@ -935,15 +923,12 @@ class DefectMapController {
                 val newName = nameResult.get().trim()
                 if (newName.isNotEmpty()) {
 
-                    // 2. Диалог для ячейки
-                    val cellDialog = TextInputDialog()
-                    cellDialog.title = "Номер ячейки"
-                    cellDialog.headerText = "Введите номер ячейки"
-                    cellDialog.contentText = "Ячейка:"
-                    cellDialog.editor?.text = currentCell
-
-                    val cellResult = cellDialog.showAndWait()
-                    val newCell = cellResult.orElse("").trim()
+                    // 2. Выбор ячейки (ОБЩАЯ ФУНКЦИЯ!)
+                    val newCell = selectCell(currentCell)
+                    if (newCell == null) {
+                        println("❌ Выбор ячейки отменён")
+                        return@runLater
+                    }
 
                     // 3. Диалог для типа
                     val typeDialog = ChoiceDialog(
@@ -1001,22 +986,14 @@ class DefectMapController {
                             var id = '$equipmentId';
                             var marker = document.getElementById(id);
                             if (marker) {
-                                // Обновляем классы (тип + размер)
                                 marker.className = 'equipment-marker $escapedType $escapedSize';
-                                
                                 var dot = marker.querySelector('.dot');
                                 if (dot) dot.textContent = '$escapedLetter';
-                                
                                 var tooltip = marker.querySelector('.tooltip-text');
                                 if (tooltip) {
-                                    var text = '$escapedName';
-                                    if ('$escapedCell'.length > 0) {
-                                        text = '$escapedName (яч.$escapedCell)';
-                                    }
-                                    tooltip.textContent = text;
+                                    tooltip.textContent = '$escapedName';
                                 }
                             }
-                            
                             if (window.equipment) {
                                 for (var i = 0; i < window.equipment.length; i++) {
                                     if (window.equipment[i].id === id) {
@@ -1035,17 +1012,15 @@ class DefectMapController {
                             equipmentCounter = updatedList.size
                             showInfo("Оборудование обновлено: $newName (размер: $newSize)")
 
-                            // ===== ОБНОВЛЯЕМ ОКНО СПИСКА (без перезакрытия) =====
+                            // ===== ОБНОВЛЯЕМ ОКНО СПИСКА =====
                             Platform.runLater {
                                 val stages = Stage.getWindows()
                                 for (window in stages) {
                                     if (window is Stage && window.title == "📋 Список оборудования") {
                                         val root = window.scene?.root
                                         if (root is VBox) {
-                                            // Ищем TableView среди детей
                                             val tableView = findTableView(root)
                                             if (tableView != null) {
-                                                // Обновляем данные с использованием raw type
                                                 @Suppress("UNCHECKED_CAST")
                                                 val table = tableView as javafx.scene.control.TableView<EquipmentTableItem>
 
@@ -1064,7 +1039,6 @@ class DefectMapController {
                                                 }
                                                 table.items = javafx.collections.FXCollections.observableArrayList(items)
 
-                                                // Обновляем countLabel
                                                 val label = findCountLabel(root)
                                                 label?.text = "Показано: ${updatedData.size} из ${updatedData.size}"
                                             }
@@ -1110,6 +1084,61 @@ class DefectMapController {
 
     private fun loadEquipment(): List<EquipmentData> {
         return database.loadAllEquipment()
+    }
+
+    // ======================== ОБЩАЯ ФУНКЦИЯ ДЛЯ ВЫБОРА ЯЧЕЙКИ ========================
+
+    /**
+     * Открывает диалог выбора ячейки.
+     * @param currentCell Текущая ячейка (для редактирования). Если пустая, будет предложено выбрать или создать.
+     * @return Выбранная ячейка или null, если пользователь отменил выбор.
+     */
+    private fun selectCell(currentCell: String = ""): String? {
+        // Загружаем все существующие ячейки из БД
+        val allEquipment = loadEquipment()
+        val existingCells = allEquipment
+            .mapNotNull { it.cell.takeIf { cell -> cell.isNotEmpty() } }
+            .distinct()
+            .sorted()
+
+        // Создаём список для выбора: существующие ячейки + "➕ Создать новую"
+        val cellOptions = existingCells + "➕ Создать новую"
+
+        // Если есть текущая ячейка и она не пустая — выбираем её по умолчанию
+        val defaultCell = if (currentCell.isNotEmpty() && existingCells.contains(currentCell)) {
+            currentCell
+        } else {
+            cellOptions.firstOrNull() ?: "➕ Создать новую"
+        }
+
+        val cellDialog = ChoiceDialog(defaultCell, cellOptions)
+        cellDialog.title = "Номер ячейки"
+        cellDialog.headerText = "Выберите существующую ячейку или создайте новую"
+        cellDialog.contentText = "Ячейка:"
+
+        val cellResult = cellDialog.showAndWait()
+        if (cellResult.isPresent) {
+            val selectedCell = cellResult.get()
+
+            if (selectedCell == "➕ Создать новую") {
+                // Если выбрано "Создать новую" — открываем диалог для ввода
+                val newCellDialog = TextInputDialog()
+                newCellDialog.title = "Новая ячейка"
+                newCellDialog.headerText = "Введите номер новой ячейки"
+                newCellDialog.contentText = "Ячейка:"
+                newCellDialog.editor?.text = ""
+
+                val newCellResult = newCellDialog.showAndWait()
+                return if (newCellResult.isPresent) {
+                    newCellResult.get().trim()
+                } else {
+                    null
+                }
+            } else {
+                return selectedCell
+            }
+        }
+        return null
     }
 
     // Вместо deleteEquipment()

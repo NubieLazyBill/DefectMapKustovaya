@@ -12,6 +12,8 @@ object EquipmentTypes {
         "ks_500" to "КС-500",
         "opn_500" to "ОПН-500",
         "reactor_500" to "Р-500",
+        "s" to "С",
+        "ls" to "ЛС",
         // --- 220 кВ ---
         "v_220" to "В-220",
         "r_220" to "Разъединитель 220 кВ",
@@ -72,6 +74,8 @@ object EquipmentTypes {
         "tsn" to "ТСН",
         "opn_35" to "ОПН",
         "Buildings" to "*",
+        "s" to "С",
+        "ls" to "ЛС",
         "lightning" to "М",
         "capacitor" to "К",
         "arrester" to "РВ",
