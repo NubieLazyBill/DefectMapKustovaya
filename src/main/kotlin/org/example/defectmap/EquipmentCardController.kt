@@ -1,8 +1,10 @@
 package org.example.defectmap
 
 import javafx.application.Platform
+import javafx.geometry.Insets
 import javafx.geometry.Pos
 import javafx.scene.Scene
+import javafx.scene.canvas.Canvas
 import javafx.scene.control.*
 import javafx.scene.image.Image
 import javafx.scene.image.ImageView
@@ -13,7 +15,8 @@ import javafx.stage.Stage
 import javafx.scene.control.Alert.AlertType
 import javafx.scene.input.MouseEvent
 import javafx.scene.paint.Color
-import javafx.scene.shape.Circle
+import javafx.animation.PauseTransition
+import javafx.util.Duration
 
 class EquipmentCardController(
     private val equipment: EquipmentData,
@@ -25,8 +28,13 @@ class EquipmentCardController(
     private val defectsListView = ListView<DefectData>()
     private var isMarkerMode = false
     private var selectedDefectId: String? = null
-    private val imageView = ImageView()
-    private var markerNodes: MutableList<Circle> = mutableListOf()
+
+    // Параметры для Canvas
+    private var drawWidth = 0.0
+    private var drawHeight = 0.0
+    private var offsetX = 0.0
+    private var offsetY = 0.0
+    private var canvas: Canvas? = null
 
     fun show() {
         defects.clear()
@@ -62,31 +70,92 @@ class EquipmentCardController(
     // ======================== ПАНЕЛЬ С КАРТИНКОЙ ========================
 
     private fun createImagePanel(): VBox {
-        val imageView = createEquipmentImageView()
-        this.imageView.image = imageView.image
-        this.imageView.fitWidth = imageView.fitWidth
-        this.imageView.fitHeight = imageView.fitHeight
-        this.imageView.isPreserveRatio = imageView.isPreserveRatio
+        val image = createEquipmentImage()
 
-        val stackPane = StackPane()
-        stackPane.children.add(imageView)
-        stackPane.style = "-fx-border-color: #dee2e6; -fx-border-radius: 8px; -fx-background-color: white;"
+        val canvasWidth = 450.0
+        val canvasHeight = 450.0
 
-        // Загружаем существующие маркеры
-        loadMarkers(stackPane)
+        val scale = minOf(canvasWidth / image.width, canvasHeight / image.height)
+        val drawWidth = image.width * scale
+        val drawHeight = image.height * scale
+        val offsetX = (canvasWidth - drawWidth) / 2
+        val offsetY = (canvasHeight - drawHeight) / 2
 
-        // Клик по картинке для добавления маркера
-        stackPane.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
+        this.drawWidth = drawWidth
+        this.drawHeight = drawHeight
+        this.offsetX = offsetX
+        this.offsetY = offsetY
+
+        val canvas = Canvas(canvasWidth, canvasHeight)
+        this.canvas = canvas
+        val gc = canvas.graphicsContext2D
+
+        gc.drawImage(image, offsetX, offsetY, drawWidth, drawHeight)
+        loadMarkersOnCanvas(gc)
+
+        // Обработчик клика по Canvas (добавление маркера)
+        canvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
             if (isMarkerMode && selectedDefectId != null) {
-                val x = (event.x / imageView.fitWidth) * 100
-                val y = (event.y / imageView.fitHeight) * 100
-                addMarkerToDefect(selectedDefectId!!, x, y, stackPane)
-                isMarkerMode = false
-                selectedDefectId = null
+                val clickX = event.x
+                val clickY = event.y
+                val xInImage = clickX - offsetX
+                val yInImage = clickY - offsetY
+
+                if (xInImage >= 0 && xInImage <= drawWidth &&
+                    yInImage >= 0 && yInImage <= drawHeight) {
+
+                    val xPercent = (xInImage / drawWidth) * 100
+                    val yPercent = (yInImage / drawHeight) * 100
+
+                    addMarkerToDefect(
+                        selectedDefectId!!,
+                        xPercent.coerceIn(0.0, 100.0),
+                        yPercent.coerceIn(0.0, 100.0)
+                    )
+                    isMarkerMode = false
+                    selectedDefectId = null
+                } else {
+                    showToast("⚠️ Кликните внутри картинки")
+                }
             }
         }
 
-        val imageContainer = VBox(10.0, stackPane)
+        // Обработчик клика по Canvas (клик по маркеру)
+        canvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
+            if (!isMarkerMode) {
+                val clickX = event.x
+                val clickY = event.y
+
+                for ((index, defect) in defects.withIndex()) {
+                    if (defect.markerLeft != null && defect.markerTop != null) {
+                        val markerX = (defect.markerLeft!! / 100.0) * drawWidth + offsetX
+                        val markerY = (defect.markerTop!! / 100.0) * drawHeight + offsetY
+                        val radius = 10.0
+
+                        val dx = clickX - markerX
+                        val dy = clickY - markerY
+                        if (dx * dx + dy * dy <= radius * radius) {
+                            if (event.clickCount == 1) {
+                                // Одиночный клик — выделяем в списке
+                                defectsListView.selectionModel.select(index)
+                                defectsListView.scrollTo(index)
+                                showToast("📍 ${defect.name}")
+                            } else if (event.clickCount == 2) {
+                                // Двойной клик — открываем редактирование
+                                editDefectDialog(defect)
+                            }
+                            break
+                        }
+                    }
+                }
+            }
+        }
+
+        val imageWrapper = StackPane()
+        imageWrapper.children.add(canvas)
+        imageWrapper.style = "-fx-border-color: #dee2e6; -fx-border-radius: 8px; -fx-background-color: white;"
+
+        val imageContainer = VBox(10.0, imageWrapper)
         imageContainer.alignment = Pos.TOP_CENTER
         imageContainer.prefWidth = 500.0
         imageContainer.style = "-fx-padding: 15px;"
@@ -98,10 +167,8 @@ class EquipmentCardController(
         return imageContainer
     }
 
-    private fun createEquipmentImageView(): ImageView {
-        var imagePath = "/org/example/defectmap/equipment.jpg"
-
-        imagePath = when (equipment.type) {
+    private fun createEquipmentImage(): Image {
+        val imagePath = when (equipment.type) {
             "v_500", "v_220", "v_35", "v_10" -> "/org/example/defectmap/ВВБК-500.jfif"
             "r_500", "r_220", "r_35", "r_10" -> "/org/example/defectmap/disconnector.jpg"
             "autotransformer", "transformer" -> "/org/example/defectmap/transformer.jpg"
@@ -113,75 +180,178 @@ class EquipmentCardController(
             "reactor_500", "reactor_220" -> "/org/example/defectmap/reactor.jpg"
             "capacitor" -> "/org/example/defectmap/capacitor.jpg"
             "compressor" -> "/org/example/defectmap/compressor.jpg"
-            else -> "/org/example/defectmap/equipment.jpg"
+            else -> null
         }
 
-        val imageUrl = javaClass.getResource(imagePath)
-        return if (imageUrl != null) {
-            val image = Image(imageUrl.toExternalForm())
-            ImageView(image).apply {
-                isPreserveRatio = true
-                fitWidth = 450.0
-                fitHeight = 450.0
+        return try {
+            if (imagePath != null) {
+                val url = javaClass.getResource(imagePath)
+                if (url != null) {
+                    Image(url.toExternalForm())
+                } else {
+                    // fallback
+                    val defaultUrl = javaClass.getResource("/org/example/defectmap/equipment.jpg")
+                    if (defaultUrl != null) Image(defaultUrl.toExternalForm())
+                    else throw RuntimeException("Нет ни одной картинки")
+                }
+            } else {
+                val defaultUrl = javaClass.getResource("/org/example/defectmap/equipment.jpg")
+                if (defaultUrl != null) Image(defaultUrl.toExternalForm())
+                else throw RuntimeException("Нет ни одной картинки")
             }
-        } else {
-            ImageView().apply {
-                fitWidth = 450.0
-                fitHeight = 450.0
-                style = "-fx-background-color: #f8f9fa; -fx-border-color: #dee2e6; -fx-border-radius: 8px;"
-            }
+        } catch (e: Exception) {
+            println("❌ Ошибка загрузки картинки: ${e.message}")
+            // Создаём пустое изображение 1x1
+            Image(javaClass.getResourceAsStream("/org/example/defectmap/equipment.jpg"))
         }
     }
 
-    private fun loadMarkers(stackPane: StackPane) {
-        // Удаляем старые маркеры
-        markerNodes.forEach { stackPane.children.remove(it) }
-        markerNodes.clear()
-
+    private fun loadMarkersOnCanvas(gc: javafx.scene.canvas.GraphicsContext) {
         val defects = database.getDefectsByEquipment(equipment.id)
         defects.forEach { defect ->
             if (defect.markerLeft != null && defect.markerTop != null) {
-                val circle = Circle(8.0, Color.RED)
-                circle.style = "-fx-stroke: white; -fx-stroke-width: 2px;"
-                val markerX = (defect.markerLeft!! / 100.0) * imageView.fitWidth
-                val markerY = (defect.markerTop!! / 100.0) * imageView.fitHeight
-                circle.centerX = markerX
-                circle.centerY = markerY
-                stackPane.children.add(circle)
-                markerNodes.add(circle)
+                val x = (defect.markerLeft!! / 100.0) * drawWidth + offsetX
+                val y = (defect.markerTop!! / 100.0) * drawHeight + offsetY
+
+                gc.fill = Color.RED
+                gc.stroke = Color.WHITE
+                gc.lineWidth = 2.0
+                gc.fillOval(x - 8, y - 8, 16.0, 16.0)
+                gc.strokeOval(x - 8, y - 8, 16.0, 16.0)
             }
         }
     }
 
-    private fun addMarkerToDefect(defectId: String, x: Double, y: Double, stackPane: StackPane) {
+    private fun addMarkerToDefect(defectId: String, xPercent: Double, yPercent: Double) {
         val defect = defects.find { it.id == defectId }
         if (defect != null) {
             val updatedDefect = defect.copy(
-                markerLeft = x,
-                markerTop = y
+                markerLeft = xPercent,
+                markerTop = yPercent
             )
             database.updateDefect(updatedDefect)
 
-            // Обновляем в списке
             val index = defects.indexOfFirst { it.id == defectId }
             if (index >= 0) {
                 defects[index] = updatedDefect
                 defectsListView.items[index] = updatedDefect
             }
 
-            // Рисуем маркер на картинке
-            val circle = Circle(8.0, Color.RED)
-            circle.style = "-fx-stroke: white; -fx-stroke-width: 2px;"
-            val markerX = (x / 100.0) * imageView.fitWidth
-            val markerY = (y / 100.0) * imageView.fitHeight
-            circle.centerX = markerX
-            circle.centerY = markerY
-            stackPane.children.add(circle)
-            markerNodes.add(circle)
+            val gc = canvas?.graphicsContext2D
+            if (gc != null) {
+                val x = (xPercent / 100.0) * drawWidth + offsetX
+                val y = (yPercent / 100.0) * drawHeight + offsetY
+
+                gc.fill = Color.RED
+                gc.stroke = Color.WHITE
+                gc.lineWidth = 2.0
+                gc.fillOval(x - 8, y - 8, 16.0, 16.0)
+                gc.strokeOval(x - 8, y - 8, 16.0, 16.0)
+            }
 
             updateDefectsCount()
-            showToast("✅ Метка добавлена для дефекта '${defect.name}'")
+            showToast("✅ Метка добавлена для '${defect.name}'")
         }
+    }
+
+    private fun refreshImagePanel() {
+        val root = defectsListView.scene?.root as? javafx.scene.layout.Pane ?: return
+        val imageWrapper = findImageWrapper(root) ?: return
+
+        imageWrapper.children.clear()
+
+        val image = createEquipmentImage()
+        val canvasWidth = 450.0
+        val canvasHeight = 450.0
+
+        val scale = minOf(canvasWidth / image.width, canvasHeight / image.height)
+        val drawWidth = image.width * scale
+        val drawHeight = image.height * scale
+        val offsetX = (canvasWidth - drawWidth) / 2
+        val offsetY = (canvasHeight - drawHeight) / 2
+
+        this.drawWidth = drawWidth
+        this.drawHeight = drawHeight
+        this.offsetX = offsetX
+        this.offsetY = offsetY
+
+        val canvas = Canvas(canvasWidth, canvasHeight)
+        this.canvas = canvas
+        val gc = canvas.graphicsContext2D
+
+        gc.drawImage(image, offsetX, offsetY, drawWidth, drawHeight)
+        loadMarkersOnCanvas(gc)
+
+        // Обработчик клика по Canvas (добавление маркера)
+        canvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
+            if (isMarkerMode && selectedDefectId != null) {
+                val clickX = event.x
+                val clickY = event.y
+                val xInImage = clickX - offsetX
+                val yInImage = clickY - offsetY
+
+                if (xInImage >= 0 && xInImage <= drawWidth &&
+                    yInImage >= 0 && yInImage <= drawHeight) {
+
+                    val xPercent = (xInImage / drawWidth) * 100
+                    val yPercent = (yInImage / drawHeight) * 100
+
+                    addMarkerToDefect(
+                        selectedDefectId!!,
+                        xPercent.coerceIn(0.0, 100.0),
+                        yPercent.coerceIn(0.0, 100.0)
+                    )
+                    isMarkerMode = false
+                    selectedDefectId = null
+                } else {
+                    showToast("⚠️ Кликните внутри картинки")
+                }
+            }
+        }
+
+        // Обработчик клика по Canvas (клик по маркеру)
+        canvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
+            if (!isMarkerMode) {
+                val clickX = event.x
+                val clickY = event.y
+
+                for ((index, defect) in defects.withIndex()) {
+                    if (defect.markerLeft != null && defect.markerTop != null) {
+                        val markerX = (defect.markerLeft!! / 100.0) * drawWidth + offsetX
+                        val markerY = (defect.markerTop!! / 100.0) * drawHeight + offsetY
+                        val radius = 10.0
+
+                        val dx = clickX - markerX
+                        val dy = clickY - markerY
+                        if (dx * dx + dy * dy <= radius * radius) {
+                            if (event.clickCount == 1) {
+                                defectsListView.selectionModel.select(index)
+                                defectsListView.scrollTo(index)
+                                showToast("📍 ${defect.name}")
+                            } else if (event.clickCount == 2) {
+                                editDefectDialog(defect)
+                            }
+                            break
+                        }
+                    }
+                }
+            }
+        }
+
+        imageWrapper.children.add(canvas)
+    }
+
+    private fun findImageWrapper(node: javafx.scene.Node): StackPane? {
+        if (node is StackPane && node.children.isNotEmpty() && node.children[0] is Canvas) {
+            return node
+        }
+        if (node is javafx.scene.layout.Pane) {
+            for (child in node.children) {
+                val result = findImageWrapper(child)
+                if (result != null) return result
+            }
+        }
+        return null
     }
 
     // ======================== ПАНЕЛЬ С ДЕФЕКТАМИ ========================
@@ -214,21 +384,14 @@ class EquipmentCardController(
                         text = null
                         tooltip = null
                     } else {
-                        val severityIcon = when (defect.severity) {
-                            "critical" -> "🔴"
-                            "high" -> "🟠"
-                            "medium" -> "🟡"
-                            "low" -> "🟢"
-                            else -> "⚪"
-                        }
+                        // Убираем иконку важности, оставляем только статус
                         val statusText = when (defect.status) {
-                            "open" -> "Открыт"
-                            "in_progress" -> "В работе"
-                            "fixed" -> "✅ Исправлен"
+                            "open" -> "🟡 Обнаружен"
+                            "fixed" -> "✅ Устранён"
                             else -> defect.status
                         }
                         val markerIcon = if (defect.markerLeft != null && defect.markerTop != null) " 📍" else ""
-                        text = "$severityIcon ${defect.name} [$statusText]$markerIcon"
+                        text = "${defect.name} [$statusText]$markerIcon"
 
                         if (defect.description.isNotEmpty()) {
                             tooltip = Tooltip(defect.description)
@@ -240,11 +403,22 @@ class EquipmentCardController(
             }
         }
 
+        // ===== ДВОЙНОЙ КЛИК ПО ДЕФЕКТУ (ОТКРЫВАЕТ РЕДАКТИРОВАНИЕ) =====
+        defectsListView.setOnMouseClicked { event ->
+            if (event.clickCount == 2) {
+                val selected = defectsListView.selectionModel.selectedItem
+                if (selected != null) {
+                    editDefectDialog(selected)
+                }
+            }
+        }
+
         // ===== КОНТЕКСТНОЕ МЕНЮ =====
         val contextMenu = ContextMenu()
         val editItem = MenuItem("✏️ Редактировать")
-        val deleteItem = MenuItem("🗑️ Удалить")
+        val deleteItem = MenuItem("🗑️ Удалить дефект")
         val addMarkerItem = MenuItem("📌 Отметить на оборудовании")
+        val removeMarkerItem = MenuItem("🗑️ Удалить маркер")
 
         editItem.setOnAction {
             val selected = defectsListView.selectionModel.selectedItem
@@ -259,14 +433,15 @@ class EquipmentCardController(
                 val confirm = Alert(AlertType.CONFIRMATION)
                 confirm.title = "Удаление дефекта"
                 confirm.headerText = "Удалить дефект?"
-                confirm.contentText = "Вы уверены, что хотите удалить '${selected.name}'?"
+                confirm.contentText = "Вы уверены, что хотите удалить '${selected.name}'?\n\nВместе с дефектом будет удалён и его маркер на картинке."
                 val result = confirm.showAndWait()
                 if (result.isPresent && result.get() == ButtonType.OK) {
                     database.deleteDefect(selected.id)
                     defects.remove(selected)
                     defectsListView.items.remove(selected)
+                    refreshImagePanel()
                     updateDefectsCount()
-                    showToast("🗑️ Дефект удалён")
+                    showToast("🗑️ Дефект и маркер удалены")
                     onDefectChanged?.invoke()
                 }
             }
@@ -281,7 +456,39 @@ class EquipmentCardController(
             }
         }
 
-        contextMenu.items.addAll(editItem, deleteItem, addMarkerItem)
+        removeMarkerItem.setOnAction {
+            val selected = defectsListView.selectionModel.selectedItem
+            if (selected != null) {
+                if (selected.markerLeft != null && selected.markerTop != null) {
+                    val confirm = Alert(AlertType.CONFIRMATION)
+                    confirm.title = "Удаление маркера"
+                    confirm.headerText = "Удалить маркер?"
+                    confirm.contentText = "Вы уверены, что хотите удалить маркер для '${selected.name}'?"
+                    val result = confirm.showAndWait()
+                    if (result.isPresent && result.get() == ButtonType.OK) {
+                        val updatedDefect = selected.copy(
+                            markerLeft = null,
+                            markerTop = null
+                        )
+                        database.updateDefect(updatedDefect)
+
+                        val index = defects.indexOfFirst { it.id == selected.id }
+                        if (index >= 0) {
+                            defects[index] = updatedDefect
+                            defectsListView.items[index] = updatedDefect
+                        }
+
+                        refreshImagePanel()
+                        showToast("🗑️ Маркер удалён")
+                        onDefectChanged?.invoke()
+                    }
+                } else {
+                    showToast("⚠️ У этого дефекта нет маркера")
+                }
+            }
+        }
+
+        contextMenu.items.addAll(editItem, deleteItem, addMarkerItem, removeMarkerItem)
         defectsListView.contextMenu = contextMenu
     }
 
@@ -324,20 +531,21 @@ class EquipmentCardController(
         descField.prefHeight = 100.0
         descField.style = "-fx-padding: 8px 12px; -fx-font-size: 14px; -fx-border-color: #ced4da; -fx-border-radius: 4px;"
 
-        val severityLabel = Label("Важность:")
-        severityLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
-        val severityCombo = ComboBox<String>()
-        severityCombo.items.addAll("critical", "high", "medium", "low")
-        severityCombo.value = "medium"
-        severityCombo.style = "-fx-pref-width: 120px; -fx-padding: 6px; -fx-font-size: 14px;"
+        // ===== СТАТУС (только два пункта) =====
+        val statusLabel = Label("Статус:")
+        statusLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
+        val statusCombo = ComboBox<String>()
+        statusCombo.items.addAll("обнаружен", "устранён")
+        statusCombo.value = "обнаружен"
+        statusCombo.style = "-fx-pref-width: 120px; -fx-padding: 6px; -fx-font-size: 14px;"
 
-        val severityBox = HBox(10.0, severityLabel, severityCombo)
-        severityBox.alignment = Pos.CENTER_LEFT
+        val statusBox = HBox(10.0, statusLabel, statusCombo)
+        statusBox.alignment = Pos.CENTER_LEFT
 
         content.children.addAll(
             nameLabel, nameField,
             descLabel, descField,
-            severityBox
+            statusBox
         )
 
         dialog.dialogPane.content = content
@@ -352,7 +560,8 @@ class EquipmentCardController(
                     equipmentId = equipment.id,
                     name = name,
                     description = descField.text.trim(),
-                    severity = severityCombo.value ?: "medium"
+                    severity = "medium",  // по умолчанию
+                    status = if (statusCombo.value == "устранён") "fixed" else "open"
                 )
                 database.saveDefect(newDefect)
                 defects.add(newDefect)
@@ -385,20 +594,18 @@ class EquipmentCardController(
         descField.prefHeight = 80.0
         descField.style = "-fx-padding: 8px 12px; -fx-font-size: 14px; -fx-border-color: #ced4da; -fx-border-radius: 4px;"
 
-        val severityCombo = ComboBox<String>()
-        severityCombo.items.addAll("critical", "high", "medium", "low")
-        severityCombo.value = defect.severity
-        severityCombo.style = "-fx-pref-width: 120px; -fx-padding: 6px; -fx-font-size: 14px;"
-
+        // ===== СТАТУС (только два пункта) =====
+        val statusLabel = Label("Статус:")
+        statusLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val statusCombo = ComboBox<String>()
-        statusCombo.items.addAll("open", "in_progress", "fixed")
-        statusCombo.value = defect.status
+        statusCombo.items.addAll("обнаружен", "устранён")
+        // Устанавливаем текущее значение
+        statusCombo.value = if (defect.status == "fixed") "устранён" else "обнаружен"
         statusCombo.style = "-fx-pref-width: 120px; -fx-padding: 6px; -fx-font-size: 14px;"
 
         content.children.addAll(
             Label("Название:"), nameField,
             Label("Описание:"), descField,
-            Label("Важность:"), severityCombo,
             Label("Статус:"), statusCombo
         )
 
@@ -410,8 +617,7 @@ class EquipmentCardController(
             val updatedDefect = defect.copy(
                 name = nameField.text.trim().ifEmpty { defect.name },
                 description = descField.text.trim(),
-                severity = severityCombo.value ?: defect.severity,
-                status = statusCombo.value ?: defect.status
+                status = if (statusCombo.value == "устранён") "fixed" else "open"
             )
             database.updateDefect(updatedDefect)
 
@@ -437,11 +643,35 @@ class EquipmentCardController(
 
     private fun showToast(message: String) {
         Platform.runLater {
-            val alert = Alert(AlertType.INFORMATION)
-            alert.title = ""
-            alert.headerText = null
-            alert.contentText = message
-            alert.showAndWait()
+            val toast = Label(message)
+            toast.style = """
+                -fx-background-color: rgba(0, 0, 0, 0.85);
+                -fx-text-fill: white;
+                -fx-font-size: 14px;
+                -fx-padding: 12px 24px;
+                -fx-background-radius: 8px;
+                -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 10, 0, 0, 0);
+            """.trimIndent()
+            toast.isWrapText = true
+            toast.maxWidth = 500.0
+            toast.alignment = Pos.CENTER
+            toast.isMouseTransparent = true
+
+            val scene = defectsListView.scene ?: return@runLater
+            val root = scene.root as? javafx.scene.layout.Pane ?: return@runLater
+
+            val stackPane = StackPane()
+            stackPane.children.add(toast)
+            stackPane.isMouseTransparent = true
+            root.children.add(stackPane)
+            StackPane.setAlignment(stackPane, Pos.TOP_CENTER)
+            StackPane.setMargin(stackPane, Insets(80.0, 0.0, 0.0, 0.0))
+
+            val pause = PauseTransition(Duration.seconds(2.5))
+            pause.setOnFinished {
+                root.children.remove(stackPane)
+            }
+            pause.play()
         }
     }
 
