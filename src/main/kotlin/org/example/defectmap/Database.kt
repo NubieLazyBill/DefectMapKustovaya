@@ -461,7 +461,7 @@ class Database {
                     markers = markers
                 )
 
-                // ===== ИМПОРТ ДЕФЕКТОВ =====
+                // ===== ИМПОРТ ДЕФЕКТОВ (БЕЗ УДАЛЕНИЯ) =====
                 val defectsJson = map["defects"] as? String ?: "[]"
                 val defectsType = object : TypeToken<List<DefectData>>() {}.type
                 val defects: List<DefectData> = try {
@@ -470,9 +470,7 @@ class Database {
                     emptyList()
                 }
 
-                // Сохраняем дефекты в БД (сначала удаляем старые)
-                val existingDefects = getDefectsByEquipment(equipmentData.id)
-                existingDefects.forEach { deleteDefect(it.id) }
+                // Просто сохраняем дефекты (INSERT OR REPLACE)
                 defects.forEach { saveDefect(it) }
 
                 equipmentData
@@ -490,6 +488,11 @@ class Database {
 
     fun exportAllToJson() {
         val allEquipment = loadAllEquipment()
+        println("📊 Экспортируем ${allEquipment.size} записей")
+        allEquipment.forEach { eq ->
+            val defects = getDefectsByEquipment(eq.id)
+            println("  📌 ${eq.name}: ${defects.size} дефектов")
+        }
         exportToJson(allEquipment)
     }
 }
