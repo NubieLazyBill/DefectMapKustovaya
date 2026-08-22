@@ -68,6 +68,8 @@ class Database {
             stmt.executeUpdate()
         }
         println("💾 Дефект сохранён: ${defect.name}")
+        // После сохранения — автоэкспорт
+        exportAllToJson()
     }
 
     fun getDefectsByEquipment(equipmentId: String): List<DefectData> {
@@ -91,6 +93,7 @@ class Database {
             stmt.executeUpdate()
         }
         println("🗑️ Дефект удалён: $defectId")
+        exportAllToJson()
     }
 
     fun updateDefect(defect: DefectData) {
@@ -395,6 +398,8 @@ class Database {
         try {
             val gson = GsonBuilder().setPrettyPrinting().create()
             val exportData = equipment.map { eq ->
+                // Загружаем дефекты для этого оборудования
+                val defects = getDefectsByEquipment(eq.id)
                 mapOf(
                     "id" to eq.id,
                     "left" to eq.left,
@@ -404,14 +409,15 @@ class Database {
                     "letter" to eq.letter,
                     "cell" to eq.cell,
                     "size" to eq.size,
-                    "markers" to eq.markers  // <-- ЭТО ДОБАВЛЯЕТ markers!
+                    "markers" to eq.markers,
+                    "defects" to defects  // <-- ДОБАВЛЯЕМ ДЕФЕКТЫ!
                 )
             }
             val json = gson.toJson(exportData)
             val exportFile = File(System.getProperty("user.home"), ".defectmap/equipment_export.json")
             exportFile.parentFile?.mkdirs()
             exportFile.writeText(json, Charsets.UTF_8)
-            println("📤 Экспортировано ${equipment.size} записей в JSON")
+            println("📤 Экспортировано ${equipment.size} записей с дефектами в JSON")
         } catch (e: Exception) {
             println("❌ Ошибка экспорта: ${e.message}")
         }
@@ -443,7 +449,7 @@ class Database {
                     ))
                 }
 
-                EquipmentData(
+                val equipmentData = EquipmentData(
                     id = map["id"] as? String ?: "",
                     left = (map["left"] as? Double) ?: 0.0,
                     top = (map["top"] as? Double) ?: 0.0,
@@ -454,6 +460,22 @@ class Database {
                     size = map["size"] as? String ?: "normal",
                     markers = markers
                 )
+
+                // ===== ИМПОРТ ДЕФЕКТОВ =====
+                val defectsJson = map["defects"] as? String ?: "[]"
+                val defectsType = object : TypeToken<List<DefectData>>() {}.type
+                val defects: List<DefectData> = try {
+                    gson.fromJson(defectsJson, defectsType)
+                } catch (e: Exception) {
+                    emptyList()
+                }
+
+                // Сохраняем дефекты в БД (сначала удаляем старые)
+                val existingDefects = getDefectsByEquipment(equipmentData.id)
+                existingDefects.forEach { deleteDefect(it.id) }
+                defects.forEach { saveDefect(it) }
+
+                equipmentData
             }
 
             println("📥 Импортировано ${result.size} записей из JSON")
@@ -462,6 +484,13 @@ class Database {
             println("❌ Ошибка импорта: ${e.message}")
             return null
         }
+    }
+
+    // ======================== ЭКСПОРТ ВСЕХ ДАННЫХ ========================
+
+    fun exportAllToJson() {
+        val allEquipment = loadAllEquipment()
+        exportToJson(allEquipment)
     }
 }
 
