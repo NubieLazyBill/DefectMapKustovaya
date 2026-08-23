@@ -1,0 +1,3005 @@
+[
+  {
+    "id": "equipment-1787307960772",
+    "left": 39.3,
+    "top": 150.8,
+    "type": "s",
+    "name": "1С-500",
+    "letter": "С",
+    "cell": "",
+    "size": "large",
+    "markers": [
+      {
+        "left": 39.3,
+        "top": 150.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154507914",
+    "left": 61.0,
+    "top": 133.9,
+    "type": "tn_220",
+    "name": "1ТН-220",
+    "letter": "ТН",
+    "cell": "1ТН-220",
+    "size": "small",
+    "markers": [
+      {
+        "left": 61.0,
+        "top": 133.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055730116",
+    "left": 42.1,
+    "top": 92.8,
+    "type": "tn_500",
+    "name": "1ТН-500",
+    "letter": "ТН",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 42.1,
+        "top": 92.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "marker-1786963938926",
+    "left": 13.8,
+    "top": 50.9,
+    "type": "tn_500",
+    "name": "1ТН-500 Трачуковская",
+    "letter": "ТН",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 13.8,
+        "top": 50.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154891696",
+    "left": 63.7,
+    "top": 141.1,
+    "type": "r_220",
+    "name": "1ШР-220 2АТГ",
+    "letter": "Р",
+    "cell": "В-220 2АТГ",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 63.7,
+        "top": 141.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158506935",
+    "left": 74.2,
+    "top": 141.0,
+    "type": "r_220",
+    "name": "1ШР-220 3АТГ",
+    "letter": "Р",
+    "cell": "В-220 3АТГ",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 74.2,
+        "top": 141.0,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787159283133",
+    "left": 88.2,
+    "top": 141.0,
+    "type": "r_220",
+    "name": "1ШР-220 Комета-1",
+    "letter": "Р",
+    "cell": "В-220 Комета-1",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 88.2,
+        "top": 141.0,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787159024274",
+    "left": 85.5,
+    "top": 141.0,
+    "type": "r_220",
+    "name": "1ШР-220 Комета-2",
+    "letter": "Р",
+    "cell": "В-220 Комета-2",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 85.5,
+        "top": 141.0,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787153947866",
+    "left": 53.1,
+    "top": 140.9,
+    "type": "r_220",
+    "name": "1ШР-220 Мирная",
+    "letter": "Р",
+    "cell": "В-220 Мирная",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 53.1,
+        "top": 140.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154608337",
+    "left": 61.0,
+    "top": 140.9,
+    "type": "r_220",
+    "name": "1ШР-220 ОВ",
+    "letter": "Р",
+    "cell": "ОВ-220",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 61.0,
+        "top": 140.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158710045",
+    "left": 80.3,
+    "top": 141.0,
+    "type": "r_220",
+    "name": "1ШР-220 Орбита",
+    "letter": "Р",
+    "cell": "В-220 Орбита",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 80.3,
+        "top": 141.0,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154292551",
+    "left": 58.3,
+    "top": 141.0,
+    "type": "r_220",
+    "name": "1ШР-220 Топаз",
+    "letter": "Р",
+    "cell": "В-220 Топаз",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 58.3,
+        "top": 141.0,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158871550",
+    "left": 82.9,
+    "top": 140.9,
+    "type": "r_220",
+    "name": "1ШР-220 Факел",
+    "letter": "Р",
+    "cell": "В-220 Факел",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 82.9,
+        "top": 140.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787155047994",
+    "left": 66.3,
+    "top": 141.0,
+    "type": "r_220",
+    "name": "1ШР-220 ШСВ",
+    "letter": "Р",
+    "cell": "ШСВ-220",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 66.3,
+        "top": 141.0,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787054979873",
+    "left": 46.5,
+    "top": 77.3,
+    "type": "autotransformer",
+    "name": "2АТГ ф.А",
+    "letter": "АТ",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 46.5,
+        "top": 77.3,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787054989726",
+    "left": 46.5,
+    "top": 84.5,
+    "type": "autotransformer",
+    "name": "2АТГ ф.В",
+    "letter": "АТ",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 46.5,
+        "top": 84.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055000579",
+    "left": 46.5,
+    "top": 92.1,
+    "type": "autotransformer",
+    "name": "2АТГ ф.С",
+    "letter": "АТ",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 46.5,
+        "top": 92.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787307382572",
+    "left": 15.9,
+    "top": 150.6,
+    "type": "s",
+    "name": "2С-500",
+    "letter": "С",
+    "cell": "",
+    "size": "large",
+    "markers": [
+      {
+        "left": 15.9,
+        "top": 150.6,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154998107",
+    "left": 66.3,
+    "top": 132.4,
+    "type": "tn_220",
+    "name": "2ТН-220",
+    "letter": "ТН",
+    "cell": "2ТН-220",
+    "size": "small",
+    "markers": [
+      {
+        "left": 66.3,
+        "top": 132.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055783759",
+    "left": 13.2,
+    "top": 103.6,
+    "type": "tn_500",
+    "name": "2ТН-500",
+    "letter": "ТН",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 13.2,
+        "top": 103.6,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055123785",
+    "left": 20.2,
+    "top": 50.7,
+    "type": "tn_500",
+    "name": "2ТН-500 Трачуковская",
+    "letter": "ТН",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 20.2,
+        "top": 50.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787157617135",
+    "left": 55.5,
+    "top": 90.6,
+    "type": "tsn",
+    "name": "2ТСН",
+    "letter": "ТСН",
+    "cell": "2ТСН",
+    "size": "small",
+    "markers": [
+      {
+        "left": 55.5,
+        "top": 90.6,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787308321665",
+    "left": 63.7,
+    "top": 146.2,
+    "type": "r_220",
+    "name": "2ШР-220 2АТГ",
+    "letter": "Р",
+    "cell": "В-220 2АТГ",
+    "size": "large",
+    "markers": [
+      {
+        "left": 63.7,
+        "top": 146.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787308347556",
+    "left": 74.2,
+    "top": 146.1,
+    "type": "r_220",
+    "name": "2ШР-220 3АТГ",
+    "letter": "Р",
+    "cell": "В-220 3АТГ",
+    "size": "large",
+    "markers": [
+      {
+        "left": 74.2,
+        "top": 146.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787308449303",
+    "left": 88.3,
+    "top": 146.1,
+    "type": "r_220",
+    "name": "2ШР-220 Комета-1",
+    "letter": "Р",
+    "cell": "В-220 Комета-1",
+    "size": "large",
+    "markers": [
+      {
+        "left": 88.3,
+        "top": 146.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787308405898",
+    "left": 85.6,
+    "top": 146.1,
+    "type": "r_220",
+    "name": "2ШР-220 Комета-2",
+    "letter": "Р",
+    "cell": "В-220 Комета-2",
+    "size": "large",
+    "markers": [
+      {
+        "left": 85.6,
+        "top": 146.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787308239949",
+    "left": 53.0,
+    "top": 146.2,
+    "type": "r_220",
+    "name": "2ШР-220 Мирная",
+    "letter": "Р",
+    "cell": "В-220 Мирная",
+    "size": "large",
+    "markers": [
+      {
+        "left": 53.0,
+        "top": 146.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787308296047",
+    "left": 61.0,
+    "top": 146.2,
+    "type": "r_220",
+    "name": "2ШР-220 ОВ",
+    "letter": "Р",
+    "cell": "ОВ-220",
+    "size": "large",
+    "markers": [
+      {
+        "left": 61.0,
+        "top": 146.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787308364961",
+    "left": 80.2,
+    "top": 146.1,
+    "type": "r_220",
+    "name": "2ШР-220 Орбита",
+    "letter": "Р",
+    "cell": "В-220 Орбита",
+    "size": "large",
+    "markers": [
+      {
+        "left": 80.2,
+        "top": 146.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787308264294",
+    "left": 58.4,
+    "top": 146.2,
+    "type": "r_220",
+    "name": "2ШР-220 Топаз",
+    "letter": "Р",
+    "cell": "В-220 Топаз",
+    "size": "large",
+    "markers": [
+      {
+        "left": 58.4,
+        "top": 146.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787308386483",
+    "left": 82.9,
+    "top": 146.1,
+    "type": "r_220",
+    "name": "2ШР-220 Факел",
+    "letter": "Р",
+    "cell": "В-220 Факел",
+    "size": "large",
+    "markers": [
+      {
+        "left": 82.9,
+        "top": 146.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787155154840",
+    "left": 66.3,
+    "top": 155.6,
+    "type": "r_220",
+    "name": "2ШР-220 ШСВ",
+    "letter": "Р",
+    "cell": "ШСВ-220",
+    "size": "small",
+    "markers": [
+      {
+        "left": 66.3,
+        "top": 155.6,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "marker-1786951182633",
+    "left": 46.4,
+    "top": 47.0,
+    "type": "autotransformer",
+    "name": "3АТГ ф.А",
+    "letter": "АТ",
+    "cell": "3АТГ",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 46.4,
+        "top": 47.0,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787054935416",
+    "left": 46.5,
+    "top": 54.8,
+    "type": "autotransformer",
+    "name": "3АТГ ф.В",
+    "letter": "АТ",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 46.5,
+        "top": 54.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787054943733",
+    "left": 46.5,
+    "top": 62.1,
+    "type": "autotransformer",
+    "name": "3АТГ ф.С",
+    "letter": "АТ",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 46.5,
+        "top": 62.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787157348542",
+    "left": 55.5,
+    "top": 88.7,
+    "type": "tsn",
+    "name": "3ТСН",
+    "letter": "ТСН",
+    "cell": "3ТСН",
+    "size": "small",
+    "markers": [
+      {
+        "left": 55.5,
+        "top": 88.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787157636500",
+    "left": 56.9,
+    "top": 94.2,
+    "type": "tsn",
+    "name": "4ТСН",
+    "letter": "ТСН",
+    "cell": "4ТСН",
+    "size": "small",
+    "markers": [
+      {
+        "left": 56.9,
+        "top": 94.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787054968984",
+    "left": 46.5,
+    "top": 69.9,
+    "type": "autotransformer",
+    "name": "АТГ резервная фаза",
+    "letter": "АТ",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 46.5,
+        "top": 69.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787307724840",
+    "left": 64.5,
+    "top": 34.2,
+    "type": "Buildings",
+    "name": "Артскважина",
+    "letter": "*",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 64.5,
+        "top": 34.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787300390946",
+    "left": 46.8,
+    "top": 131.0,
+    "type": "Buildings",
+    "name": "Баллонная №1",
+    "letter": "*",
+    "cell": "Воздухоприготовительная сеть",
+    "size": "small",
+    "markers": [
+      {
+        "left": 46.8,
+        "top": 131.0,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787300961194",
+    "left": 24.2,
+    "top": 24.3,
+    "type": "Buildings",
+    "name": "Баллонная №2",
+    "letter": "*",
+    "cell": "Воздухоприготовительная сеть",
+    "size": "small",
+    "markers": [
+      {
+        "left": 24.2,
+        "top": 24.3,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154905923",
+    "left": 63.7,
+    "top": 150.5,
+    "type": "v_220",
+    "name": "В-220 2АТГ",
+    "letter": "В",
+    "cell": "В-220 2АТГ",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 63.7,
+        "top": 150.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158519637",
+    "left": 74.2,
+    "top": 150.5,
+    "type": "v_220",
+    "name": "В-220 3АТГ",
+    "letter": "В",
+    "cell": "В-220 3АТГ",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 74.2,
+        "top": 150.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787159298511",
+    "left": 88.1,
+    "top": 150.5,
+    "type": "v_220",
+    "name": "В-220 Комета-1",
+    "letter": "В",
+    "cell": "В-220 Комета-1",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 88.1,
+        "top": 150.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787159048688",
+    "left": 85.5,
+    "top": 150.5,
+    "type": "v_220",
+    "name": "В-220 Комета-2",
+    "letter": "В",
+    "cell": "В-220 Комета-2",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 85.5,
+        "top": 150.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154062298",
+    "left": 53.0,
+    "top": 150.6,
+    "type": "v_220",
+    "name": "В-220 Мирная",
+    "letter": "В",
+    "cell": "В-220 Мирная",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 53.0,
+        "top": 150.6,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158724087",
+    "left": 80.2,
+    "top": 150.4,
+    "type": "v_220",
+    "name": "В-220 Орбита",
+    "letter": "В",
+    "cell": "В-220 Орбита",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 80.2,
+        "top": 150.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154341446",
+    "left": 58.3,
+    "top": 150.5,
+    "type": "v_220",
+    "name": "В-220 Топаз",
+    "letter": "В",
+    "cell": "В-220 Топаз",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 58.3,
+        "top": 150.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158884173",
+    "left": 82.9,
+    "top": 150.4,
+    "type": "v_220",
+    "name": "В-220 Факел",
+    "letter": "В",
+    "cell": "В-220 Факел",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 82.9,
+        "top": 150.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787157148769",
+    "left": 53.6,
+    "top": 91.7,
+    "type": "v_35",
+    "name": "В-35 2ТСН",
+    "letter": "В",
+    "cell": "2ТСН",
+    "size": "small",
+    "markers": [
+      {
+        "left": 53.6,
+        "top": 91.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787078218318",
+    "left": 53.6,
+    "top": 87.9,
+    "type": "v_500",
+    "name": "В-35 3ТСН",
+    "letter": "В",
+    "cell": "3ТСН",
+    "size": "small",
+    "markers": [
+      {
+        "left": 53.6,
+        "top": 87.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "marker-1787053937411",
+    "left": 28.2,
+    "top": 92.9,
+    "type": "v_500",
+    "name": "В-500 ВЛТ-20",
+    "letter": "В",
+    "cell": "",
+    "size": "large",
+    "markers": [
+      {
+        "left": 28.2,
+        "top": 92.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "marker-1786964295265",
+    "left": 28.4,
+    "top": 50.1,
+    "type": "v_500",
+    "name": "В-500 ВЛТ-30",
+    "letter": "В",
+    "cell": "",
+    "size": "large",
+    "markers": [
+      {
+        "left": 28.4,
+        "top": 50.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "marker-1787053967310",
+    "left": 28.2,
+    "top": 124.5,
+    "type": "v_500",
+    "name": "В-500 ВШЛ-12",
+    "letter": "В",
+    "cell": "",
+    "size": "large",
+    "markers": [
+      {
+        "left": 28.2,
+        "top": 124.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "marker-1787053905308",
+    "left": 28.2,
+    "top": 71.9,
+    "type": "v_500",
+    "name": "В-500 ВШЛ-21",
+    "letter": "В",
+    "cell": "В-500 ВШЛ-21 (яч. №12)",
+    "size": "large",
+    "markers": [
+      {
+        "left": 28.2,
+        "top": 71.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "marker-1787053880681",
+    "left": 28.2,
+    "top": 61.3,
+    "type": "v_500",
+    "name": "В-500 ВШЛ-32",
+    "letter": "В",
+    "cell": "",
+    "size": "large",
+    "markers": [
+      {
+        "left": 28.2,
+        "top": 61.3,
+        "isMain": true
+      }
+    ],
+    "defects": [
+      {
+        "id": "defect-1787504513897",
+        "equipmentId": "marker-1787053880681",
+        "name": "234234",
+        "description": "2342344",
+        "severity": "medium",
+        "status": "open",
+        "detectionDate": 1787504513897,
+        "notes": ""
+      },
+      {
+        "id": "defect-1787423698381",
+        "equipmentId": "marker-1787053880681",
+        "name": "12312",
+        "description": "123123",
+        "severity": "medium",
+        "status": "fixed",
+        "detectionDate": 1787423698381,
+        "notes": ""
+      },
+      {
+        "id": "defect-1787423553926",
+        "equipmentId": "marker-1787053880681",
+        "name": "121212",
+        "description": "1212121",
+        "severity": "medium",
+        "status": "open",
+        "detectionDate": 1787423553927,
+        "notes": "",
+        "markerLeft": 70.7593924860112,
+        "markerTop": 14.444444444444443
+      }
+    ]
+  },
+  {
+    "id": "marker-1787053956168",
+    "left": 28.2,
+    "top": 103.4,
+    "type": "v_500",
+    "name": "В-500 ВШТ-11",
+    "letter": "В",
+    "cell": "",
+    "size": "large",
+    "markers": [
+      {
+        "left": 28.2,
+        "top": 103.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "marker-1787053923088",
+    "left": 28.2,
+    "top": 82.3,
+    "type": "v_500",
+    "name": "В-500 ВШТ-22",
+    "letter": "В",
+    "cell": "",
+    "size": "large",
+    "markers": [
+      {
+        "left": 28.2,
+        "top": 82.3,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "marker-1787053854262",
+    "left": 28.3,
+    "top": 40.2,
+    "type": "v_500",
+    "name": "В-500 ВШТ-31",
+    "letter": "В",
+    "cell": "",
+    "size": "large",
+    "markers": [
+      {
+        "left": 28.3,
+        "top": 40.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "marker-1787053868157",
+    "left": 28.3,
+    "top": 29.7,
+    "type": "v_500",
+    "name": "В-500 Р-500 2С",
+    "letter": "В",
+    "cell": "",
+    "size": "large",
+    "markers": [
+      {
+        "left": 28.3,
+        "top": 29.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787307696585",
+    "left": 62.4,
+    "top": 33.8,
+    "type": "Buildings",
+    "name": "Здание артезианской скважины",
+    "letter": "*",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 62.4,
+        "top": 33.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787307766671",
+    "left": 55.7,
+    "top": 125.4,
+    "type": "Buildings",
+    "name": "Здание ёмкости запаса воды",
+    "letter": "*",
+    "cell": "",
+    "size": "small",
+    "markers": [
+      {
+        "left": 55.7,
+        "top": 125.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787300304357",
+    "left": 52.5,
+    "top": 77.9,
+    "type": "Buildings",
+    "name": "КПЗ-2",
+    "letter": "*",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 52.5,
+        "top": 77.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787159365417",
+    "left": 88.2,
+    "top": 157.5,
+    "type": "ks_220",
+    "name": "КС-220 Комета-1",
+    "letter": "КС",
+    "cell": "В-220 Комета-1",
+    "size": "small",
+    "markers": [
+      {
+        "left": 88.2,
+        "top": 157.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787159111197",
+    "left": 85.5,
+    "top": 157.6,
+    "type": "ks_220",
+    "name": "КС-220 Комета-2",
+    "letter": "КС",
+    "cell": "В-220 Комета-2",
+    "size": "small",
+    "markers": [
+      {
+        "left": 85.5,
+        "top": 157.6,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154152888",
+    "left": 53.0,
+    "top": 157.6,
+    "type": "ks_220",
+    "name": "КС-220 Мирная",
+    "letter": "КС",
+    "cell": "В-220 Мирная",
+    "size": "small",
+    "markers": [
+      {
+        "left": 53.0,
+        "top": 157.6,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158810912",
+    "left": 80.2,
+    "top": 157.4,
+    "type": "ks_220",
+    "name": "КС-220 Орбита",
+    "letter": "КС",
+    "cell": "В-220 Орбита",
+    "size": "small",
+    "markers": [
+      {
+        "left": 80.2,
+        "top": 157.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154449674",
+    "left": 58.3,
+    "top": 157.5,
+    "type": "ks_220",
+    "name": "КС-220 Топаз",
+    "letter": "КС",
+    "cell": "В-220 Топаз",
+    "size": "small",
+    "markers": [
+      {
+        "left": 58.3,
+        "top": 157.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158964707",
+    "left": 82.8,
+    "top": 157.5,
+    "type": "ks_220",
+    "name": "КС-220 Факел",
+    "letter": "КС",
+    "cell": "В-220 Факел",
+    "size": "small",
+    "markers": [
+      {
+        "left": 82.8,
+        "top": 157.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787306965806",
+    "left": 13.8,
+    "top": 134.9,
+    "type": "ks_500",
+    "name": "КС-500 Белозёрная",
+    "letter": "КС",
+    "cell": "ВЛ 500кВ Белозёрная",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 13.8,
+        "top": 134.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055595468",
+    "left": 14.2,
+    "top": 92.8,
+    "type": "ks_500",
+    "name": "КС-500 СГРЭС-1",
+    "letter": "КС",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 14.2,
+        "top": 92.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787300352112",
+    "left": 45.7,
+    "top": 131.0,
+    "type": "Buildings",
+    "name": "Компрессорная №1",
+    "letter": "*",
+    "cell": "Воздухоприготовительная сеть",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 45.7,
+        "top": 131.0,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787300933240",
+    "left": 23.1,
+    "top": 24.2,
+    "type": "Buildings",
+    "name": "Компрессорная №2",
+    "letter": "*",
+    "cell": "Воздухоприготовительная сеть",
+    "size": "small",
+    "markers": [
+      {
+        "left": 23.1,
+        "top": 24.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787159345766",
+    "left": 88.2,
+    "top": 155.7,
+    "type": "r_220",
+    "name": "ЛР-220 Комета-1",
+    "letter": "Р",
+    "cell": "В-220 Комета-1",
+    "size": "small",
+    "markers": [
+      {
+        "left": 88.2,
+        "top": 155.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787159093494",
+    "left": 85.5,
+    "top": 155.6,
+    "type": "r_220",
+    "name": "ЛР-220 Комета-2",
+    "letter": "Р",
+    "cell": "В-220 Комета-2",
+    "size": "small",
+    "markers": [
+      {
+        "left": 85.5,
+        "top": 155.6,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154127407",
+    "left": 53.0,
+    "top": 155.6,
+    "type": "r_220",
+    "name": "ЛР-220 Мирная",
+    "letter": "Р",
+    "cell": "В-220 Мирная",
+    "size": "small",
+    "markers": [
+      {
+        "left": 53.0,
+        "top": 155.6,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158745634",
+    "left": 80.2,
+    "top": 154.1,
+    "type": "tt_220",
+    "name": "ЛР-220 Орбита",
+    "letter": "ТТ",
+    "cell": "В-220 Орбита",
+    "size": "small",
+    "markers": [
+      {
+        "left": 80.2,
+        "top": 154.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154420240",
+    "left": 58.4,
+    "top": 155.6,
+    "type": "r_220",
+    "name": "ЛР-220 Топаз",
+    "letter": "Р",
+    "cell": "В-220 Топаз",
+    "size": "small",
+    "markers": [
+      {
+        "left": 58.4,
+        "top": 155.6,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158946594",
+    "left": 82.9,
+    "top": 155.7,
+    "type": "r_220",
+    "name": "ЛР-220 Факел",
+    "letter": "Р",
+    "cell": "В-220 Факел",
+    "size": "small",
+    "markers": [
+      {
+        "left": 82.9,
+        "top": 155.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787077626195",
+    "left": 21.7,
+    "top": 134.8,
+    "type": "r_500",
+    "name": "ЛР-500 Белозёрная",
+    "letter": "Р",
+    "cell": "ВЛ 500кВ Белозёрная",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 21.7,
+        "top": 134.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055630746",
+    "left": 21.7,
+    "top": 92.7,
+    "type": "r_500",
+    "name": "ЛР-500 СГРЭС-1",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 21.7,
+        "top": 92.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055137253",
+    "left": 21.7,
+    "top": 50.7,
+    "type": "r_500",
+    "name": "ЛР-500 Трачуковская",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 21.7,
+        "top": 50.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787307421755",
+    "left": 22.8,
+    "top": 150.8,
+    "type": "ls",
+    "name": "ЛС-500 Белолзёрная",
+    "letter": "ЛС",
+    "cell": "",
+    "size": "large",
+    "markers": [
+      {
+        "left": 22.8,
+        "top": 150.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787313528793",
+    "left": 23.0,
+    "top": 107.1,
+    "type": "ls",
+    "name": "ЛС-500 СГРЭС-1",
+    "letter": "ЛС",
+    "cell": "",
+    "size": "large",
+    "markers": [
+      {
+        "left": 23.0,
+        "top": 107.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787308028231",
+    "left": 22.9,
+    "top": 45.5,
+    "type": "ls",
+    "name": "ЛС-500 Трачуковская",
+    "letter": "ЛС",
+    "cell": "",
+    "size": "large",
+    "markers": [
+      {
+        "left": 22.9,
+        "top": 45.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787307646203",
+    "left": 54.4,
+    "top": 27.3,
+    "type": "Buildings",
+    "name": "Мастерская по ремонту вв",
+    "letter": "*",
+    "cell": "",
+    "size": "large",
+    "markers": [
+      {
+        "left": 54.4,
+        "top": 27.3,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787307604145",
+    "left": 50.7,
+    "top": 26.7,
+    "type": "Buildings",
+    "name": "НПТ",
+    "letter": "*",
+    "cell": "Пожаротушение",
+    "size": "large",
+    "markers": [
+      {
+        "left": 50.7,
+        "top": 26.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154633934",
+    "left": 61.0,
+    "top": 150.5,
+    "type": "v_220",
+    "name": "ОВ-220",
+    "letter": "В",
+    "cell": "ОВ-220",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 61.0,
+        "top": 150.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787122000749",
+    "left": 60.9,
+    "top": 131.4,
+    "type": "opn_220",
+    "name": "ОНП-220 1ТН",
+    "letter": "ОПН",
+    "cell": "1ТН-220",
+    "size": "large",
+    "markers": [
+      {
+        "left": 60.9,
+        "top": 131.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787077437300",
+    "left": 50.8,
+    "top": 81.9,
+    "type": "opn_220",
+    "name": "ОПН-220 2АТГ",
+    "letter": "ОПН",
+    "cell": "2АТГ",
+    "size": "large",
+    "markers": [
+      {
+        "left": 50.8,
+        "top": 81.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787141761901",
+    "left": 66.2,
+    "top": 130.0,
+    "type": "opn_220",
+    "name": "ОПН-220 2ТН",
+    "letter": "ОПН",
+    "cell": "2ТН-220",
+    "size": "large",
+    "markers": [
+      {
+        "left": 66.2,
+        "top": 130.0,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787076380553",
+    "left": 49.6,
+    "top": 51.4,
+    "type": "opn_500",
+    "name": "ОПН-220 3АТГ",
+    "letter": "ОПН",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 49.6,
+        "top": 51.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787157686835",
+    "left": 56.9,
+    "top": 91.4,
+    "type": "opn_35",
+    "name": "ОПН-35 4ТСН",
+    "letter": "ОПН",
+    "cell": "4ТСН",
+    "size": "small",
+    "markers": [
+      {
+        "left": 56.9,
+        "top": 91.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055569298",
+    "left": 42.1,
+    "top": 82.4,
+    "type": "opn_500",
+    "name": "ОПН-500 2АТГ",
+    "letter": "ОПН",
+    "cell": "2АТГ",
+    "size": "large",
+    "markers": [
+      {
+        "left": 42.1,
+        "top": 82.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787306983952",
+    "left": 11.6,
+    "top": 134.7,
+    "type": "opn_500",
+    "name": "ОПН-500 Белозёрная",
+    "letter": "ОПН",
+    "cell": "ВЛ 500кВ Белозёрная",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 11.6,
+        "top": 134.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055321406",
+    "left": 41.4,
+    "top": 29.7,
+    "type": "opn_500",
+    "name": "ОПН-500 Р-500 2С",
+    "letter": "ОПН",
+    "cell": "Р-500 2С (15)",
+    "size": "large",
+    "markers": [
+      {
+        "left": 41.4,
+        "top": 29.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055583302",
+    "left": 11.7,
+    "top": 92.6,
+    "type": "opn_500",
+    "name": "ОПН-500 СГРЭС-1",
+    "letter": "ОПН",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 11.7,
+        "top": 92.6,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055084041",
+    "left": 11.7,
+    "top": 50.8,
+    "type": "opn_500",
+    "name": "ОПН-500 Трачуковская",
+    "letter": "ОПН",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 11.7,
+        "top": 50.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787299772104",
+    "left": 55.1,
+    "top": 109.7,
+    "type": "Buildings",
+    "name": "ОПУ",
+    "letter": "*",
+    "cell": "ОПУ",
+    "size": "large",
+    "markers": [
+      {
+        "left": 55.1,
+        "top": 109.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154968656",
+    "left": 63.6,
+    "top": 158.8,
+    "type": "r_220",
+    "name": "ОР-220 2АТГ",
+    "letter": "Р",
+    "cell": "В-220 2АТГ",
+    "size": "small",
+    "markers": [
+      {
+        "left": 63.6,
+        "top": 158.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158581491",
+    "left": 74.3,
+    "top": 158.9,
+    "type": "r_220",
+    "name": "ОР-220 3АТГ",
+    "letter": "Р",
+    "cell": "В-220 3АТГ",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 74.3,
+        "top": 158.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787159382874",
+    "left": 88.2,
+    "top": 158.9,
+    "type": "r_220",
+    "name": "ОР-220 Комета-1",
+    "letter": "Р",
+    "cell": "В-220 Комета-1",
+    "size": "small",
+    "markers": [
+      {
+        "left": 88.2,
+        "top": 158.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787159256382",
+    "left": 85.5,
+    "top": 159.0,
+    "type": "r_220",
+    "name": "ОР-220 Комета-2",
+    "letter": "Р",
+    "cell": "В-220 Комета-2",
+    "size": "small",
+    "markers": [
+      {
+        "left": 85.5,
+        "top": 159.0,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154178614",
+    "left": 53.1,
+    "top": 158.8,
+    "type": "r_220",
+    "name": "ОР-220 Мирная",
+    "letter": "Р",
+    "cell": "В-220 Мирная",
+    "size": "small",
+    "markers": [
+      {
+        "left": 53.1,
+        "top": 158.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154709658",
+    "left": 61.0,
+    "top": 158.8,
+    "type": "r_220",
+    "name": "ОР-220 ОВ",
+    "letter": "Р",
+    "cell": "ОВ-220",
+    "size": "small",
+    "markers": [
+      {
+        "left": 61.0,
+        "top": 158.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158833459",
+    "left": 80.2,
+    "top": 158.9,
+    "type": "r_220",
+    "name": "ОР-220 Орбита",
+    "letter": "Р",
+    "cell": "В-220 Орбита",
+    "size": "small",
+    "markers": [
+      {
+        "left": 80.2,
+        "top": 158.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154467628",
+    "left": 58.4,
+    "top": 158.8,
+    "type": "r_220",
+    "name": "ОР-220 Топаз",
+    "letter": "Р",
+    "cell": "В-220 Топаз",
+    "size": "small",
+    "markers": [
+      {
+        "left": 58.4,
+        "top": 158.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158978131",
+    "left": 82.9,
+    "top": 158.9,
+    "type": "r_220",
+    "name": "ОР-220 Факел",
+    "letter": "Р",
+    "cell": "В-220 Факел",
+    "size": "small",
+    "markers": [
+      {
+        "left": 82.9,
+        "top": 158.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787054792051",
+    "left": 45.6,
+    "top": 25.7,
+    "type": "reactor_500",
+    "name": "Р-500 2С ф.А",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 45.6,
+        "top": 25.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787054811823",
+    "left": 45.4,
+    "top": 32.0,
+    "type": "reactor_500",
+    "name": "Р-500 2С ф.В",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 45.4,
+        "top": 32.0,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787054829824",
+    "left": 45.5,
+    "top": 38.7,
+    "type": "reactor_500",
+    "name": "Р-500 2С ф.С",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 45.5,
+        "top": 38.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055180917",
+    "left": 24.5,
+    "top": 50.8,
+    "type": "r_500",
+    "name": "РЛС-500 ВЛТ-30",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 24.5,
+        "top": 50.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787077597566",
+    "left": 24.4,
+    "top": 124.2,
+    "type": "r_500",
+    "name": "РЛС-500 ВШЛ-12",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 24.4,
+        "top": 124.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055464296",
+    "left": 24.4,
+    "top": 71.8,
+    "type": "r_500",
+    "name": "РЛС-500 ВШЛ-21",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 24.4,
+        "top": 71.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055436742",
+    "left": 24.3,
+    "top": 61.2,
+    "type": "r_500",
+    "name": "РЛС-500 ВШЛ-32",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 24.3,
+        "top": 61.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787077523290",
+    "left": 31.3,
+    "top": 103.4,
+    "type": "r_500",
+    "name": "РЛС-500 ВШТ-11",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 31.3,
+        "top": 103.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055651284",
+    "left": 24.1,
+    "top": 92.7,
+    "type": "r_500",
+    "name": "РТС-500 ВЛТ-20",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 24.1,
+        "top": 92.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055702931",
+    "left": 31.3,
+    "top": 92.9,
+    "type": "r_500",
+    "name": "РТС-500 ВЛТ-20",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 31.3,
+        "top": 92.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "marker-1786964420758",
+    "left": 31.3,
+    "top": 50.4,
+    "type": "r_500",
+    "name": "РТС-500 ВЛТ-30",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 31.3,
+        "top": 50.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055542614",
+    "left": 31.3,
+    "top": 82.3,
+    "type": "r_500",
+    "name": "РТС-500 ВШТ-22",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 31.3,
+        "top": 82.3,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055362082",
+    "left": 31.3,
+    "top": 40.1,
+    "type": "r_500",
+    "name": "РТС-500 ВШТ-31",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 31.3,
+        "top": 40.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154739111",
+    "left": 61.0,
+    "top": 160.4,
+    "type": "tn_220",
+    "name": "ТН-220 ОСШ ф.В",
+    "letter": "ТН",
+    "cell": "ОВ-220",
+    "size": "small",
+    "markers": [
+      {
+        "left": 61.0,
+        "top": 160.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787077613841",
+    "left": 20.0,
+    "top": 134.7,
+    "type": "tn_500",
+    "name": "ТН-500 Белозёрная",
+    "letter": "ТН",
+    "cell": "ВЛ 500кВ Белозёрная",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 20.0,
+        "top": 134.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055617880",
+    "left": 20.1,
+    "top": 92.8,
+    "type": "tn_500",
+    "name": "ТН-500 СГРЭС-1",
+    "letter": "ТН",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 20.1,
+        "top": 92.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154946864",
+    "left": 63.6,
+    "top": 155.6,
+    "type": "r_220",
+    "name": "ТР-220 2АТГ",
+    "letter": "Р",
+    "cell": "В-220 2АТГ",
+    "size": "small",
+    "markers": [
+      {
+        "left": 63.6,
+        "top": 155.6,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158557151",
+    "left": 74.2,
+    "top": 155.6,
+    "type": "r_220",
+    "name": "ТР-220 3АТГ",
+    "letter": "Р",
+    "cell": "В-220 3АТГ",
+    "size": "small",
+    "markers": [
+      {
+        "left": 74.2,
+        "top": 155.6,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787301114206",
+    "left": 50.3,
+    "top": 91.4,
+    "type": "Buildings",
+    "name": "ТР-35 2АТГ",
+    "letter": "*",
+    "cell": "2АТГ",
+    "size": "small",
+    "markers": [
+      {
+        "left": 50.3,
+        "top": 91.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787157520283",
+    "left": 54.8,
+    "top": 91.7,
+    "type": "r_35",
+    "name": "ТР-35 2ТСН",
+    "letter": "Р",
+    "cell": "2ТСН",
+    "size": "small",
+    "markers": [
+      {
+        "left": 54.8,
+        "top": 91.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787301093196",
+    "left": 50.3,
+    "top": 88.3,
+    "type": "r_35",
+    "name": "ТР-35 3АТГ",
+    "letter": "Р",
+    "cell": "3АТГ",
+    "size": "small",
+    "markers": [
+      {
+        "left": 50.3,
+        "top": 88.3,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787157176329",
+    "left": 54.8,
+    "top": 87.9,
+    "type": "r_35",
+    "name": "ТР-35 3ТСН",
+    "letter": "Р",
+    "cell": "3ТСН",
+    "size": "small",
+    "markers": [
+      {
+        "left": 54.8,
+        "top": 87.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787157661155",
+    "left": 56.9,
+    "top": 92.5,
+    "type": "r_35",
+    "name": "ТР-35 4ТСН",
+    "letter": "Р",
+    "cell": "4ТСН",
+    "size": "small",
+    "markers": [
+      {
+        "left": 56.9,
+        "top": 92.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055552117",
+    "left": 34.0,
+    "top": 82.2,
+    "type": "r_500",
+    "name": "ТР-500 2АТГ",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 34.0,
+        "top": 82.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055394712",
+    "left": 33.9,
+    "top": 50.6,
+    "type": "r_500",
+    "name": "ТР-500 3АТГ",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 33.9,
+        "top": 50.6,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154926725",
+    "left": 63.7,
+    "top": 154.2,
+    "type": "tt_220",
+    "name": "ТТ-220 2АТГ",
+    "letter": "ТТ",
+    "cell": "В-220 2АТГ",
+    "size": "small",
+    "markers": [
+      {
+        "left": 63.7,
+        "top": 154.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158537518",
+    "left": 74.3,
+    "top": 154.1,
+    "type": "tt_220",
+    "name": "ТТ-220 3АТГ",
+    "letter": "ТТ",
+    "cell": "В-220 3АТГ",
+    "size": "small",
+    "markers": [
+      {
+        "left": 74.3,
+        "top": 154.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787159327235",
+    "left": 88.2,
+    "top": 154.0,
+    "type": "tt_220",
+    "name": "ТТ-220 Комета-1",
+    "letter": "ТТ",
+    "cell": "В-220 Комета-1",
+    "size": "small",
+    "markers": [
+      {
+        "left": 88.2,
+        "top": 154.0,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787159074212",
+    "left": 85.5,
+    "top": 154.1,
+    "type": "tt_220",
+    "name": "ТТ-220 Комета-2",
+    "letter": "ТТ",
+    "cell": "В-220 Комета-2",
+    "size": "small",
+    "markers": [
+      {
+        "left": 85.5,
+        "top": 154.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154100782",
+    "left": 53.1,
+    "top": 153.9,
+    "type": "tt_220",
+    "name": "ТТ-220 Мирная",
+    "letter": "ТТ",
+    "cell": "В-220 Мирная",
+    "size": "small",
+    "markers": [
+      {
+        "left": 53.1,
+        "top": 153.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154668115",
+    "left": 61.0,
+    "top": 154.1,
+    "type": "tt_220",
+    "name": "ТТ-220 ОВ",
+    "letter": "ТТ",
+    "cell": "ОВ-220",
+    "size": "small",
+    "markers": [
+      {
+        "left": 61.0,
+        "top": 154.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158767843",
+    "left": 80.2,
+    "top": 155.6,
+    "type": "r_220",
+    "name": "ТТ-220 Орбита",
+    "letter": "Р",
+    "cell": "В-220 Орбита",
+    "size": "small",
+    "markers": [
+      {
+        "left": 80.2,
+        "top": 155.6,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154377707",
+    "left": 58.4,
+    "top": 154.1,
+    "type": "tt_220",
+    "name": "ТТ-220 Топаз",
+    "letter": "ТТ",
+    "cell": "В-220 Топаз",
+    "size": "small",
+    "markers": [
+      {
+        "left": 58.4,
+        "top": 154.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787158927353",
+    "left": 82.9,
+    "top": 154.1,
+    "type": "tt_220",
+    "name": "ТТ-220 Факел",
+    "letter": "ТТ",
+    "cell": "В-220 Факел",
+    "size": "small",
+    "markers": [
+      {
+        "left": 82.9,
+        "top": 154.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787155132768",
+    "left": 66.3,
+    "top": 154.1,
+    "type": "tt_220",
+    "name": "ТТ-220 ШСВ",
+    "letter": "ТТ",
+    "cell": "ШСВ-220",
+    "size": "small",
+    "markers": [
+      {
+        "left": 66.3,
+        "top": 154.1,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787157559460",
+    "left": 54.2,
+    "top": 91.7,
+    "type": "tt_35",
+    "name": "ТТ-35 2ТСН",
+    "letter": "ТТ",
+    "cell": "2ТСН",
+    "size": "small",
+    "markers": [
+      {
+        "left": 54.2,
+        "top": 91.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787157218882",
+    "left": 54.2,
+    "top": 87.9,
+    "type": "tt_35",
+    "name": "ТТ-35 3ТСН",
+    "letter": "ТТ",
+    "cell": "3ТСН",
+    "size": "small",
+    "markers": [
+      {
+        "left": 54.2,
+        "top": 87.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787307523660",
+    "left": 25.7,
+    "top": 92.9,
+    "type": "tt_500",
+    "name": "ТТ-500 ВЛТ-20",
+    "letter": "ТТ",
+    "cell": "В-500 ВЛТ-20",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 25.7,
+        "top": 92.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055195285",
+    "left": 25.9,
+    "top": 50.7,
+    "type": "tt_500",
+    "name": "ТТ-500 ВЛТ-30",
+    "letter": "ТТ",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 25.9,
+        "top": 50.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055484567",
+    "left": 25.8,
+    "top": 71.4,
+    "type": "tt_500",
+    "name": "ТТ-500 ВШЛ-21",
+    "letter": "ТТ",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 25.8,
+        "top": 71.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055451536",
+    "left": 25.8,
+    "top": 61.2,
+    "type": "tt_500",
+    "name": "ТТ-500 ВШЛ-32",
+    "letter": "ТТ",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 25.8,
+        "top": 61.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787077509387",
+    "left": 25.6,
+    "top": 103.5,
+    "type": "r_500",
+    "name": "ТТ-500 ВШТ-11",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 25.6,
+        "top": 103.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787307483639",
+    "left": 25.6,
+    "top": 82.4,
+    "type": "tt_500",
+    "name": "ТТ-500 ВШТ-22",
+    "letter": "ТТ",
+    "cell": "В-500 ВШТ-22 (10)",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 25.6,
+        "top": 82.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055375341",
+    "left": 25.6,
+    "top": 40.2,
+    "type": "tt_500",
+    "name": "ТТ-500 ВШТ-31",
+    "letter": "ТТ",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 25.6,
+        "top": 40.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055162080",
+    "left": 23.1,
+    "top": 50.8,
+    "type": "tt_500",
+    "name": "ТТ-500 Трачуковская",
+    "letter": "ТТ",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 23.1,
+        "top": 50.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787154534945",
+    "left": 61.0,
+    "top": 136.4,
+    "type": "r_220",
+    "name": "ШР-220 1ТН",
+    "letter": "Р",
+    "cell": "1ТН-220",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 61.0,
+        "top": 136.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787155018183",
+    "left": 66.3,
+    "top": 134.5,
+    "type": "r_220",
+    "name": "ШР-220 2ТН",
+    "letter": "Р",
+    "cell": "2ТН-220",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 66.3,
+        "top": 134.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055721570",
+    "left": 40.4,
+    "top": 92.9,
+    "type": "r_500",
+    "name": "ШР-500 1ТН",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 40.4,
+        "top": 92.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055763240",
+    "left": 14.9,
+    "top": 103.2,
+    "type": "r_500",
+    "name": "ШР-500 2ТН",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 14.9,
+        "top": 103.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787077580925",
+    "left": 17.6,
+    "top": 124.4,
+    "type": "r_500",
+    "name": "ШР-500 ВШЛ-12",
+    "letter": "Р",
+    "cell": "В-500 ВШЛ-12 (6)",
+    "size": "large",
+    "markers": [
+      {
+        "left": 17.6,
+        "top": 124.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055504491",
+    "left": 38.2,
+    "top": 71.7,
+    "type": "r_500",
+    "name": "ШР-500 ВШЛ-21",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 38.2,
+        "top": 71.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055413137",
+    "left": 17.5,
+    "top": 61.4,
+    "type": "r_500",
+    "name": "ШР-500 ВШЛ-32",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 17.5,
+        "top": 61.4,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787077548822",
+    "left": 38.1,
+    "top": 103.5,
+    "type": "r_500",
+    "name": "ШР-500 ВШТ-11",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 38.1,
+        "top": 103.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055528743",
+    "left": 17.5,
+    "top": 82.2,
+    "type": "r_500",
+    "name": "ШР-500 ВШТ-22",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 17.5,
+        "top": 82.2,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055341763",
+    "left": 38.1,
+    "top": 40.3,
+    "type": "r_500",
+    "name": "ШР-500 ВШТ-31",
+    "letter": "Р",
+    "cell": "В-500 ВШТ-31 (14)",
+    "size": "large",
+    "markers": [
+      {
+        "left": 38.1,
+        "top": 40.3,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787055288209",
+    "left": 17.6,
+    "top": 29.9,
+    "type": "r_500",
+    "name": "ШР-500 Р-500 2С",
+    "letter": "Р",
+    "cell": "",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 17.6,
+        "top": 29.9,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787155116430",
+    "left": 66.3,
+    "top": 150.5,
+    "type": "v_220",
+    "name": "ШСВ-220",
+    "letter": "В",
+    "cell": "ШСВ-220",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 66.3,
+        "top": 150.5,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  }
+]
