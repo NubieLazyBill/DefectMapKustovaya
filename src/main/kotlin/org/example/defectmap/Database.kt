@@ -128,6 +128,7 @@ class Database {
 
     private fun connect() {
         val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
+        dbFile.parentFile?.mkdirs()  // <-- СОЗДАЁМ ПАПКУ, ЕСЛИ ЕЁ НЕТ
         val dbPath = dbFile.absolutePath
         connection = DriverManager.getConnection("jdbc:sqlite:$dbPath")
         connection?.autoCommit = true
@@ -145,7 +146,7 @@ class Database {
                 letter TEXT NOT NULL,
                 cell TEXT DEFAULT '',
                 size TEXT DEFAULT 'normal',
-                markers TEXT DEFAULT '[]',  -- <-- НОВАЯ КОЛОНКА
+                markers TEXT DEFAULT '[]',
                 created_at INTEGER DEFAULT (strftime('%s', 'now')),
                 updated_at INTEGER DEFAULT (strftime('%s', 'now'))
             )
@@ -159,7 +160,6 @@ class Database {
             executeUpdate("ALTER TABLE equipment ADD COLUMN size TEXT DEFAULT 'normal'")
             println("✅ Колонка size добавлена")
         } catch (e: Exception) {
-            // Колонка уже существует — ничего не делаем
             println("ℹ️ Колонка size уже существует")
         }
     }
@@ -167,9 +167,8 @@ class Database {
     // ======================== СОХРАНЕНИЕ ========================
 
     private val exportFile: File by lazy {
-        val dir = File(System.getProperty("user.home"), ".defectmap")
-        if (!dir.exists()) dir.mkdirs()
-        File(dir, "equipment_export.json")
+        // ===== JSON В ПАПКЕ ПРОЕКТА (КОММИТИТСЯ В GIT) =====
+        File("equipment_export.json")
     }
 
     fun saveEquipment(equipment: List<EquipmentData>) {
@@ -187,22 +186,17 @@ class Database {
 
         connection?.prepareStatement(sql)?.use { stmt ->
             equipment.forEach { item ->
-                // ===== БЕЗОПАСНАЯ ПРОВЕРКА: если markers == null, создаём пустой список =====
                 val safeMarkers = item.markers ?: listOf()
 
-                // Сохраняем основной маркер (первый или isMain=true)
                 val mainMarker = if (safeMarkers.isNotEmpty()) {
                     safeMarkers.firstOrNull { it.isMain } ?: safeMarkers.first()
                 } else {
-                    // Если маркеров нет — создаём из left/top
                     MarkerPosition(item.left, item.top, true)
                 }
 
-                // Сохраняем все маркеры в JSON (если null — сохраняем пустой массив)
                 val markersJson = if (safeMarkers.isNotEmpty()) {
                     gson.toJson(safeMarkers)
                 } else {
-                    // Если маркеров нет — сохраняем один из left/top
                     gson.toJson(listOf(MarkerPosition(item.left, item.top, true)))
                 }
 
@@ -345,7 +339,6 @@ class Database {
             val type = object : TypeToken<List<MarkerPosition>>() {}.type
             gson.fromJson(markersJson, type)
         } catch (e: Exception) {
-            // Если не удалось распарсить — создаём из left/top
             listOf(MarkerPosition(rs.getDouble("left_pos"), rs.getDouble("top_pos"), true))
         }
 
@@ -358,7 +351,7 @@ class Database {
             letter = rs.getString("letter"),
             cell = rs.getString("cell") ?: "",
             size = rs.getString("size") ?: "normal",
-            markers = markers  // <-- НОВОЕ!
+            markers = markers
         )
     }
 
@@ -388,7 +381,7 @@ class Database {
         connection?.prepareStatement(sql)?.use { stmt ->
             val rs = stmt.executeQuery()
             if (rs.next()) {
-                return rs.getLong("max_updated") * 1000 // Unix timestamp в миллисекунды
+                return rs.getLong("max_updated") * 1000
             }
         }
         return 0L
@@ -398,7 +391,6 @@ class Database {
         try {
             val gson = GsonBuilder().setPrettyPrinting().create()
             val exportData = equipment.map { eq ->
-                // Загружаем дефекты для этого оборудования
                 val defects = getDefectsByEquipment(eq.id)
                 mapOf(
                     "id" to eq.id,
@@ -410,14 +402,15 @@ class Database {
                     "cell" to eq.cell,
                     "size" to eq.size,
                     "markers" to eq.markers,
-                    "defects" to defects  // <-- ДОБАВЛЯЕМ ДЕФЕКТЫ!
+                    "defects" to defects
                 )
             }
             val json = gson.toJson(exportData)
-            val exportFile = File(System.getProperty("user.home"), ".defectmap/equipment_export.json")
-            exportFile.parentFile?.mkdirs()
+            // ===== СОХРАНЯЕМ В ПАПКУ ПРОЕКТА =====
+            val exportFile = File("equipment_export.json")
             exportFile.writeText(json, Charsets.UTF_8)
             println("📤 Экспортировано ${equipment.size} записей с дефектами в JSON")
+            println("📁 Файл: ${exportFile.absolutePath}")
         } catch (e: Exception) {
             println("❌ Ошибка экспорта: ${e.message}")
         }
@@ -425,9 +418,10 @@ class Database {
 
     fun importFromJson(): List<EquipmentData>? {
         try {
-            val importFile = File(System.getProperty("user.home"), ".defectmap/equipment_export.json")
+            // ===== ЧИТАЕМ ИЗ ПАПКИ ПРОЕКТА =====
+            val importFile = File("equipment_export.json")
             if (!importFile.exists()) {
-                println("⚠️ Файл экспорта не найден")
+                println("⚠️ Файл экспорта не найден в папке проекта")
                 return null
             }
 
@@ -461,7 +455,6 @@ class Database {
                     markers = markers
                 )
 
-                // ===== ИМПОРТ ДЕФЕКТОВ (БЕЗ УДАЛЕНИЯ) =====
                 val defectsJson = map["defects"] as? String ?: "[]"
                 val defectsType = object : TypeToken<List<DefectData>>() {}.type
                 val defects: List<DefectData> = try {
@@ -470,7 +463,6 @@ class Database {
                     emptyList()
                 }
 
-                // Просто сохраняем дефекты (INSERT OR REPLACE)
                 defects.forEach { saveDefect(it) }
 
                 equipmentData
@@ -508,7 +500,7 @@ data class EquipmentData(
     val letter: String,
     val cell: String = "",
     val size: String = "normal",
-    val markers: List<MarkerPosition> = listOf()  // НОВОЕ ПОЛЕ
+    val markers: List<MarkerPosition> = listOf()
 )
 
 data class MarkerPosition(
