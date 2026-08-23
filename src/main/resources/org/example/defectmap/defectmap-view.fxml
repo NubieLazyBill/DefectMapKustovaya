@@ -3,6 +3,8 @@
 <?import javafx.scene.layout.AnchorPane?>
 <?import javafx.scene.web.WebView?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.MenuButton?>
+<?import javafx.scene.control.MenuItem?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.geometry.Insets?>
 
@@ -13,41 +15,38 @@
 
     <WebView fx:id="webView"
              AnchorPane.topAnchor="0.0"
-             AnchorPane.bottomAnchor="50.0"
+             AnchorPane.bottomAnchor="60.0"
              AnchorPane.leftAnchor="0.0"
              AnchorPane.rightAnchor="0.0"/>
 
-    <!-- Панель управления -->
+    <!-- Панель управления (кнопки по центру) -->
     <HBox spacing="10.0"
           alignment="CENTER"
           AnchorPane.bottomAnchor="10.0"
           AnchorPane.leftAnchor="0.0"
           AnchorPane.rightAnchor="0.0">
         <padding>
-            <Insets top="5.0" right="10.0" bottom="5.0" left="10.0"/>
+            <Insets top="5.0" right="15.0" bottom="5.0" left="15.0"/>
         </padding>
 
-        <Button fx:id="addEquipmentBtn" text="➕ Добавить оборудование"
-                style="-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
-
-        <Button fx:id="editModeBtn" text="✏️ Режим редактирования"
-                style="-fx-background-color: #2196F3; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
-
-        <Button fx:id="saveEquipmentBtn" text="💾 Сохранить оборудование"
-                style="-fx-background-color: #FF9800; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
-
+        <!-- 1. Список оборудования -->
         <Button fx:id="viewEquipmentBtn" text="📋 Список оборудования"
                 style="-fx-background-color: #9C27B0; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
 
-        <Button fx:id="cancelEditBtn" text="❌ Отмена"
-                style="-fx-background-color: #f44336; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"
-                visible="false" managed="false"/>
-
-        <Button fx:id="statsBtn" text="📊 Статистика"
+        <!-- 2. Дефекты -->
+        <Button fx:id="defectsBtn" text="📊 Дефекты"
                 style="-fx-background-color: #17a2b8; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
 
-        <Button fx:id="forceImportBtn" text="📥 Принудительный импорт"
-                style="-fx-background-color: #6c757d; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
+        <!-- 3. Для разработчиков (последняя) -->
+        <MenuButton fx:id="devMenuBtn" text="🔧 Для разработчиков"
+                    style="-fx-background-color: #6c757d; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;">
+            <items>
+                <MenuItem fx:id="editModeMenuItem" text="✏️ Режим редактирования" onAction="#toggleEditModeAction"/>
+                <MenuItem fx:id="toggleMarkersMenuItem" text="👁️ Скрыть маркеры" onAction="#toggleMarkersVisibility"/>
+                <MenuItem fx:id="forceImportMenuItem" text="🔄 Принудительный импорт" onAction="#onForceImport"/>
+            </items>
+        </MenuButton>
+
     </HBox>
 
 </AnchorPane>

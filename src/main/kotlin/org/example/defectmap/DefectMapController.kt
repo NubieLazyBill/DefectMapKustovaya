@@ -35,32 +35,37 @@ import javafx.scene.control.ButtonType
 import javafx.scene.layout.StackPane
 import javafx.geometry.Insets
 import javafx.animation.PauseTransition
+import javafx.scene.control.MenuButton
+import javafx.scene.control.TableView
+import javafx.scene.control.TableColumn
+import javafx.scene.control.TableCell
+import javafx.scene.control.cell.PropertyValueFactory
+import javafx.collections.FXCollections
+
 
 class DefectMapController {
-
-    @FXML
-    private lateinit var statsBtn: Button
-
     @FXML
     private lateinit var webView: WebView
-
-    @FXML
-    private lateinit var addEquipmentBtn: Button
-
-    @FXML
-    private lateinit var editModeBtn: Button
-
-    @FXML
-    private lateinit var saveEquipmentBtn: Button
 
     @FXML
     private lateinit var viewEquipmentBtn: Button
 
     @FXML
-    private lateinit var cancelEditBtn: Button
+    private lateinit var devMenuBtn: MenuButton
 
     @FXML
-    private lateinit var forceImportBtn: Button
+    private lateinit var editModeMenuItem: MenuItem
+
+    @FXML
+    private lateinit var toggleMarkersMenuItem: MenuItem
+
+    @FXML
+    private lateinit var forceImportMenuItem: MenuItem
+
+    @FXML
+    private lateinit var defectsBtn: Button
+
+    private var markersVisible = false
 
     private var currentEditingEquipmentId: String? = null  // Для добавления маркеров
 
@@ -88,9 +93,10 @@ class DefectMapController {
     @FXML
     private fun initialize() {
         loadSvgIntoWebView()
-
-        // Проверка импорта при запуске
         checkAndImportData()
+
+        // Устанавливаем правильный текст для меню при запуске
+        toggleMarkersMenuItem.text = if (markersVisible) "👁️ Скрыть маркеры" else "👁️ Показать маркеры"
 
         webView.engine.getLoadWorker().stateProperty().addListener { _, _, newState ->
             if (newState == Worker.State.SUCCEEDED) {
@@ -103,6 +109,36 @@ class DefectMapController {
                 }
             }
         }
+    }
+
+    // ======================== РЕЖИМ РЕДАКТИРОВАНИЯ (из меню) ========================
+
+    @FXML
+    private fun toggleEditModeAction() {
+        toggleEditMode(!isEditMode)
+    }
+
+    // ======================== ПЕРЕКЛЮЧАТЕЛЬ ВИДИМОСТИ МАРКЕРОВ ========================
+
+    @FXML
+    private fun toggleMarkersVisibility() {
+        markersVisible = !markersVisible
+
+        webView.engine.executeScript("""
+        (function() {
+            var markers = document.querySelectorAll('.equipment-marker');
+            markers.forEach(function(marker) {
+                if (${markersVisible}) {
+                    marker.classList.remove('hidden');
+                } else {
+                    marker.classList.add('hidden');
+                }
+            });
+        })();
+    """.trimIndent())
+
+        // Текст показывает ДЕЙСТВИЕ при следующем нажатии
+        toggleMarkersMenuItem.text = if (markersVisible) "👁️ Скрыть маркеры" else "👁️ Показать маркеры"
     }
 
     // ======================== ЗАГРУЗКА SVG ========================
@@ -163,12 +199,23 @@ class DefectMapController {
                 transform: translate(-50%, -50%);
                 width: 28px;
                 height: 28px;
-                transition: transform 0.2s ease;
-            }
-            .equipment-marker:hover {
-                transform: translate(-50%, -50%) scale(1.2);
-            }
-            .equipment-marker .dot {
+                transition: all 0.2s ease;
+              }
+              /* Скрытый маркер — убираем всё визуальное, но оставляем область для наведения */
+              .equipment-marker.hidden .dot {
+                  opacity: 0 !important;
+                  pointer-events: none;
+              }
+              .equipment-marker.hidden .tooltip-text {
+                  opacity: 0 !important;
+                  visibility: hidden !important;
+              }
+              /* При наведении на скрытый маркер — показываем тултип */
+              .equipment-marker.hidden:hover .tooltip-text {
+                  opacity: 1 !important;
+                  visibility: visible !important;
+              }
+              .equipment-marker .dot {
                 width: 24px;
                 height: 24px;
                 border-radius: 50%;
@@ -184,11 +231,11 @@ class DefectMapController {
                 background: rgba(0, 0, 0, 0.5);
                 backdrop-filter: blur(2px);
                 transition: all 0.2s ease;
-            }
-            .equipment-marker:hover .dot {
+              }
+              .equipment-marker:hover .dot {
                 background: rgba(0, 0, 0, 0.8);
                 border-color: white;
-            }
+              }
               .equipment-marker.breaker .dot { background: #ff4444; }
               .equipment-marker.disconnector .dot { background: #ff8800; }
               .equipment-marker.transformer .dot { background: #44bb44; }
@@ -237,7 +284,6 @@ class DefectMapController {
                   height: 16px;
                   font-size: 8px;
               }
-
               .equipment-marker.normal {
                   width: 28px;
                   height: 28px;
@@ -247,7 +293,6 @@ class DefectMapController {
                   height: 24px;
                   font-size: 11px;
               }
-
               .equipment-marker.large {
                   width: 36px;
                   height: 36px;
@@ -257,7 +302,6 @@ class DefectMapController {
                   height: 32px;
                   font-size: 14px;
               }
-              /* ===== СТИЛИ ДЛЯ ДОПОЛНИТЕЛЬНЫХ МАРКЕРОВ ===== */
               .equipment-marker.marker-extra {
                   border: 2px dashed rgba(255, 255, 255, 0.5);
                   opacity: 0.85;
@@ -265,7 +309,6 @@ class DefectMapController {
               .equipment-marker.marker-extra .dot {
                   border: 2px dashed rgba(255, 255, 255, 0.8);
               }
-
               .equipment-marker:hover {
                   transform: translate(-50%, -50%) scale(1.2);
               }
@@ -467,19 +510,21 @@ class DefectMapController {
             if (!container) return;
             
             savedData.forEach(function(item) {
-                // ===== ГЛАВНОЕ ИСПРАВЛЕНИЕ =====
                 // Если markers пустой массив или отсутствует — создаём из left/top
                 var markers = item.markers;
                 if (!markers || markers.length === 0) {
                     markers = [{left: item.left, top: item.top, isMain: true}];
                 }
-                // ==================================
                 
                 markers.forEach(function(markerPos, index) {
                     var marker = document.createElement('div');
                     var sizeClass = item.size || 'normal';
                     marker.className = 'equipment-marker ' + item.type + ' ' + sizeClass;
                     if (index > 0) marker.className += ' marker-extra';
+                    // Добавляем класс hidden, если маркеры скрыты
+                    if (!${markersVisible}) {
+                        marker.className += ' hidden';
+                    }
                     marker.id = item.id + '-marker-' + index;
                     marker.style.left = markerPos.left + '%';
                     marker.style.top = markerPos.top + '%';
@@ -615,40 +660,34 @@ class DefectMapController {
     }
 
     private fun setupButtons() {
-        addEquipmentBtn.setOnAction { toggleEditMode(true) }
-        editModeBtn.setOnAction { toggleEditMode(!isEditMode) }
-        saveEquipmentBtn.setOnAction { saveEquipment() }
         viewEquipmentBtn.setOnAction { viewEquipmentList() }
-        cancelEditBtn.setOnAction { toggleEditMode(false) }
-        statsBtn.setOnAction { showStatistics() }
-        forceImportBtn.setOnAction { onForceImport() }
+        defectsBtn.setOnAction { showDefectsList() }
+        // Режим редактирования теперь через меню
     }
 
     private fun toggleEditMode(enable: Boolean) {
         isEditMode = enable
-        cancelEditBtn.isVisible = enable
-        cancelEditBtn.isManaged = enable
 
         // Если выходим из режима редактирования — сбрасываем ID
         if (!enable) {
             currentEditingEquipmentId = null
-            editModeBtn.text = "✏️ Режим редактирования"
+            editModeMenuItem.text = "✏️ Режим редактирования"
         }
 
         webView.engine.executeScript("""
-    var container = document.getElementById('container');
-    if (${enable}) {
-        container.classList.add('edit-mode');
-        window.editMode = true;
-        document.body.style.cursor = 'crosshair';
-    } else {
-        container.classList.remove('edit-mode');
-        window.editMode = false;
-        document.body.style.cursor = 'default';
-    }
+        var container = document.getElementById('container');
+        if (${enable}) {
+            container.classList.add('edit-mode');
+            window.editMode = true;
+            document.body.style.cursor = 'crosshair';
+        } else {
+            container.classList.remove('edit-mode');
+            window.editMode = false;
+            document.body.style.cursor = 'default';
+        }
     """.trimIndent())
 
-        editModeBtn.text = if (enable) "🔒 Выйти из редактирования" else "✏️ Режим редактирования"
+        editModeMenuItem.text = if (enable) "🔒 Выйти из редактирования" else "✏️ Режим редактирования"
     }
 
     // ======================== ЗУМ И ПАН ========================
@@ -728,6 +767,164 @@ class DefectMapController {
             """.trimIndent())
             }
         }
+    }
+
+    // ======================== СПИСОК ДЕФЕКТОВ ========================
+
+    private fun showDefectsList() {
+        val allDefects = mutableListOf<DefectViewItem>()
+        val allEquipment = loadEquipment()
+
+        allEquipment.forEach { eq ->
+            val defects = database.getDefectsByEquipment(eq.id)
+            defects.forEach { defect ->
+                allDefects.add(
+                    DefectViewItem(
+                        equipmentName = eq.name,
+                        cell = eq.cell,
+                        defectName = defect.name,
+                        description = defect.description,
+                        status = defect.status,
+                        equipmentId = eq.id,
+                        defectId = defect.id
+                    )
+                )
+            }
+        }
+
+        if (allDefects.isEmpty()) {
+            showInfo("📋 Нет зарегистрированных дефектов")
+            return
+        }
+
+        val mainLayout = VBox(15.0)
+        mainLayout.style = "-fx-background-color: white; -fx-padding: 20px;"
+        mainLayout.prefWidth = 900.0
+        mainLayout.prefHeight = 650.0
+
+        val headerLabel = Label("📊 ВСЕ ДЕФЕКТЫ (${allDefects.size})")
+        headerLabel.style = "-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #333;"
+
+        // Фильтры
+        val filterPanel = HBox(10.0)
+        filterPanel.alignment = Pos.CENTER_LEFT
+        filterPanel.style = "-fx-padding: 10px 0; -fx-background-color: #f8f9fa; -fx-border-color: #e9ecef; -fx-border-width: 0 0 1px 0;"
+
+        val statusFilter = ComboBox<String>()
+        statusFilter.promptText = "Все статусы"
+        statusFilter.items.addAll("Все статусы", "🟡 Обнаружен", "✅ Устранён")
+        statusFilter.selectionModel.selectFirst()
+        statusFilter.style = "-fx-pref-width: 150px; -fx-padding: 4px; -fx-font-size: 13px;"
+
+        val searchField = TextField()
+        searchField.promptText = "🔍 Поиск по оборудованию..."
+        searchField.style = "-fx-pref-width: 250px; -fx-padding: 6px 10px; -fx-border-color: #ced4da; -fx-border-radius: 4px;"
+
+        val tableView = TableView<DefectViewItem>()
+        tableView.style = "-fx-font-size: 13px; -fx-border-color: #dee2e6;"
+
+        // Колонки
+        val colEquipment = TableColumn<DefectViewItem, String>("Оборудование")
+        colEquipment.cellValueFactory = PropertyValueFactory("equipmentName")
+        colEquipment.prefWidth = 200.0
+
+        val colCell = TableColumn<DefectViewItem, String>("Ячейка")
+        colCell.cellValueFactory = PropertyValueFactory("cell")
+        colCell.prefWidth = 80.0
+        colCell.style = "-fx-alignment: CENTER;"
+
+        val colDefect = TableColumn<DefectViewItem, String>("Дефект")
+        colDefect.cellValueFactory = PropertyValueFactory("defectName")
+        colDefect.prefWidth = 200.0
+
+        val colDescription = TableColumn<DefectViewItem, String>("Описание")
+        colDescription.cellValueFactory = PropertyValueFactory("description")
+        colDescription.prefWidth = 200.0
+
+        val colStatus = TableColumn<DefectViewItem, String>("Статус")
+        colStatus.cellValueFactory = PropertyValueFactory("status")
+        colStatus.prefWidth = 100.0
+        colStatus.style = "-fx-alignment: CENTER;"
+        colStatus.setCellFactory {
+            object : TableCell<DefectViewItem, String>() {
+                override fun updateItem(item: String?, empty: Boolean) {
+                    super.updateItem(item, empty)
+                    if (empty || item == null) {
+                        text = null
+                    } else {
+                        text = if (item == "fixed") "✅ Устранён" else "🟡 Обнаружен"
+                    }
+                }
+            }
+        }
+
+        tableView.columns.addAll(colEquipment, colCell, colDefect, colDescription, colStatus)
+
+        val observableData = FXCollections.observableArrayList(allDefects)
+        tableView.items = observableData
+
+        fun applyFilter() {
+            val status = statusFilter.value
+            val search = searchField.text.lowercase()
+
+            val filtered = allDefects.filter { item ->
+                val statusMatch = status == "Все статусы" ||
+                        (status == "🟡 Обнаружен" && item.status != "fixed") ||
+                        (status == "✅ Устранён" && item.status == "fixed")
+                val searchMatch = search.isEmpty() || item.equipmentName.lowercase().contains(search)
+                statusMatch && searchMatch
+            }
+            tableView.items = FXCollections.observableArrayList(filtered)
+        }
+
+        searchField.textProperty().addListener { _, _, _ -> applyFilter() }
+        statusFilter.valueProperty().addListener { _, _, _ -> applyFilter() }
+
+        val resetBtn = Button("Сбросить")
+        resetBtn.style = "-fx-background-color: #6c757d; -fx-text-fill: white; -fx-font-size: 13px; -fx-padding: 4px 16px; -fx-background-radius: 4px;"
+        resetBtn.setOnAction {
+            statusFilter.selectionModel.selectFirst()
+            searchField.clear()
+            applyFilter()
+        }
+
+        filterPanel.children.addAll(
+            Label("Статус:"), statusFilter,
+            searchField,
+            resetBtn
+        )
+
+        // Двойной клик — открыть карточку оборудования
+        tableView.setOnMouseClicked { event ->
+            if (event.clickCount == 2) {
+                val selected = tableView.selectionModel.selectedItem
+                if (selected != null) {
+                    val equipment = loadEquipment().find { it.id == selected.equipmentId }
+                    if (equipment != null) {
+                        val cardController = EquipmentCardController(equipment, database) {
+                            showDefectsList()
+                        }
+                        cardController.show()
+                        (tableView.scene.window as Stage).close()
+                    }
+                }
+            }
+        }
+
+        val closeBtn = Button("✕ Закрыть")
+        closeBtn.style = "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-padding: 8px 20px; -fx-background-radius: 6px;"
+        closeBtn.setOnAction { (closeBtn.scene.window as Stage).close() }
+
+        val bottomPanel = HBox(closeBtn)
+        bottomPanel.alignment = Pos.CENTER_RIGHT
+
+        mainLayout.children.addAll(headerLabel, filterPanel, tableView, bottomPanel)
+
+        val popupStage = Stage()
+        popupStage.title = "📊 Список дефектов"
+        popupStage.scene = Scene(mainLayout, 920.0, 650.0)
+        popupStage.isResizable = true
+        popupStage.showAndWait()
     }
 
     // ======================== КЛИКИ ========================
@@ -1064,6 +1261,10 @@ class DefectMapController {
                 var marker = document.createElement('div');
                 var sizeClass = '${equipment.size}' || 'normal';
                 marker.className = 'equipment-marker ${equipment.type} ' + sizeClass + ' marker-extra';
+                // Добавляем класс hidden, если маркеры скрыты
+                if (!${markersVisible}) {
+                    marker.className += ' hidden';
+                }
                 marker.id = '${equipmentId}-marker-' + Date.now();
                 marker.style.left = '$left%';
                 marker.style.top = '$top%';
@@ -2020,7 +2221,7 @@ class DefectMapController {
         currentEditingEquipmentId = equipmentId
         isEditMode = true
         toggleEditMode(true)
-        editModeBtn.text = "🔒 Закончить добавление маркера"
+        editModeMenuItem.text = "🔒 Закончить добавление маркера"
 
         showToast("Кликните на схеме, чтобы добавить маркер для '${equipment.name}'")
     }
@@ -2071,3 +2272,13 @@ class DefectMapController {
         }
     }
 }
+
+data class DefectViewItem(
+    val equipmentName: String,
+    val cell: String,
+    val defectName: String,
+    val description: String,
+    val status: String,
+    val equipmentId: String,
+    val defectId: String
+)
