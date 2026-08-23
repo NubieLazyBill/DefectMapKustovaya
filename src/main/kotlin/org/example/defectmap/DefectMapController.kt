@@ -41,6 +41,7 @@ import javafx.scene.control.TableColumn
 import javafx.scene.control.TableCell
 import javafx.scene.control.cell.PropertyValueFactory
 import javafx.collections.FXCollections
+import javafx.scene.control.TableRow
 
 
 class DefectMapController {
@@ -83,6 +84,9 @@ class DefectMapController {
 
     private var isEditMode = false
     private var equipmentCounter = 0
+
+    private var equipmentListStage: Stage? = null
+    private var defectsListStage: Stage? = null
 
     private val database: Database by lazy { Database() }
 
@@ -772,6 +776,9 @@ class DefectMapController {
     // ======================== СПИСОК ДЕФЕКТОВ ========================
 
     private fun showDefectsList() {
+        // Если окно уже открыто — закрываем его
+        defectsListStage?.close()
+
         val allDefects = mutableListOf<DefectViewItem>()
         val allEquipment = loadEquipment()
 
@@ -924,6 +931,13 @@ class DefectMapController {
         popupStage.title = "📊 Список дефектов"
         popupStage.scene = Scene(mainLayout, 920.0, 650.0)
         popupStage.isResizable = true
+
+        // Сохраняем ссылку на окно
+        defectsListStage = popupStage
+        popupStage.setOnHidden {
+            defectsListStage = null
+        }
+
         popupStage.showAndWait()
     }
 
@@ -1701,6 +1715,9 @@ class DefectMapController {
     // ======================== СПИСОК И ЭКСПОРТ ========================
 
     private fun viewEquipmentList() {
+        // Если окно уже открыто — закрываем его
+        equipmentListStage?.close()
+
         val result = webView.engine.executeScript("""
         JSON.stringify(window.equipment || [])
     """.trimIndent()) as? String
@@ -1748,51 +1765,51 @@ class DefectMapController {
                 searchField.style = "-fx-pref-width: 250px; -fx-font-size: 13px; -fx-padding: 6px 10px; -fx-background-radius: 4px; -fx-border-color: #ced4da; -fx-border-radius: 4px;"
 
                 // Таблица
-                val tableView = javafx.scene.control.TableView<EquipmentTableItem>()
+                val tableView = TableView<EquipmentTableItem>()
                 tableView.style = "-fx-font-size: 13px; -fx-border-color: #dee2e6;"
 
                 // ======================== КОЛОНКИ ТАБЛИЦЫ ========================
 
-                val colNumber = javafx.scene.control.TableColumn<EquipmentTableItem, Int>("№")
-                colNumber.cellValueFactory = javafx.scene.control.cell.PropertyValueFactory("number")
+                val colNumber = TableColumn<EquipmentTableItem, Int>("№")
+                colNumber.cellValueFactory = PropertyValueFactory("number")
                 colNumber.prefWidth = 45.0
                 colNumber.style = "-fx-alignment: CENTER;"
 
-                val colName = javafx.scene.control.TableColumn<EquipmentTableItem, String>("Наименование")
-                colName.cellValueFactory = javafx.scene.control.cell.PropertyValueFactory("name")
+                val colName = TableColumn<EquipmentTableItem, String>("Наименование")
+                colName.cellValueFactory = PropertyValueFactory("name")
                 colName.prefWidth = 200.0
 
-                val colType = javafx.scene.control.TableColumn<EquipmentTableItem, String>("Тип")
-                colType.cellValueFactory = javafx.scene.control.cell.PropertyValueFactory("type")
+                val colType = TableColumn<EquipmentTableItem, String>("Тип")
+                colType.cellValueFactory = PropertyValueFactory("type")
                 colType.prefWidth = 180.0
 
-                val colCell = javafx.scene.control.TableColumn<EquipmentTableItem, String>("Ячейка")
-                colCell.cellValueFactory = javafx.scene.control.cell.PropertyValueFactory("cell")
+                val colCell = TableColumn<EquipmentTableItem, String>("Ячейка")
+                colCell.cellValueFactory = PropertyValueFactory("cell")
                 colCell.prefWidth = 70.0
                 colCell.style = "-fx-alignment: CENTER;"
 
-                val colX = javafx.scene.control.TableColumn<EquipmentTableItem, Double>("X%")
-                colX.cellValueFactory = javafx.scene.control.cell.PropertyValueFactory("left")
+                val colX = TableColumn<EquipmentTableItem, Double>("X%")
+                colX.cellValueFactory = PropertyValueFactory("left")
                 colX.prefWidth = 60.0
                 colX.style = "-fx-alignment: CENTER;"
 
-                val colY = javafx.scene.control.TableColumn<EquipmentTableItem, Double>("Y%")
-                colY.cellValueFactory = javafx.scene.control.cell.PropertyValueFactory("top")
+                val colY = TableColumn<EquipmentTableItem, Double>("Y%")
+                colY.cellValueFactory = PropertyValueFactory("top")
                 colY.prefWidth = 60.0
                 colY.style = "-fx-alignment: CENTER;"
 
-                val colId = javafx.scene.control.TableColumn<EquipmentTableItem, String>("ID")
-                colId.cellValueFactory = javafx.scene.control.cell.PropertyValueFactory("id")
+                val colId = TableColumn<EquipmentTableItem, String>("ID")
+                colId.cellValueFactory = PropertyValueFactory("id")
                 colId.prefWidth = 120.0
 
                 // ======================== КОЛОНКА: ДЕЙСТВИЯ (С КНОПКАМИ) ========================
 
-                val colActions = javafx.scene.control.TableColumn<EquipmentTableItem, Void>("Действие")
+                val colActions = TableColumn<EquipmentTableItem, Void>("Действие")
                 colActions.prefWidth = 120.0
                 colActions.style = "-fx-alignment: CENTER;"
 
                 colActions.setCellFactory {
-                    object : javafx.scene.control.TableCell<EquipmentTableItem, Void>() {
+                    object : TableCell<EquipmentTableItem, Void>() {
                         private val editBtn = Button("✏️")
                         private val deleteBtn = Button("🗑️")
                         private val hbox = HBox(5.0, editBtn, deleteBtn)
@@ -1835,7 +1852,7 @@ class DefectMapController {
                                                 top = eq.top
                                             )
                                         }
-                                        tableView.items = javafx.collections.FXCollections.observableArrayList(updatedItems)
+                                        tableView.items = FXCollections.observableArrayList(updatedItems)
                                         countLabel.text = "Показано: ${updatedData.size} из ${updatedData.size}"
                                     }
                                 }
@@ -1897,7 +1914,7 @@ class DefectMapController {
 
                 fun updateTable(data: List<EquipmentData>) {
                     val items = toTableItems(data)
-                    tableView.items = javafx.collections.FXCollections.observableArrayList(items)
+                    tableView.items = FXCollections.observableArrayList(items)
                     countLabel.text = "Показано: ${data.size} из ${allEquipment.size}"
                 }
 
@@ -1978,12 +1995,14 @@ class DefectMapController {
                 // ======================== СТИЛЬ СТРОК ========================
 
                 tableView.setRowFactory {
-                    val row = javafx.scene.control.TableRow<EquipmentTableItem>()
-                    row.styleProperty().bind(
-                        javafx.beans.binding.Bindings.`when`(row.hoverProperty())
-                            .then("-fx-background-color: #e8f4f8;")
-                            .otherwise("-fx-background-color: transparent;")
-                    )
+                    val row = TableRow<EquipmentTableItem>()
+                    row.hoverProperty().addListener { _, _, hovered ->
+                        if (hovered) {
+                            row.style = "-fx-background-color: #e8f4f8;"
+                        } else {
+                            row.style = "-fx-background-color: transparent;"
+                        }
+                    }
                     row
                 }
 
@@ -2011,10 +2030,9 @@ class DefectMapController {
                         val result = confirm.showAndWait()
                         if (result.isPresent && result.get() == ButtonType.OK) {
                             deleteEquipment(selected.id)
-                            // Обновляем таблицу через перезагрузку данных из БД
                             val updatedData = loadEquipment()
                             val updatedItems = toTableItems(updatedData)
-                            tableView.items = javafx.collections.FXCollections.observableArrayList(updatedItems)
+                            tableView.items = FXCollections.observableArrayList(updatedItems)
                             countLabel.text = "Показано: ${updatedData.size} из ${allEquipment.size}"
                         }
                     }
@@ -2065,6 +2083,13 @@ class DefectMapController {
                 popupStage.isResizable = true
                 popupStage.minWidth = 700.0
                 popupStage.minHeight = 500.0
+
+                // Сохраняем ссылку на окно
+                equipmentListStage = popupStage
+                popupStage.setOnHidden {
+                    equipmentListStage = null
+                }
+
                 popupStage.showAndWait()
 
             } catch (e: Exception) {

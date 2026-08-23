@@ -29,6 +29,9 @@ class EquipmentCardController(
     private var isMarkerMode = false
     private var selectedDefectId: String? = null
 
+    private var equipmentListStage: Stage? = null
+    private var defectsListStage: Stage? = null
+
     // Параметры для Canvas
     private var drawWidth = 0.0
     private var drawHeight = 0.0
