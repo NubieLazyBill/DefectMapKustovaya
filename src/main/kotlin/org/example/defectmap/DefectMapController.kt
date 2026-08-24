@@ -117,6 +117,16 @@ class DefectMapController {
                 }
             }
         }
+        // ===== ДОБАВЛЯЕМ ОБРАБОТЧИК ЗАКРЫТИЯ =====
+        Platform.runLater {
+            val stage = webView.scene?.window as? Stage
+            stage?.setOnCloseRequest {
+                println("🔄 Приложение закрывается, синхронизируем данные...")
+                saveEquipment()
+                database.exportAllToJson()
+                println("✅ Данные синхронизированы перед закрытием")
+            }
+        }
     }
 
     // ======================== РЕЖИМ РЕДАКТИРОВАНИЯ (из меню) ========================
@@ -344,9 +354,8 @@ class DefectMapController {
 
     private fun checkAndImportData() {
         val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
-        val exportFile = File("equipment_export.json") // В папке проекта (для git)
+        val exportFile = File("equipment_export.json")
 
-        // Если БД не существует - импортируем из JSON
         if (!dbFile.exists() || database.getCount() == 0) {
             if (exportFile.exists()) {
                 println("📥 БД пуста, импортируем из JSON")
@@ -355,14 +364,12 @@ class DefectMapController {
             return
         }
 
-        // Если JSON не существует - экспортируем БД
         if (!exportFile.exists()) {
             println("📤 JSON не найден, экспортируем БД")
             database.exportAllToJson()
             return
         }
 
-        // Загружаем данные
         val dbData = database.loadAllEquipment()
         val jsonData = database.importFromJson()
 
@@ -372,35 +379,69 @@ class DefectMapController {
             return
         }
 
-        // Сначала проверяем, есть ли реальные различия в данных
+        // Проверяем изменения с выводом конкретных расхождений
         val added = jsonData.filter { new -> dbData.none { it.id == new.id } }
         val removed = dbData.filter { old -> jsonData.none { it.id == old.id } }
         val changed = jsonData.filter { new ->
             dbData.find { it.id == new.id }?.let { old ->
-                old.name != new.name ||
-                        old.type != new.type ||
-                        old.letter != new.letter ||
-                        old.cell != new.cell ||
-                        old.size != new.size ||
-                        Math.abs(old.left - new.left) > 0.01 ||
-                        Math.abs(old.top - new.top) > 0.01
+                val nameChanged = old.name != new.name
+                val typeChanged = old.type != new.type
+                val letterChanged = old.letter != new.letter
+                val cellChanged = old.cell != new.cell
+                val sizeChanged = old.size != new.size
+                val leftChanged = Math.abs(old.left - new.left) > 0.01
+                val topChanged = Math.abs(old.top - new.top) > 0.01
+
+                if (nameChanged || typeChanged || letterChanged || cellChanged || sizeChanged || leftChanged || topChanged) {
+                    println("🔄 Изменение в ${old.name}:")
+                    if (leftChanged) println("   left: ${old.left} -> ${new.left}")
+                    if (topChanged) println("   top: ${old.top} -> ${new.top}")
+                    if (nameChanged) println("   name: ${old.name} -> ${new.name}")
+                    if (typeChanged) println("   type: ${old.type} -> ${new.type}")
+                    if (letterChanged) println("   letter: ${old.letter} -> ${new.letter}")
+                    if (cellChanged) println("   cell: ${old.cell} -> ${new.cell}")
+                    if (sizeChanged) println("   size: ${old.size} -> ${new.size}")
+                }
+                nameChanged || typeChanged || letterChanged || cellChanged || sizeChanged || leftChanged || topChanged
             } ?: false
         }
 
-        // Если различий нет - данные синхронизированы
         if (added.isEmpty() && removed.isEmpty() && changed.isEmpty()) {
             println("✅ Данные синхронизированы (содержание совпадает)")
             return
         }
 
-        // Если есть различия - показываем диалог
         println("📊 Найдены расхождения между БД и JSON")
+        println("  Добавлено: ${added.size}")
+        println("  Удалено: ${removed.size}")
+        println("  Изменено: ${changed.size}")
+
+        if (changed.isNotEmpty()) {
+            println("  Первые 5 изменений:")
+            changed.take(5).forEach { eq ->
+                val old = dbData.find { it.id == eq.id }
+                if (old != null) {
+                    println("    - ${eq.name}: left ${old.left}->${eq.left}, top ${old.top}->${eq.top}")
+                }
+            }
+        }
+
+        // Показываем диалог
         Platform.runLater {
             val message = buildString {
                 append("📊 Обнаружены расхождения между БД и JSON:\n\n")
                 if (added.isNotEmpty()) append("➕ В JSON добавлено: ${added.size}\n")
                 if (removed.isNotEmpty()) append("➖ В JSON удалено: ${removed.size}\n")
                 if (changed.isNotEmpty()) append("🔄 Изменено: ${changed.size}\n")
+                if (changed.isNotEmpty() && changed.size <= 10) {
+                    append("\nИзменения:\n")
+                    changed.forEach { eq ->
+                        val old = dbData.find { it.id == eq.id }
+                        if (old != null) {
+                            append("  - ${eq.name}: (${old.left},${old.top}) → (${eq.left},${eq.top})\n")
+                        }
+                    }
+                }
                 append("\nЧто делаем?")
             }
 
@@ -409,8 +450,8 @@ class DefectMapController {
             alert.headerText = "📊 Обнаружены расхождения"
             alert.contentText = message
 
-            val importBtn = ButtonType("📥 Импорт из JSON (из git)")
-            val exportBtn = ButtonType("📤 Экспорт в JSON (сохранить в git)")
+            val importBtn = ButtonType("📥 Импорт из JSON")
+            val exportBtn = ButtonType("📤 Экспорт в JSON")
             val cancelBtn = ButtonType("Отмена", ButtonBar.ButtonData.CANCEL_CLOSE)
 
             alert.buttonTypes.setAll(importBtn, exportBtn, cancelBtn)
@@ -1366,6 +1407,7 @@ class DefectMapController {
 
         database.saveEquipment(updatedList)
         syncWindowEquipment()
+        syncFileTimestamps()
         println("✅ Сохранено в БД для ${equipment.name}")
 
         // Обновляем маркер на схеме
@@ -2736,7 +2778,6 @@ class DefectMapController {
                 val type = object : TypeToken<List<EquipmentData>>() {}.type
                 val equipment: List<EquipmentData> = gson.fromJson(result, type)
 
-                // Проверяем, что данные не пустые
                 if (equipment.isEmpty()) {
                     println("⚠️ Нет данных для сохранения")
                     return
@@ -2747,15 +2788,23 @@ class DefectMapController {
                     println("  ${it.name}: markers=${it.markers.size}")
                 }
 
+                // Сохраняем в БД
                 database.saveEquipment(equipment)
 
-                // Синхронизируем
-                val freshData = loadEquipment()
-                val freshJson = gson.toJson(freshData)
-                webView.engine.executeScript("""
-                window.equipment = $freshJson;
-                console.log('🔄 window.equipment обновлён из БД, записей: ' + window.equipment.length);
-            """.trimIndent())
+                // Принудительно синхронизируем window.equipment с БД
+                syncWindowEquipment()
+
+                // Принудительно экспортируем в JSON и обновляем время файла
+                database.exportAllToJson()
+
+                // Обновляем время модификации JSON, чтобы оно совпадало с БД
+                val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
+                val exportFile = File("equipment_export.json")
+                if (dbFile.exists() && exportFile.exists()) {
+                    // Устанавливаем время JSON равным времени БД
+                    exportFile.setLastModified(dbFile.lastModified())
+                    println("🔄 Время JSON синхронизировано с БД")
+                }
 
                 showExportNotification(equipment.size)
             } catch (e: Exception) {
@@ -2774,6 +2823,19 @@ class DefectMapController {
         window.equipment = $freshJson;
         console.log('🔄 Синхронизация: загружено ' + window.equipment.length + ' записей из БД');
     """.trimIndent())
+    }
+
+    private fun syncFileTimestamps() {
+        try {
+            val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
+            val exportFile = File("equipment_export.json")
+            if (dbFile.exists() && exportFile.exists()) {
+                exportFile.setLastModified(dbFile.lastModified())
+                println("🔄 Время JSON синхронизировано с БД")
+            }
+        } catch (e: Exception) {
+            println("⚠️ Не удалось синхронизировать время файлов: ${e.message}")
+        }
     }
 
     // ======================== ВСПОМОГАТЕЛЬНЫЕ ========================
