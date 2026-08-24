@@ -42,6 +42,9 @@ import javafx.scene.control.TableCell
 import javafx.scene.control.cell.PropertyValueFactory
 import javafx.collections.FXCollections
 import javafx.scene.control.TableRow
+import javafx.scene.control.ButtonBar
+import javafx.animation.FadeTransition
+import javafx.util.Duration
 
 
 class DefectMapController {
@@ -67,6 +70,8 @@ class DefectMapController {
     private lateinit var defectsBtn: Button
 
     private var markersVisible = false
+
+    private var isDraggingMarker = false
 
     private var currentEditingEquipmentId: String? = null  // Для добавления маркеров
 
@@ -106,7 +111,6 @@ class DefectMapController {
             if (newState == Worker.State.SUCCEEDED) {
                 Platform.runLater {
                     setupZoom()
-                    setupPan()
                     setupClickHandler()
                     setupButtons()
                     initEquipment()
@@ -197,13 +201,16 @@ class DefectMapController {
               }
               .equipment-marker {
                 position: absolute;
-                cursor: pointer;
+                cursor: grab;
                 z-index: 10;
                 pointer-events: auto;
                 transform: translate(-50%, -50%);
                 width: 28px;
                 height: 28px;
                 transition: all 0.2s ease;
+              }
+              .equipment-marker:active {
+                cursor: grabbing;
               }
               /* Скрытый маркер — убираем всё визуальное, но оставляем область для наведения */
               .equipment-marker.hidden .dot {
@@ -337,96 +344,94 @@ class DefectMapController {
 
     private fun checkAndImportData() {
         val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
-        val exportFile = File(System.getProperty("user.home"), ".defectmap/equipment_export.json")
+        val exportFile = File("equipment_export.json") // В папке проекта (для git)
 
-        // 1. Если БД НЕ существует или ПУСТАЯ — пробуем импортировать
+        // Если БД не существует - импортируем из JSON
         if (!dbFile.exists() || database.getCount() == 0) {
             if (exportFile.exists()) {
-                Platform.runLater {
-                    val alert = Alert(AlertType.CONFIRMATION)
-                    alert.title = "Импорт данных"
-                    alert.headerText = "📥 Найдены экспортированные данные"
-                    alert.contentText = """
-                    Обнаружен файл с экспортированными данными:
-                    ${exportFile.absolutePath}
-                    
-                    База данных пуста. Хотите импортировать данные?
-                """.trimIndent()
-
-                    val result = alert.showAndWait()
-                    if (result.isPresent && result.get() == ButtonType.OK) {
-                        importData()
-                    }
-                }
+                println("📥 БД пуста, импортируем из JSON")
+                importData()
             }
             return
         }
 
-        // 2. Если БД есть — проверяем, есть ли реальные изменения
-        if (exportFile.exists()) {
-            val dbData = database.loadAllEquipment()
-            val jsonData = database.importFromJson()
+        // Если JSON не существует - экспортируем БД
+        if (!exportFile.exists()) {
+            println("📤 JSON не найден, экспортируем БД")
+            database.exportAllToJson()
+            return
+        }
 
-            if (jsonData == null || jsonData.isEmpty()) {
-                return // JSON пустой — ничего не делаем
+        // Загружаем данные
+        val dbData = database.loadAllEquipment()
+        val jsonData = database.importFromJson()
+
+        if (jsonData == null || jsonData.isEmpty()) {
+            println("📤 JSON пуст, экспортируем БД")
+            database.exportAllToJson()
+            return
+        }
+
+        // Сначала проверяем, есть ли реальные различия в данных
+        val added = jsonData.filter { new -> dbData.none { it.id == new.id } }
+        val removed = dbData.filter { old -> jsonData.none { it.id == old.id } }
+        val changed = jsonData.filter { new ->
+            dbData.find { it.id == new.id }?.let { old ->
+                old.name != new.name ||
+                        old.type != new.type ||
+                        old.letter != new.letter ||
+                        old.cell != new.cell ||
+                        old.size != new.size ||
+                        Math.abs(old.left - new.left) > 0.01 ||
+                        Math.abs(old.top - new.top) > 0.01
+            } ?: false
+        }
+
+        // Если различий нет - данные синхронизированы
+        if (added.isEmpty() && removed.isEmpty() && changed.isEmpty()) {
+            println("✅ Данные синхронизированы (содержание совпадает)")
+            return
+        }
+
+        // Если есть различия - показываем диалог
+        println("📊 Найдены расхождения между БД и JSON")
+        Platform.runLater {
+            val message = buildString {
+                append("📊 Обнаружены расхождения между БД и JSON:\n\n")
+                if (added.isNotEmpty()) append("➕ В JSON добавлено: ${added.size}\n")
+                if (removed.isNotEmpty()) append("➖ В JSON удалено: ${removed.size}\n")
+                if (changed.isNotEmpty()) append("🔄 Изменено: ${changed.size}\n")
+                append("\nЧто делаем?")
             }
 
-            // Находим различия
-            val added = jsonData.filter { new -> dbData.none { it.id == new.id } }
-            val removed = dbData.filter { old -> jsonData.none { it.id == old.id } }
-            val changed = jsonData.filter { new ->
-                dbData.find { it.id == new.id }?.let { old ->
-                    // Сравниваем все поля (кроме created_at)
-                    old.name != new.name ||
-                            old.type != new.type ||
-                            old.letter != new.letter ||
-                            old.cell != new.cell ||
-                            old.size != new.size ||
-                            old.left != new.left ||
-                            old.top != new.top
-                } ?: false
-            }
+            val alert = Alert(AlertType.CONFIRMATION)
+            alert.title = "Синхронизация данных"
+            alert.headerText = "📊 Обнаружены расхождения"
+            alert.contentText = message
 
-            // Если изменений нет — ничего не делаем
-            if (added.isEmpty() && removed.isEmpty() && changed.isEmpty()) {
-                println("✅ Данные синхронизированы, изменений нет")
-                return
-            }
+            val importBtn = ButtonType("📥 Импорт из JSON (из git)")
+            val exportBtn = ButtonType("📤 Экспорт в JSON (сохранить в git)")
+            val cancelBtn = ButtonType("Отмена", ButtonBar.ButtonData.CANCEL_CLOSE)
 
-            // 3. Есть изменения — показываем диалог
-            Platform.runLater {
-                val message = buildString {
-                    append("📊 Обнаружены изменения в экспортированных данных:\n\n")
-                    if (added.isNotEmpty()) {
-                        append("✅ Добавлено: ${added.size} записей\n")
-                        added.take(5).forEach { append("   - ${it.name}\n") }
-                        if (added.size > 5) append("   ... и еще ${added.size - 5}\n")
-                    }
-                    if (removed.isNotEmpty()) {
-                        append("❌ Удалено: ${removed.size} записей\n")
-                        removed.take(5).forEach { append("   - ${it.name}\n") }
-                        if (removed.size > 5) append("   ... и еще ${removed.size - 5}\n")
-                    }
-                    if (changed.isNotEmpty()) {
-                        append("🔄 Изменено: ${changed.size} записей\n")
-                        changed.take(5).forEach { append("   - ${it.name}\n") }
-                        if (changed.size > 5) append("   ... и еще ${changed.size - 5}\n")
-                    }
-                    append("\nИмпортировать изменения?")
-                }
+            alert.buttonTypes.setAll(importBtn, exportBtn, cancelBtn)
 
-                val alert = Alert(AlertType.CONFIRMATION)
-                alert.title = "Обновление данных"
-                alert.headerText = "📥 Найдены новые данные для импорта"
-                alert.contentText = message
-
-                val result = alert.showAndWait()
-                if (result.isPresent && result.get() == ButtonType.OK) {
+            val result = alert.showAndWait()
+            when (result.orElse(null)) {
+                importBtn -> {
+                    println("📥 Импортируем из JSON")
                     importData()
+                    showToast("✅ Импортировано из JSON")
                 }
+                exportBtn -> {
+                    println("📤 Экспортируем БД в JSON")
+                    database.exportAllToJson()
+                    showToast("✅ БД экспортирована в JSON")
+                }
+                else -> println("❌ Синхронизация отменена")
             }
         }
     }
+
 
     private fun importData() {
         val imported = database.importFromJson()
@@ -443,12 +448,10 @@ class DefectMapController {
                 - small: ${imported.count { it.size == "small" }}
                 - normal: ${imported.count { it.size == "normal" }}
                 - large: ${imported.count { it.size == "large" }}
-                
-                Нажмите "OK" для обновления отображения.
             """.trimIndent()
                 alert.showAndWait()
 
-                // Перезагружаем метки
+                // Обновляем отображение
                 initEquipment()
             }
         } else {
@@ -713,64 +716,9 @@ class DefectMapController {
     }
 
     private fun setupPan() {
-        webView.setOnMousePressed { event: MouseEvent ->
-            if (event.isPrimaryButtonDown) {
-                if (!isEditMode) {
-                    isDragging = true
-                    lastMouseX = event.x
-                    lastMouseY = event.y
-                    webView.engine.executeScript("""
-                    document.getElementById('container').classList.add('dragging');
-                """.trimIndent())
-                }
-            }
-        }
-
-        webView.setOnMouseDragged { event: MouseEvent ->
-            if (isDragging) {
-                val deltaX = event.x - lastMouseX
-                val deltaY = event.y - lastMouseY
-                currentTranslateX += deltaX
-                currentTranslateY += deltaY
-                lastMouseX = event.x
-                lastMouseY = event.y
-                webView.engine.executeScript("""
-                var wrapper = document.getElementById('image-wrapper');
-                wrapper.style.transform = 'translate(${currentTranslateX}px, ${currentTranslateY}px) scale($zoomLevel)';
-                wrapper.style.transformOrigin = 'center center';
-            """.trimIndent())
-            }
-        }
-
-        webView.setOnMouseReleased { event: MouseEvent ->
-            if (isDragging) {
-                isDragging = false
-                webView.engine.executeScript("""
-                document.getElementById('container').classList.remove('dragging');
-            """.trimIndent())
-            }
-        }
-
-        webView.setOnMouseExited {
-            if (isDragging) {
-                isDragging = false
-                webView.engine.executeScript("""
-                document.getElementById('container').classList.remove('dragging');
-            """.trimIndent())
-            }
-        }
-
-        webView.setOnMouseClicked { event: MouseEvent ->
-            if (event.clickCount == 2) {
-                zoomLevel = 1.0
-                currentTranslateX = 0.0
-                currentTranslateY = 0.0
-                webView.engine.executeScript("""
-                document.getElementById('image-wrapper').style.transform = 'translate(0px, 0px) scale(1)';
-                document.getElementById('image-wrapper').style.transformOrigin = 'center center';
-            """.trimIndent())
-            }
-        }
+        // Все обработчики теперь в setupClickHandler()
+        // Эта функция остаётся пустой или удаляем её вызов из initialize()
+        // Но оставляем для обратной совместимости
     }
 
     // ======================== СПИСОК ДЕФЕКТОВ ========================
@@ -944,23 +892,333 @@ class DefectMapController {
     // ======================== КЛИКИ ========================
 
     private fun setupClickHandler() {
-        // Левый клик - просмотр (только не в режиме редактирования)
-        webView.setOnMouseClicked { event: MouseEvent ->
-            if (event.clickCount == 1 && !isEditMode) {
-                if (event.button == javafx.scene.input.MouseButton.PRIMARY) {
-                    handleEquipmentClick(event.x, event.y)
+        // ============================================================
+        //  ОБРАБОТЧИК НАЖАТИЯ МЫШИ
+        // ============================================================
+        webView.setOnMousePressed { event: MouseEvent ->
+            if (!isEditMode) {
+                if (event.isPrimaryButtonDown) {
+                    isDragging = true
+                    lastMouseX = event.x
+                    lastMouseY = event.y
+                    webView.engine.executeScript("""
+                    document.getElementById('container').classList.add('dragging');
+                """.trimIndent())
                 }
-            }
-            // В режиме редактирования - добавляем оборудование по левому клику
-            if (event.clickCount == 1 && isEditMode) {
-                if (event.button == javafx.scene.input.MouseButton.PRIMARY) {
-                    println("🖱️ Клик в режиме редактирования!")
-                    addEquipmentAtPosition(event.x, event.y)
+            } else {
+                if (event.isPrimaryButtonDown) {
+                    val markerId = webView.engine.executeScript("""
+                    (function() {
+                        var container = document.getElementById('container');
+                        var rect = container.getBoundingClientRect();
+                        var markers = document.querySelectorAll('.equipment-marker');
+                        var clickX = ${event.x};
+                        var clickY = ${event.y};
+                        for (var i = 0; i < markers.length; i++) {
+                            var marker = markers[i];
+                            var markerRect = marker.getBoundingClientRect();
+                            if (clickX >= markerRect.left - rect.left - 15 &&
+                                clickX <= markerRect.right - rect.left + 15 &&
+                                clickY >= markerRect.top - rect.top - 15 &&
+                                clickY <= markerRect.bottom - rect.top + 15) {
+                                return marker.id;
+                            }
+                        }
+                        return null;
+                    })();
+                """.trimIndent()) as? String
+
+                    if (markerId != null) {
+                        println("🖱️ НАЖАТИЕ НА МАРКЕР: $markerId")
+                        isDraggingMarker = true
+                        webView.engine.executeScript("""
+                        window.draggingMarkerId = '$markerId';
+                        window.dragStartX = ${event.x};
+                        window.dragStartY = ${event.y};
+                        var marker = document.getElementById('$markerId');
+                        if (marker) {
+                            // Сохраняем ТЕКУЩУЮ позицию в процентах
+                            var leftStr = marker.style.left;
+                            var topStr = marker.style.top;
+                            // Убираем '%' и парсим как число
+                            window.dragOrigLeftPercent = parseFloat(leftStr);
+                            window.dragOrigTopPercent = parseFloat(topStr);
+                            
+                            // Если не получилось - пробуем через getComputedStyle
+                            if (isNaN(window.dragOrigLeftPercent) || isNaN(window.dragOrigTopPercent)) {
+                                var computed = window.getComputedStyle(marker);
+                                window.dragOrigLeftPercent = parseFloat(computed.left);
+                                window.dragOrigTopPercent = parseFloat(computed.top);
+                            }
+                            
+                            // Если всё ещё NaN - пробуем через bounding rect
+                            if (isNaN(window.dragOrigLeftPercent) || isNaN(window.dragOrigTopPercent)) {
+                                var wrapper = document.getElementById('image-wrapper');
+                                var wrapperRect = wrapper.getBoundingClientRect();
+                                var markerRect = marker.getBoundingClientRect();
+                                var leftPx = markerRect.left - wrapperRect.left + markerRect.width / 2;
+                                var topPx = markerRect.top - wrapperRect.top + markerRect.height / 2;
+                                window.dragOrigLeftPercent = (leftPx / wrapperRect.width) * 100;
+                                window.dragOrigTopPercent = (topPx / wrapperRect.height) * 100;
+                            }
+                            
+                            marker.style.cursor = 'grabbing';
+                            console.log('✅ Маркер захвачен: ' + marker.id);
+                            console.log('✅ orig left: ' + window.dragOrigLeftPercent + '%, top: ' + window.dragOrigTopPercent + '%');
+                        }
+                    """.trimIndent())
+                        event.consume()
+                    }
                 }
             }
         }
 
-        // Контекстное меню по правому клику (только в режиме редактирования)
+        // ============================================================
+//  ОБРАБОТЧИК ДВИЖЕНИЯ МЫШИ (ИСПРАВЛЕННЫЙ)
+// ============================================================
+        webView.setOnMouseDragged { event: MouseEvent ->
+            if (!isEditMode) {
+                // === ОБЫЧНЫЙ РЕЖИМ: панорамирование ===
+                if (isDragging) {
+                    val deltaX = event.x - lastMouseX
+                    val deltaY = event.y - lastMouseY
+                    currentTranslateX += deltaX
+                    currentTranslateY += deltaY
+                    lastMouseX = event.x
+                    lastMouseY = event.y
+                    webView.engine.executeScript("""
+                var wrapper = document.getElementById('image-wrapper');
+                wrapper.style.transform = 'translate(${currentTranslateX}px, ${currentTranslateY}px) scale($zoomLevel)';
+                wrapper.style.transformOrigin = 'center center';
+            """.trimIndent())
+                    event.consume()
+                }
+            } else {
+                // === РЕЖИМ РЕДАКТИРОВАНИЯ: перетаскивание маркера ===
+                if (isDraggingMarker) {
+                    webView.engine.executeScript("""
+                (function() {
+                    var marker = document.getElementById(window.draggingMarkerId);
+                    if (!marker) return;
+                    
+                    // Получаем размеры wrapper
+                    var wrapper = document.getElementById('image-wrapper');
+                    var wrapperRect = wrapper.getBoundingClientRect();
+                    
+                    // Вычисляем дельту в пикселях
+                    var deltaX = ${event.x} - window.dragStartX;
+                    var deltaY = ${event.y} - window.dragStartY;
+                    
+                    // Переводим дельту в проценты
+                    var deltaPercentX = (deltaX / wrapperRect.width) * 100;
+                    var deltaPercentY = (deltaY / wrapperRect.height) * 100;
+                    
+                    // Новая позиция в процентах (БЕЗ ОГРАНИЧЕНИЙ!)
+                    var newLeftPercent = window.dragOrigLeftPercent + deltaPercentX;
+                    var newTopPercent = window.dragOrigTopPercent + deltaPercentY;
+                    
+                    // Применяем (без ограничений, чтобы можно было двигать за пределы)
+                    marker.style.left = newLeftPercent + '%';
+                    marker.style.top = newTopPercent + '%';
+                    
+                    // Обновляем сохранённую позицию
+                    window.dragOrigLeftPercent = newLeftPercent;
+                    window.dragOrigTopPercent = newTopPercent;
+                    window.dragStartX = ${event.x};
+                    window.dragStartY = ${event.y};
+                })();
+            """.trimIndent())
+                    event.consume()
+                }
+            }
+        }
+
+        // ============================================================
+//  ОБРАБОТЧИК ОТПУСКАНИЯ МЫШИ (ИСПРАВЛЕННЫЙ)
+// ============================================================
+        webView.setOnMouseReleased { event: MouseEvent ->
+            if (!isEditMode) {
+                if (isDragging) {
+                    isDragging = false
+                    webView.engine.executeScript("""
+                document.getElementById('container').classList.remove('dragging');
+            """.trimIndent())
+                }
+            } else {
+                println("🔄 ОТПУСКАНИЕ: isDraggingMarker=$isDraggingMarker")
+                if (isDraggingMarker) {
+                    // Получаем ID маркера
+                    val markerId = webView.engine.executeScript("""
+                (function() {
+                    return window.draggingMarkerId || null;
+                })();
+            """.trimIndent()) as? String
+
+                    println("🔍 markerId: $markerId")
+
+                    if (markerId == null) {
+                        println("❌ window.draggingMarkerId = null")
+                        isDraggingMarker = false
+                        return@setOnMouseReleased
+                    }
+
+                    // Получаем данные маркера через JSON (БЕЗ ОГРАНИЧЕНИЙ!)
+                    val jsonResult = webView.engine.executeScript("""
+                (function() {
+                    var marker = document.getElementById('$markerId');
+                    if (!marker) {
+                        return JSON.stringify({ error: 'marker_not_found' });
+                    }
+                    
+                    var equipmentId = marker.dataset.equipmentId;
+                    if (!equipmentId) {
+                        var parts = '$markerId'.split('-marker-');
+                        if (parts.length > 0) {
+                            equipmentId = parts[0];
+                        }
+                    }
+                    
+                    // Получаем позицию маркера
+                    var rect = marker.getBoundingClientRect();
+                    var wrapper = document.getElementById('image-wrapper');
+                    var wrapperRect = wrapper.getBoundingClientRect();
+                    
+                    // Центр маркера относительно wrapper в пикселях
+                    var leftPx = rect.left - wrapperRect.left + rect.width / 2;
+                    var topPx = rect.top - wrapperRect.top + rect.height / 2;
+                    
+                    // Вычисляем проценты (БЕЗ ОГРАНИЧЕНИЙ!)
+                    var leftPercent = (leftPx / wrapperRect.width) * 100;
+                    var topPercent = (topPx / wrapperRect.height) * 100;
+                    
+                    // НЕ ОГРАНИЧИВАЕМ значения!
+                    // leftPercent = Math.max(0, Math.min(100, leftPercent));
+                    // topPercent = Math.max(0, Math.min(100, topPercent));
+                    
+                    var data = {
+                        equipmentId: equipmentId,
+                        leftPercent: leftPercent,
+                        topPercent: topPercent,
+                        leftPx: leftPx,
+                        topPx: topPx,
+                        wrapperWidth: wrapperRect.width,
+                        wrapperHeight: wrapperRect.height
+                    };
+                    
+                    return JSON.stringify(data);
+                })();
+            """.trimIndent()) as? String
+
+                    println("📊 JSON результат: $jsonResult")
+
+                    if (jsonResult != null && jsonResult != "null" && !jsonResult.contains("error")) {
+                        try {
+                            val gson = Gson()
+                            val type = object : TypeToken<Map<String, Any>>() {}.type
+                            val data: Map<String, Any> = gson.fromJson(jsonResult, type)
+
+                            val equipmentId = data["equipmentId"] as? String ?: ""
+                            val leftPercent = (data["leftPercent"] as? Double) ?: 0.0
+                            val topPercent = (data["topPercent"] as? Double) ?: 0.0
+                            val leftPx = (data["leftPx"] as? Double) ?: 0.0
+                            val topPx = (data["topPx"] as? Double) ?: 0.0
+                            val wrapperWidth = (data["wrapperWidth"] as? Double) ?: 1.0
+                            val wrapperHeight = (data["wrapperHeight"] as? Double) ?: 1.0
+
+                            println("📊 ПАРСИНГ УСПЕШЕН:")
+                            println("  equipmentId: $equipmentId")
+                            println("  leftPx: $leftPx, topPx: $topPx")
+                            println("  wrapperWidth: $wrapperWidth, wrapperHeight: $wrapperHeight")
+                            println("  leftPercent: $leftPercent%, topPercent: $topPercent%")
+
+                            if (equipmentId.isNotEmpty()) {
+                                saveMarkerPosition(equipmentId, markerId, leftPercent, topPercent)
+                                showToast("✅ Маркер перемещён")
+                            } else {
+                                println("❌ Неверные данные: equipmentId=$equipmentId")
+                                showToast("⚠️ Ошибка при перетаскивании маркера")
+                            }
+                        } catch (e: Exception) {
+                            println("❌ Ошибка парсинга JSON: ${e.message}")
+                            e.printStackTrace()
+                            showToast("⚠️ Ошибка при перетаскивании маркера")
+                        }
+                    } else {
+                        println("❌ Невалидный JSON: $jsonResult")
+                        showToast("⚠️ Ошибка при перетаскивании маркера")
+                    }
+
+                    // Очищаем состояние
+                    webView.engine.executeScript("""
+                window.draggingMarkerId = null;
+                window.dragStartX = null;
+                window.dragStartY = null;
+                window.dragOrigLeftPercent = null;
+                window.dragOrigTopPercent = null;
+                var marker = document.getElementById('$markerId');
+                if (marker) marker.style.cursor = 'grab';
+            """.trimIndent())
+                    isDraggingMarker = false
+                    event.consume()
+                }
+            }
+        }
+
+        // ============================================================
+        //  КЛИК (добавление оборудования в режиме редактирования)
+        // ============================================================
+        webView.setOnMouseClicked { event: MouseEvent ->
+            if (!isEditMode) {
+                // === ОБЫЧНЫЙ РЕЖИМ: показываем карточку оборудования ===
+                if (event.clickCount == 1 && event.button == javafx.scene.input.MouseButton.PRIMARY) {
+                    handleEquipmentClick(event.x, event.y)
+                }
+                // Двойной клик для сброса зума
+                if (event.clickCount == 2) {
+                    zoomLevel = 1.0
+                    currentTranslateX = 0.0
+                    currentTranslateY = 0.0
+                    webView.engine.executeScript("""
+                    document.getElementById('image-wrapper').style.transform = 'translate(0px, 0px) scale(1)';
+                    document.getElementById('image-wrapper').style.transformOrigin = 'center center';
+                """.trimIndent())
+                }
+            } else {
+                // === РЕЖИМ РЕДАКТИРОВАНИЯ: добавляем оборудование ===
+                if (event.clickCount == 1 && event.button == javafx.scene.input.MouseButton.PRIMARY) {
+                    // Проверяем, не кликнули ли по маркеру
+                    val isMarker = webView.engine.executeScript("""
+                    (function() {
+                        var container = document.getElementById('container');
+                        var rect = container.getBoundingClientRect();
+                        var markers = document.querySelectorAll('.equipment-marker');
+                        var clickX = ${event.x};
+                        var clickY = ${event.y};
+                        for (var i = 0; i < markers.length; i++) {
+                            var marker = markers[i];
+                            var markerRect = marker.getBoundingClientRect();
+                            if (clickX >= markerRect.left - rect.left - 15 &&
+                                clickX <= markerRect.right - rect.left + 15 &&
+                                clickY >= markerRect.top - rect.top - 15 &&
+                                clickY <= markerRect.bottom - rect.top + 15) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    })();
+                """.trimIndent()) as? Boolean ?: false
+
+                    if (!isMarker) {
+                        println("🖱️ Клик в режиме редактирования!")
+                        addEquipmentAtPosition(event.x, event.y)
+                    }
+                }
+            }
+        }
+
+        // ============================================================
+        //  КОНТЕКСТНОЕ МЕНЮ (только в режиме редактирования)
+        // ============================================================
         webView.setOnContextMenuRequested { event ->
             if (isEditMode) {
                 val result = webView.engine.executeScript("""
@@ -989,6 +1247,147 @@ class DefectMapController {
                 }
             }
         }
+
+        // ============================================================
+        //  ВЫХОД МЫШИ ЗА ПРЕДЕЛЫ
+        // ============================================================
+        webView.setOnMouseExited {
+            if (!isEditMode && isDragging) {
+                isDragging = false
+                webView.engine.executeScript("""
+                document.getElementById('container').classList.remove('dragging');
+            """.trimIndent())
+            }
+        }
+    }
+
+    // В saveMarkerPosition уберите ограничение или сделайте его более широким:
+    private fun saveMarkerPosition(equipmentId: String, markerId: String, newLeftPercent: Double, newTopPercent: Double) {
+        println("=".repeat(60))
+        println("💾 saveMarkerPosition вызван")
+        println("  equipmentId: $equipmentId")
+        println("  markerId: $markerId")
+        println("  newLeftPercent: $newLeftPercent%, newTopPercent: $newTopPercent%")
+        println("=".repeat(60))
+
+        if (equipmentId.isEmpty()) {
+            println("❌ equipmentId пустой, пропускаем сохранение")
+            return
+        }
+
+        // НЕ ОГРАНИЧИВАЕМ значения - сохраняем как есть
+        val allEquipment = loadEquipment()
+
+        // Ищем оборудование по ID
+        var equipment = allEquipment.find { it.id == equipmentId }
+
+        // Если не нашли - пробуем найти по ID маркера
+        if (equipment == null) {
+            val baseId = if (equipmentId.startsWith("marker-")) {
+                equipmentId
+            } else {
+                markerId.replace(Regex("-marker-\\d+$"), "")
+            }
+            equipment = allEquipment.find { it.id == baseId }
+            println("🔍 Ищем по baseId: $baseId, найдено: ${equipment?.name ?: "нет"}")
+        }
+
+        // Если всё ещё не нашли - ищем по части ID
+        if (equipment == null) {
+            val found = allEquipment.find { equipmentId.startsWith(it.id) }
+            if (found != null) {
+                equipment = found
+                println("🔍 Найдено по части ID: ${found.id} (${found.name})")
+            }
+        }
+
+        if (equipment == null) {
+            println("❌ Оборудование не найдено: $equipmentId")
+            showToast("⚠️ Оборудование не найдено")
+            return
+        }
+
+        println("📊 Найдено оборудование: ${equipment.name} (${equipment.id})")
+        println("📊 Текущие маркеры: ${equipment.markers.size}")
+
+        // Находим индекс маркера
+        var markerIndex = -1
+
+        // Сначала ищем по ID маркера
+        val idParts = markerId.split("-marker-")
+        if (idParts.size > 1) {
+            val indexFromId = idParts[1].toIntOrNull()
+            if (indexFromId != null && indexFromId < equipment.markers.size) {
+                markerIndex = indexFromId
+                println("📊 Найден маркер по ID: индекс $markerIndex")
+            }
+        }
+
+        // Если не нашли - ищем по координатам (с допуском)
+        if (markerIndex == -1) {
+            for (i in equipment.markers.indices) {
+                val m = equipment.markers[i]
+                if (Math.abs(m.left - newLeftPercent) < 0.5 && Math.abs(m.top - newTopPercent) < 0.5) {
+                    markerIndex = i
+                    println("📊 Найден маркер по координатам: индекс $markerIndex")
+                    break
+                }
+            }
+        }
+
+        // Если не нашли - берём первый маркер
+        if (markerIndex == -1 && equipment.markers.isNotEmpty()) {
+            markerIndex = 0
+            println("📊 Используем первый маркер (основной): индекс $markerIndex")
+        }
+
+        if (markerIndex == -1) {
+            println("❌ Маркер не найден, добавляем новый")
+            val newMarkers = equipment.markers + MarkerPosition(newLeftPercent, newTopPercent, isMain = false)
+            val updatedEquipment = equipment.copy(markers = newMarkers)
+            val updatedList = allEquipment.map { if (it.id == equipment.id) updatedEquipment else it }
+            database.saveEquipment(updatedList)
+            syncWindowEquipment()
+            println("✅ Добавлен новый маркер для ${equipment.name}")
+            showToast("✅ Маркер добавлен для ${equipment.name}")
+            return
+        }
+
+        println("📊 Обновляем маркер с индексом: $markerIndex")
+
+        // Обновляем маркер (БЕЗ ОГРАНИЧЕНИЙ)
+        val updatedMarkers = equipment.markers.toMutableList()
+        updatedMarkers[markerIndex] = updatedMarkers[markerIndex].copy(left = newLeftPercent, top = newTopPercent)
+
+        val updatedEquipment = equipment.copy(markers = updatedMarkers)
+        val updatedList = allEquipment.map {
+            if (it.id == equipment.id) updatedEquipment else it
+        }
+
+        database.saveEquipment(updatedList)
+        syncWindowEquipment()
+        println("✅ Сохранено в БД для ${equipment.name}")
+
+        // Обновляем маркер на схеме
+        webView.engine.executeScript("""
+        (function() {
+            var marker = document.getElementById('$markerId');
+            if (marker) {
+                marker.style.left = '${newLeftPercent}%';
+                marker.style.top = '${newTopPercent}%';
+                marker.dataset.equipmentId = '${equipment.id}';
+                console.log('✅ Маркер обновлён на схеме');
+            }
+            
+            var allEquipment = ${gson.toJson(updatedList)};
+            window.equipment = allEquipment;
+        })();
+    """.trimIndent())
+
+        // ИСПРАВЛЕННАЯ СТРОКА - используем Kotlin format
+        val formattedLeft = "%.1f".format(newLeftPercent)
+        val formattedTop = "%.1f".format(newTopPercent)
+        showToast("✅ Маркер ${equipment.name} перемещён на ${formattedLeft}%, ${formattedTop}%")
     }
 
     private fun showContextMenu(x: Double, y: Double, equipmentId: String) {
@@ -1005,8 +1404,18 @@ class DefectMapController {
             var marker = document.getElementById('$equipmentId');
             if (!marker) return null;
             
+            // Получаем equipmentId из data-атрибута
+            var realEquipmentId = marker.dataset.equipmentId || null;
+            // Если data-equipment-id нет — пробуем найти по ID маркера (отрезаем -marker-N)
+            if (!realEquipmentId) {
+                var parts = '$equipmentId'.split('-marker-');
+                if (parts.length > 0 && parts[0].startsWith('equipment-')) {
+                    realEquipmentId = parts[0];
+                }
+            }
+            
             return {
-                equipmentId: marker.dataset.equipmentId || null,
+                equipmentId: realEquipmentId,
                 isExtra: marker.classList.contains('marker-extra'),
                 markerId: marker.id
             };
@@ -1018,12 +1427,15 @@ class DefectMapController {
             isExtraMarker = markerInfo["isExtra"] as? Boolean ?: false
             markerId = markerInfo["markerId"] as? String ?: equipmentId
 
+            println("🔍 realId: $realId, isExtraMarker: $isExtraMarker")
+
             if (realId != null) {
                 equipment = loadEquipment().find { it.id == realId }
+                println("🔍 Найдено оборудование по data-equipment-id: ${equipment?.name}")
             }
         }
 
-        // 2. Если не нашли — ищем по позиции
+        // 2. Если не нашли — ищем по позиции (старый способ)
         if (equipment == null) {
             val foundId = webView.engine.executeScript("""
             (function() {
@@ -1054,14 +1466,18 @@ class DefectMapController {
 
             if (foundId != null) {
                 equipment = loadEquipment().find { it.id == foundId }
-                // Проверяем, является ли маркер дополнительным
-                val isExtra = webView.engine.executeScript("""
-                (function() {
-                    var marker = document.getElementById('$equipmentId');
-                    return marker ? marker.classList.contains('marker-extra') : false;
-                })();
-            """.trimIndent()) as? Boolean ?: false
-                isExtraMarker = isExtra
+                println("🔍 Найдено оборудование по позиции: ${equipment?.name}")
+            }
+        }
+
+        // 3. Если всё ещё не нашли — пробуем отрезать суффикс от ID маркера
+        if (equipment == null) {
+            val baseId = equipmentId.replace(Regex("-marker-\\d+$"), "")
+            if (baseId != equipmentId) {
+                equipment = loadEquipment().find { it.id == baseId }
+                if (equipment != null) {
+                    println("🔍 Найдено оборудование по ID маркера (без суффикса): ${equipment.name}")
+                }
             }
         }
 
@@ -1124,13 +1540,13 @@ class DefectMapController {
         }
 
         val result = webView.engine.executeScript("""
-    (function() {
-        var wrapper = document.getElementById('image-wrapper');
-        var rect = wrapper.getBoundingClientRect();
-        var cx = (($x - rect.left) / rect.width * 100).toFixed(1);
-        var cy = (($y - rect.top) / rect.height * 100).toFixed(1);
-        return cx + ',' + cy;
-    })();
+        (function() {
+            var wrapper = document.getElementById('image-wrapper');
+            var rect = wrapper.getBoundingClientRect();
+            var cx = (($x - rect.left) / rect.width * 100).toFixed(1);
+            var cy = (($y - rect.top) / rect.height * 100).toFixed(1);
+            return cx + ',' + cy;
+        })();
     """.trimIndent()) as? String
 
         if (result != null && result.contains(",")) {
@@ -1151,7 +1567,7 @@ class DefectMapController {
                     val name = nameResult.get().trim()
                     if (name.isNotEmpty()) {
 
-                        // 2. Выбор ячейки (ОБЩАЯ ФУНКЦИЯ!)
+                        // 2. Выбор ячейки
                         val cell = selectCell()
                         if (cell == null) {
                             println("❌ Выбор ячейки отменён")
@@ -1189,43 +1605,54 @@ class DefectMapController {
                                 val escapedName = name.replace("'", "\\'")
                                 val escapedCell = cell.replace("'", "\\'")
 
+                                // Создаём маркер в DOM с процентами
                                 webView.engine.executeScript("""
-                            (function() {
-                                var container = document.getElementById('equipment-container');
-                                if (!container) {
-                                    var wrapper = document.getElementById('image-wrapper');
-                                    if (wrapper) {
-                                        container = document.createElement('div');
-                                        container.id = 'equipment-container';
-                                        wrapper.appendChild(container);
+                                (function() {
+                                    var container = document.getElementById('equipment-container');
+                                    if (!container) {
+                                        var wrapper = document.getElementById('image-wrapper');
+                                        if (wrapper) {
+                                            container = document.createElement('div');
+                                            container.id = 'equipment-container';
+                                            wrapper.appendChild(container);
+                                        }
                                     }
-                                }
-                                if (!container) return;
-                                
-                                var marker = document.createElement('div');
-                                marker.className = 'equipment-marker $type $size';
-                                marker.id = '$id';
-                                marker.style.left = '${left}%';
-                                marker.style.top = '${top}%';
-                                
-                                marker.innerHTML = '<div class="dot">$typeLabel</div><span class="tooltip-text">$escapedName</span>';
-                                container.appendChild(marker);
-                                
-                                if (!window.equipment) window.equipment = [];
-                                window.equipment.push({
-                                    id: '$id',
-                                    left: parseFloat('${left}'),
-                                    top: parseFloat('${top}'),
-                                    type: '$type',
-                                    name: '$escapedName',
-                                    letter: '$typeLabel',
-                                    cell: '$escapedCell',
-                                    size: '$size'
-                                });
-                                console.log('✅ Добавлено оборудование: $escapedName (ячейка: $escapedCell, размер: $size)');
-                            })();
+                                    if (!container) return;
+                                    
+                                    var marker = document.createElement('div');
+                                    marker.className = 'equipment-marker $type $size';
+                                    marker.id = '$id';
+                                    marker.style.left = '${left}%';
+                                    marker.style.top = '${top}%';
+                                    marker.dataset.equipmentId = '$id';
+                                    marker.dataset.markerIndex = '0';
+                                    
+                                    marker.innerHTML = '<div class="dot">$typeLabel</div><span class="tooltip-text">$escapedName</span>';
+                                    container.appendChild(marker);
+                                    
+                                    if (!window.equipment) window.equipment = [];
+                                    window.equipment.push({
+                                        id: '$id',
+                                        left: parseFloat('${left}'),
+                                        top: parseFloat('${top}'),
+                                        type: '$type',
+                                        name: '$escapedName',
+                                        letter: '$typeLabel',
+                                        cell: '$escapedCell',
+                                        size: '$size',
+                                        markers: [{left: parseFloat('${left}'), top: parseFloat('${top}'), isMain: true}]
+                                    });
+                                    console.log('✅ Добавлено оборудование: $escapedName (ячейка: $escapedCell, размер: $size)');
+                                })();
                             """.trimIndent())
+
+                                // Сохраняем в БД
                                 saveEquipment()
+                                syncWindowEquipment()
+
+                                Platform.runLater {
+                                    showToast("✅ Добавлено: $name")
+                                }
                             }
                         }
                     }
@@ -1241,13 +1668,13 @@ class DefectMapController {
         val equipmentId = currentEditingEquipmentId ?: return
 
         val result = webView.engine.executeScript("""
-    (function() {
-        var wrapper = document.getElementById('image-wrapper');
-        var rect = wrapper.getBoundingClientRect();
-        var cx = (($x - rect.left) / rect.width * 100).toFixed(1);
-        var cy = (($y - rect.top) / rect.height * 100).toFixed(1);
-        return cx + ',' + cy;
-    })();
+        (function() {
+            var wrapper = document.getElementById('image-wrapper');
+            var rect = wrapper.getBoundingClientRect();
+            var cx = (($x - rect.left) / rect.width * 100).toFixed(1);
+            var cy = (($y - rect.top) / rect.height * 100).toFixed(1);
+            return cx + ',' + cy;
+        })();
     """.trimIndent()) as? String
 
         if (result != null && result.contains(",")) {
@@ -1266,84 +1693,124 @@ class DefectMapController {
                     if (it.id == equipmentId) updatedEquipment else it
                 }
                 database.saveEquipment(updatedList)
+                syncWindowEquipment()
 
                 webView.engine.executeScript("""
-            (function() {
-                var container = document.getElementById('equipment-container');
-                if (!container) return;
-                
-                var marker = document.createElement('div');
-                var sizeClass = '${equipment.size}' || 'normal';
-                marker.className = 'equipment-marker ${equipment.type} ' + sizeClass + ' marker-extra';
-                // Добавляем класс hidden, если маркеры скрыты
-                if (!${markersVisible}) {
-                    marker.className += ' hidden';
-                }
-                marker.id = '${equipmentId}-marker-' + Date.now();
-                marker.style.left = '$left%';
-                marker.style.top = '$top%';
-                marker.style.border = '2px dashed rgba(255,255,255,0.5)';
-                marker.dataset.equipmentId = '${equipment.id}';
-                marker.dataset.markerIndex = '${newMarkers.size - 1}';
-                
-                marker.innerHTML = '<div class="dot">${equipment.letter}</div><span class="tooltip-text">${equipment.name}</span>';
-                container.appendChild(marker);
-                console.log('✅ Добавлен доп. маркер для: ${equipment.name}');
-            })();
+                (function() {
+                    var container = document.getElementById('equipment-container');
+                    if (!container) return;
+                    
+                    var marker = document.createElement('div');
+                    var sizeClass = '${equipment.size}' || 'normal';
+                    marker.className = 'equipment-marker ${equipment.type} ' + sizeClass + ' marker-extra';
+                    if (!${markersVisible}) {
+                        marker.className += ' hidden';
+                    }
+                    marker.id = '${equipmentId}-marker-' + Date.now();
+                    marker.style.left = '${left}%';
+                    marker.style.top = '${top}%';
+                    marker.style.border = '2px dashed rgba(255,255,255,0.5)';
+                    marker.dataset.equipmentId = '${equipment.id}';
+                    marker.dataset.markerIndex = '${newMarkers.size - 1}';
+                    
+                    marker.innerHTML = '<div class="dot">${equipment.letter}</div><span class="tooltip-text">${equipment.name}</span>';
+                    container.appendChild(marker);
+                    console.log('✅ Добавлен доп. маркер для: ${equipment.name}');
+                })();
             """.trimIndent())
 
                 println("✅ Добавлен маркер для: ${equipment.name}")
                 showToast("✅ Маркер добавлен. Кликните ещё раз для следующего.")
-
-                val updatedList2 = loadEquipment()
-                val equipmentJson = gson.toJson(updatedList2)
-                webView.engine.executeScript("""
-                window.equipment = $equipmentJson;
-                console.log('✅ window.equipment обновлён, маркеров: ' + window.equipment.length);
-            """.trimIndent())
             } else {
                 showError("Оборудование не найдено. ID: $equipmentId")
             }
         } else {
             showError("Не удалось определить позицию на схеме")
         }
+
+        val updatedList2 = loadEquipment()
+        val equipmentJson = gson.toJson(updatedList2)
+        webView.engine.executeScript("""
+        window.equipment = $equipmentJson;
+        console.log('✅ window.equipment обновлён, маркеров: ' + window.equipment.length);
+    """.trimIndent())
     }
 
     // ======================== ВСПЛЫВАЮЩАЯ ПОДСКАЗКА (TOAST) ========================
 
     private fun showToast(message: String, duration: javafx.util.Duration = javafx.util.Duration.seconds(2.5)) {
         Platform.runLater {
-            val toast = Label(message)
-            toast.style = """
-            -fx-background-color: rgba(0, 0, 0, 0.8);
-            -fx-text-fill: white;
-            -fx-font-size: 14px;
-            -fx-padding: 12px 24px;
-            -fx-background-radius: 8px;
-            -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 10, 0, 0, 0);
-        """.trimIndent()
-            toast.isWrapText = true
-            toast.maxWidth = 500.0
-            toast.alignment = Pos.CENTER
+            try {
+                // Создаём контейнер для тоста
+                val toastContainer = StackPane()
+                toastContainer.isMouseTransparent = true
+                toastContainer.style = "-fx-background-color: transparent;"
 
-            val scene = webView.scene
-            if (scene != null) {
-                val stackPane = StackPane()
-                stackPane.children.add(toast)
-                stackPane.isMouseTransparent = true
+                val toast = Label(message)
+                toast.style = """
+                -fx-background-color: rgba(0, 0, 0, 0.85);
+                -fx-text-fill: white;
+                -fx-font-size: 14px;
+                -fx-font-weight: bold;
+                -fx-padding: 12px 24px;
+                -fx-background-radius: 8px;
+                -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 15, 0, 0, 4);
+                -fx-border-color: rgba(255,255,255,0.15);
+                -fx-border-radius: 8px;
+                -fx-border-width: 1px;
+                -fx-max-width: 600px;
+                -fx-wrap-text: true;
+                -fx-text-alignment: center;
+            """.trimIndent()
+                toast.isWrapText = true
+                toast.maxWidth = 600.0
+                toast.alignment = Pos.CENTER
 
-                val root = scene.root as? javafx.scene.layout.Pane
-                if (root != null) {
-                    root.children.add(stackPane)
-                    StackPane.setAlignment(stackPane, Pos.TOP_CENTER)
-                    StackPane.setMargin(stackPane, Insets(60.0, 0.0, 0.0, 0.0))
+                val scene = webView.scene
+                if (scene != null) {
+                    val root = scene.root as? javafx.scene.layout.Pane
+                    if (root != null) {
+                        // Удаляем старые тосты
+                        root.children.filter { it is StackPane && it.isMouseTransparent && it.children.size == 1 && it.children[0] is Label }
+                            .forEach { root.children.remove(it) }
 
-                    // PauseTransition — альтернатива Timeline
-                    val pause = PauseTransition(duration)
-                    pause.setOnFinished {
-                        root.children.remove(stackPane)
+                        toastContainer.children.add(toast)
+                        root.children.add(toastContainer)
+
+                        StackPane.setAlignment(toastContainer, Pos.TOP_CENTER)
+                        StackPane.setMargin(toastContainer, Insets(60.0, 20.0, 0.0, 20.0))
+
+                        // Анимация появления
+                        toast.opacityProperty().set(0.0)
+                        val fadeIn = javafx.animation.FadeTransition(javafx.util.Duration.millis(300.0), toast)
+                        fadeIn.fromValue = 0.0
+                        fadeIn.toValue = 1.0
+                        fadeIn.play()
+
+                        // Автоматическое скрытие
+                        val pause = PauseTransition(duration)
+                        pause.setOnFinished {
+                            val fadeOut = javafx.animation.FadeTransition(javafx.util.Duration.millis(300.0), toast)
+                            fadeOut.fromValue = 1.0
+                            fadeOut.toValue = 0.0
+                            fadeOut.setOnFinished {
+                                root.children.remove(toastContainer)
+                            }
+                            fadeOut.play()
+                        }
+                        pause.play()
                     }
-                    pause.play()
+                }
+            } catch (e: Exception) {
+                println("❌ Ошибка отображения Toast: ${e.message}")
+                // fallback - используем Alert
+                Platform.runLater {
+                    Alert(AlertType.INFORMATION).apply {
+                        title = "Уведомление"
+                        headerText = null
+                        contentText = message
+                        showAndWait()
+                    }
                 }
             }
         }
@@ -1399,6 +1866,7 @@ class DefectMapController {
             if (it.id == equipmentId) updatedEquipment else it
         }
         database.saveEquipment(updatedList)
+        syncWindowEquipment()
 
         // Удаляем маркер из DOM
         webView.engine.executeScript("""
@@ -1500,6 +1968,10 @@ class DefectMapController {
                             }
 
                             database.saveEquipment(updatedList)
+                            syncWindowEquipment()
+                            val updatedListForWindow = loadEquipment()
+                            val equipmentJson = gson.toJson(updatedListForWindow)
+                            webView.engine.executeScript("window.equipment = $equipmentJson;")
                             println("✅ База данных обновлена")
 
                             // Экранируем строки для JavaScript
@@ -1686,6 +2158,7 @@ class DefectMapController {
 
         // Удаляем из БД
         database.deleteById(equipmentId)
+        syncWindowEquipment()
 
         // Удаляем все маркеры из DOM (по data-equipment-id)
         webView.engine.executeScript("""
@@ -2262,15 +2735,45 @@ class DefectMapController {
             try {
                 val type = object : TypeToken<List<EquipmentData>>() {}.type
                 val equipment: List<EquipmentData> = gson.fromJson(result, type)
-                database.saveEquipment(equipment)
-                println("💾 Сохранено в БД: ${equipment.size} шт.")
 
-                // Показываем уведомление об автоэкспорте
+                // Проверяем, что данные не пустые
+                if (equipment.isEmpty()) {
+                    println("⚠️ Нет данных для сохранения")
+                    return
+                }
+
+                println("💾 Сохраняем ${equipment.size} записей")
+                equipment.forEach {
+                    println("  ${it.name}: markers=${it.markers.size}")
+                }
+
+                database.saveEquipment(equipment)
+
+                // Синхронизируем
+                val freshData = loadEquipment()
+                val freshJson = gson.toJson(freshData)
+                webView.engine.executeScript("""
+                window.equipment = $freshJson;
+                console.log('🔄 window.equipment обновлён из БД, записей: ' + window.equipment.length);
+            """.trimIndent())
+
                 showExportNotification(equipment.size)
             } catch (e: Exception) {
                 showError("Ошибка сохранения: ${e.message}")
+                e.printStackTrace()
             }
+        } else {
+            println("❌ Ошибка: результат скрипта null")
         }
+    }
+
+    private fun syncWindowEquipment() {
+        val freshData = loadEquipment()
+        val freshJson = gson.toJson(freshData)
+        webView.engine.executeScript("""
+        window.equipment = $freshJson;
+        console.log('🔄 Синхронизация: загружено ' + window.equipment.length + ' записей из БД');
+    """.trimIndent())
     }
 
     // ======================== ВСПОМОГАТЕЛЬНЫЕ ========================
