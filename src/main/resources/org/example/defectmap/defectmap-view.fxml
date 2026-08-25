@@ -37,13 +37,18 @@
         <Button fx:id="defectsBtn" text="📊 Дефекты"
                 style="-fx-background-color: #17a2b8; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"/>
 
-        <!-- 3. Для разработчиков (последняя) -->
+        <!-- 3. Обновить маркеры -->
+        <Button fx:id="forceRefreshBtn" text="🔄 Обновить маркеры"
+                style="-fx-background-color: #28a745; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;"
+                onAction="#onForceRefresh"/>
+
+        <!-- 4. Для разработчиков (последняя) -->
         <MenuButton fx:id="devMenuBtn" text="🔧 Для разработчиков"
                     style="-fx-background-color: #6c757d; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 6px;">
             <items>
                 <MenuItem fx:id="editModeMenuItem" text="✏️ Режим редактирования" onAction="#toggleEditModeAction"/>
                 <MenuItem fx:id="toggleMarkersMenuItem" text="👁️ Скрыть маркеры" onAction="#toggleMarkersVisibility"/>
-                <MenuItem fx:id="forceImportMenuItem" text="🔄 Принудительный импорт" onAction="#onForceImport"/>
+                <MenuItem fx:id="forceImportMenuItem" text="🔄 Принудительный импорт из JSON" onAction="#onForceImport"/>
             </items>
         </MenuButton>
 

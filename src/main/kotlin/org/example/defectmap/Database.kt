@@ -10,6 +10,31 @@ import java.io.File
 class Database {
     private var connection: Connection? = null
 
+    // В Database.kt
+    private var lastKnownDbModificationTime: Long = 0
+
+    fun checkExternalChanges(): Boolean {
+        val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
+        if (!dbFile.exists()) return false
+
+        val currentTime = dbFile.lastModified()
+        val hasChanged = currentTime != lastKnownDbModificationTime && lastKnownDbModificationTime != 0L
+
+        if (hasChanged) {
+            println("🔄 Обнаружено изменение БД извне: ${java.util.Date(currentTime)}")
+            // Обновляем внутреннее состояние
+            syncFromDb()
+        }
+
+        lastKnownDbModificationTime = currentTime
+        return hasChanged
+    }
+
+    fun syncFromDb() {
+        // Принудительно синхронизируем window.equipment из БД
+        // Вызывается из контроллера
+    }
+
     init {
         Class.forName("org.sqlite.JDBC")
         connect()
@@ -137,20 +162,18 @@ class Database {
 
     private fun createTable() {
         val sql = """
-            CREATE TABLE IF NOT EXISTS equipment (
-                id TEXT PRIMARY KEY,
-                left_pos REAL NOT NULL,
-                top_pos REAL NOT NULL,
-                type TEXT NOT NULL,
-                name TEXT NOT NULL,
-                letter TEXT NOT NULL,
-                cell TEXT DEFAULT '',
-                size TEXT DEFAULT 'normal',
-                markers TEXT DEFAULT '[]',
-                created_at INTEGER DEFAULT (strftime('%s', 'now')),
-                updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-            )
-        """.trimIndent()
+        CREATE TABLE IF NOT EXISTS equipment (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            name TEXT NOT NULL,
+            letter TEXT NOT NULL,
+            cell TEXT DEFAULT '',
+            size TEXT DEFAULT 'normal',
+            markers TEXT DEFAULT '[]',
+            created_at INTEGER DEFAULT (strftime('%s', 'now')),
+            updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+    """.trimIndent()
         executeUpdate(sql)
         println("✅ Таблица equipment создана")
     }
@@ -180,35 +203,26 @@ class Database {
         val gson = GsonBuilder().create()
         val sql = """
         INSERT OR REPLACE INTO equipment 
-        (id, left_pos, top_pos, type, name, letter, cell, size, markers, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+        (id, type, name, letter, cell, size, markers, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
     """.trimIndent()
 
         connection?.prepareStatement(sql)?.use { stmt ->
             equipment.forEach { item ->
-                val safeMarkers = item.markers ?: listOf()
-
-                val mainMarker = if (safeMarkers.isNotEmpty()) {
-                    safeMarkers.firstOrNull { it.isMain } ?: safeMarkers.first()
-                } else {
-                    MarkerPosition(item.left, item.top, true)
-                }
-
+                val safeMarkers = item.markers
                 val markersJson = if (safeMarkers.isNotEmpty()) {
                     gson.toJson(safeMarkers)
                 } else {
-                    gson.toJson(listOf(MarkerPosition(item.left, item.top, true)))
+                    gson.toJson(listOf(MarkerPosition(0.0, 0.0, true)))
                 }
 
                 stmt.setString(1, item.id)
-                stmt.setDouble(2, mainMarker.left)
-                stmt.setDouble(3, mainMarker.top)
-                stmt.setString(4, item.type)
-                stmt.setString(5, item.name)
-                stmt.setString(6, item.letter)
-                stmt.setString(7, item.cell)
-                stmt.setString(8, item.size)
-                stmt.setString(9, markersJson)
+                stmt.setString(2, item.type)
+                stmt.setString(3, item.name)
+                stmt.setString(4, item.letter)
+                stmt.setString(5, item.cell)
+                stmt.setString(6, item.size)
+                stmt.setString(7, markersJson)
                 stmt.addBatch()
             }
             stmt.executeBatch()
@@ -217,6 +231,14 @@ class Database {
         exportToJson(equipment)
         println("📤 Автоэкспорт в JSON выполнен")
     }
+
+    fun reconnect() {
+        close()
+        connect()
+        println("🔄 Соединение с БД переустановлено")
+    }
+
+
 
     // ======================== ЗАГРУЗКА ========================
 
@@ -339,13 +361,13 @@ class Database {
             val type = object : TypeToken<List<MarkerPosition>>() {}.type
             gson.fromJson(markersJson, type)
         } catch (e: Exception) {
-            listOf(MarkerPosition(rs.getDouble("left_pos"), rs.getDouble("top_pos"), true))
+            listOf(MarkerPosition(0.0, 0.0, true))
         }
 
         return EquipmentData(
             id = rs.getString("id"),
-            left = rs.getDouble("left_pos"),
-            top = rs.getDouble("top_pos"),
+            left = markers.firstOrNull()?.left ?: 0.0,  // Берём из маркеров
+            top = markers.firstOrNull()?.top ?: 0.0,   // Берём из маркеров
             type = rs.getString("type"),
             name = rs.getString("name"),
             letter = rs.getString("letter"),
@@ -418,10 +440,9 @@ class Database {
 
     fun importFromJson(): List<EquipmentData>? {
         try {
-            // ===== ЧИТАЕМ ИЗ ПАПКИ ПРОЕКТА =====
             val importFile = File("equipment_export.json")
             if (!importFile.exists()) {
-                println("⚠️ Файл экспорта не найден в папке проекта")
+                println("⚠️ Файл экспорта не найден")
                 return null
             }
 
@@ -430,23 +451,53 @@ class Database {
             val type = object : TypeToken<List<Map<String, Any>>>() {}.type
             val data: List<Map<String, Any>> = gson.fromJson(json, type)
 
-            val result = data.map { map ->
-                val markersJson = map["markers"] as? String ?: "[]"
-                val markersType = object : TypeToken<List<MarkerPosition>>() {}.type
-                val markers: List<MarkerPosition> = try {
-                    gson.fromJson(markersJson, markersType)
-                } catch (e: Exception) {
-                    listOf(MarkerPosition(
-                        (map["left"] as? Double) ?: 0.0,
-                        (map["top"] as? Double) ?: 0.0,
-                        true
-                    ))
+            val result = mutableListOf<EquipmentData>()
+
+            data.forEach { map ->
+                val id = map["id"] as? String ?: ""
+                if (id.isEmpty()) return@forEach
+
+                // Парсим маркеры
+                val markersData = map["markers"]
+                val markers: List<MarkerPosition> = when (markersData) {
+                    is List<*> -> {
+                        markersData.mapNotNull {
+                            when (it) {
+                                is Map<*, *> -> {
+                                    val left = (it["left"] as? Number)?.toDouble() ?: 0.0
+                                    val top = (it["top"] as? Number)?.toDouble() ?: 0.0
+                                    val isMain = (it["isMain"] as? Boolean) ?: false
+                                    MarkerPosition(left, top, isMain)
+                                }
+                                else -> null
+                            }
+                        }
+                    }
+                    is String -> {
+                        try {
+                            val markersType = object : TypeToken<List<MarkerPosition>>() {}.type
+                            gson.fromJson(markersData, markersType)
+                        } catch (e: Exception) {
+                            listOf(MarkerPosition(
+                                (map["left"] as? Number)?.toDouble() ?: 0.0,
+                                (map["top"] as? Number)?.toDouble() ?: 0.0,
+                                true
+                            ))
+                        }
+                    }
+                    else -> {
+                        listOf(MarkerPosition(
+                            (map["left"] as? Number)?.toDouble() ?: 0.0,
+                            (map["top"] as? Number)?.toDouble() ?: 0.0,
+                            true
+                        ))
+                    }
                 }
 
-                val equipmentData = EquipmentData(
-                    id = map["id"] as? String ?: "",
-                    left = (map["left"] as? Double) ?: 0.0,
-                    top = (map["top"] as? Double) ?: 0.0,
+                val equipment = EquipmentData(
+                    id = id,
+                    left = (map["left"] as? Number)?.toDouble() ?: 0.0,
+                    top = (map["top"] as? Number)?.toDouble() ?: 0.0,
                     type = map["type"] as? String ?: "",
                     name = map["name"] as? String ?: "",
                     letter = map["letter"] as? String ?: "",
@@ -454,25 +505,51 @@ class Database {
                     size = map["size"] as? String ?: "normal",
                     markers = markers
                 )
+                result.add(equipment)
+            }
 
+            // Импортируем дефекты
+            data.forEach { map ->
                 val defectsJson = map["defects"] as? String ?: "[]"
-                val defectsType = object : TypeToken<List<DefectData>>() {}.type
-                val defects: List<DefectData> = try {
-                    gson.fromJson(defectsJson, defectsType)
+                try {
+                    val defectsType = object : TypeToken<List<DefectData>>() {}.type
+                    val defects: List<DefectData> = gson.fromJson(defectsJson, defectsType)
+                    defects.forEach { saveDefect(it) }
                 } catch (e: Exception) {
-                    emptyList()
+                    // Игнорируем ошибки парсинга дефектов
                 }
-
-                defects.forEach { saveDefect(it) }
-
-                equipmentData
             }
 
             println("📥 Импортировано ${result.size} записей из JSON")
             return result
         } catch (e: Exception) {
             println("❌ Ошибка импорта: ${e.message}")
+            e.printStackTrace()
             return null
+        }
+    }
+
+    fun getDbFileModificationTime(): Long {
+        val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
+        return if (dbFile.exists()) dbFile.lastModified() else 0L
+    }
+
+    fun getJsonFileModificationTime(): Long {
+        val jsonFile = File("equipment_export.json")
+        return if (jsonFile.exists()) jsonFile.lastModified() else 0L
+    }
+
+    fun syncFileTimestamps() {
+        try {
+            val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
+            val jsonFile = File("equipment_export.json")
+            if (dbFile.exists() && jsonFile.exists()) {
+                // Делаем время JSON равным времени БД
+                jsonFile.setLastModified(dbFile.lastModified())
+                println("🔄 Время JSON синхронизировано с БД")
+            }
+        } catch (e: Exception) {
+            println("⚠️ Не удалось синхронизировать время файлов: ${e.message}")
         }
     }
 
@@ -486,6 +563,16 @@ class Database {
             println("  📌 ${eq.name}: ${defects.size} дефектов")
         }
         exportToJson(allEquipment)
+    }
+
+    fun clearAndImport(equipment: List<EquipmentData>) {
+        // Очищаем таблицу
+        deleteAll()
+        // Сохраняем новые данные
+        saveEquipment(equipment)
+        // Экспортируем в JSON для синхронизации
+        exportAllToJson()
+        println("✅ Данные очищены и импортированы: ${equipment.size} записей")
     }
 }
 
