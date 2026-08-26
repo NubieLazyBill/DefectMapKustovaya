@@ -424,83 +424,17 @@ class DefectMapController {
             return
         }
 
-        // Сравниваем время файлов
-        val dbTime = database.getDbFileModificationTime()
-        val jsonTime = database.getJsonFileModificationTime()
-
-        println("📅 Время файлов:")
-        println("  БД:  ${java.util.Date(dbTime)}")
-        println("  JSON: ${java.util.Date(jsonTime)}")
-
-        // ЕСЛИ JSON НОВЕЕ - ВСЕГДА ПЕРЕЗАГРУЖАЕМ ДАННЫЕ
-        if (jsonTime > dbTime) {
-            println("📥 JSON новее БД - перезагружаем данные из JSON")
-            val jsonData = database.importFromJson()
-            if (jsonData != null && jsonData.isNotEmpty()) {
-                // Сравниваем с БД
-                val dbData = database.loadAllEquipment()
-
-                val dbIds = dbData.map { it.id }.toSet()
-                val jsonIds = jsonData.map { it.id }.toSet()
-
-                val added = jsonData.filter { it.id !in dbIds }
-                val removed = dbData.filter { it.id !in jsonIds }
-                val changed = jsonData.filter { new ->
-                    dbData.find { it.id == new.id }?.let { old ->
-                        old.name != new.name ||
-                                old.type != new.type ||
-                                old.letter != new.letter ||
-                                old.cell != new.cell ||
-                                old.size != new.size ||
-                                Math.abs(old.left - new.left) > 0.01 ||
-                                Math.abs(old.top - new.top) > 0.01 ||
-                                old.markers.size != new.markers.size ||
-                                old.markers.zip(new.markers).any { (a, b) ->
-                                    Math.abs(a.left - b.left) > 0.01 ||
-                                            Math.abs(a.top - b.top) > 0.01 ||
-                                            a.isMain != b.isMain
-                                }
-                    } ?: false
-                }
-
-                if (added.isNotEmpty() || removed.isNotEmpty() || changed.isNotEmpty()) {
-                    println("📊 Найдены различия (JSON новее БД):")
-                    println("  Добавлено: ${added.size}")
-                    println("  Удалено: ${removed.size}")
-                    println("  Изменено: ${changed.size}")
-
-                    Platform.runLater {
-                        showSyncDialog(dbData, jsonData, "JSON новее БД (возможно изменения через внешний клиент)")
-                    }
-                    return
-                } else {
-                    // Данные одинаковые, но JSON новее - просто обновляем маркеры
-                    println("🔄 Данные одинаковые, но JSON новее - обновляем маркеры")
-                    // Синхронизируем время файлов
-                    database.syncFileTimestamps()
-                    // Обновляем маркеры из БД
-                    loadAndRefresh()
-                    return
-                }
-            }
-        }
-
-        // Если БД новее JSON - экспортируем
-        if (dbTime > jsonTime) {
-            println("📤 БД новее JSON - экспортируем БД")
-            database.exportAllToJson()
-            return
-        }
-
-        // Если время одинаковое - проверяем содержимое
+        // Загружаем данные для сравнения
         val dbData = database.loadAllEquipment()
         val jsonData = database.importFromJson()
 
         if (jsonData == null || jsonData.isEmpty()) {
+            println("📤 JSON пуст, экспортируем БД")
             database.exportAllToJson()
             return
         }
 
+        // Сравниваем данные
         val dbIds = dbData.map { it.id }.toSet()
         val jsonIds = jsonData.map { it.id }.toSet()
 
@@ -524,11 +458,18 @@ class DefectMapController {
             } ?: false
         }
 
+        println("📊 Сравнение:")
+        println("  Добавлено: ${added.size}")
+        println("  Удалено: ${removed.size}")
+        println("  Изменено: ${changed.size}")
+
+        // Если изменений нет - выходим
         if (added.isEmpty() && removed.isEmpty() && changed.isEmpty()) {
             println("✅ Данные синхронизированы")
             return
         }
 
+        // Показываем диалог с деталями
         Platform.runLater {
             showSyncDialog(dbData, jsonData, "Обнаружены расхождения между БД и JSON")
         }
@@ -664,20 +605,69 @@ class DefectMapController {
             } ?: false
         }
 
+        // Строим детальное сообщение
         val message = buildString {
             append("📊 $reason\n\n")
             append("📂 БД: ${dbData.size} записей\n")
             append("📄 JSON: ${jsonData.size} записей\n\n")
-            if (added.isNotEmpty()) append("➕ В JSON добавлено: ${added.size}\n")
-            if (removed.isNotEmpty()) append("➖ В JSON удалено: ${removed.size}\n")
-            if (changed.isNotEmpty()) append("🔄 Изменено: ${changed.size}\n")
-            append("\nЧто делаем?")
+
+            if (added.isNotEmpty()) {
+                append("➕ ДОБАВЛЕНО В JSON (${added.size}):\n")
+                added.take(10).forEach { eq ->
+                    val marker = eq.markers.firstOrNull() ?: MarkerPosition(eq.left, eq.top, true)
+                    append("  • ${eq.name} (${eq.type}) → X=${marker.left}%, Y=${marker.top}%\n")
+                }
+                if (added.size > 10) append("  ... и ещё ${added.size - 10}\n")
+                append("\n")
+            }
+
+            if (removed.isNotEmpty()) {
+                append("➖ УДАЛЕНО ИЗ JSON (${removed.size}):\n")
+                removed.take(10).forEach { eq ->
+                    append("  • ${eq.name} (${eq.type})\n")
+                }
+                if (removed.size > 10) append("  ... и ещё ${removed.size - 10}\n")
+                append("\n")
+            }
+
+            if (changed.isNotEmpty()) {
+                append("🔄 ИЗМЕНЕНО (${changed.size}):\n")
+                changed.take(10).forEach { new ->
+                    val old = dbData.find { it.id == new.id }
+                    if (old != null) {
+                        val changes = mutableListOf<String>()
+                        if (old.name != new.name) changes.add("имя: ${old.name} → ${new.name}")
+                        if (old.type != new.type) changes.add("тип: ${old.type} → ${new.type}")
+                        if (old.cell != new.cell) changes.add("ячейка: ${old.cell} → ${new.cell}")
+                        if (old.size != new.size) changes.add("размер: ${old.size} → ${new.size}")
+
+                        val oldMarker = old.markers.firstOrNull() ?: MarkerPosition(old.left, old.top, true)
+                        val newMarker = new.markers.firstOrNull() ?: MarkerPosition(new.left, new.top, true)
+                        if (Math.abs(oldMarker.left - newMarker.left) > 0.01 || Math.abs(oldMarker.top - newMarker.top) > 0.01) {
+                            changes.add("позиция: (${oldMarker.left}%, ${oldMarker.top}%) → (${newMarker.left}%, ${newMarker.top}%)")
+                        }
+
+                        if (old.markers.size != new.markers.size) {
+                            changes.add("маркеров: ${old.markers.size} → ${new.markers.size}")
+                        }
+
+                        append("  • ${new.name}: ${changes.joinToString(", ")}\n")
+                    }
+                }
+                if (changed.size > 10) append("  ... и ещё ${changed.size - 10}\n")
+                append("\n")
+            }
+
+            append("Что делаем?")
         }
 
         val alert = Alert(AlertType.CONFIRMATION)
         alert.title = "Синхронизация данных"
         alert.headerText = "📊 Обнаружены расхождения"
         alert.contentText = message
+        alert.isResizable = true
+        alert.width = 600.0
+        alert.height = 500.0
 
         val importBtn = ButtonType("📥 Импорт из JSON (перезаписать БД)", ButtonBar.ButtonData.OK_DONE)
         val exportBtn = ButtonType("📤 Экспорт в JSON (перезаписать файл)", ButtonBar.ButtonData.APPLY)
@@ -693,22 +683,18 @@ class DefectMapController {
                 database.saveEquipment(jsonData)
                 database.exportAllToJson()
                 showToast("✅ Импортировано ${jsonData.size} записей из JSON")
-                // Перерисовываем маркеры из БД
-                initEquipment()
+                loadAndRefresh()
                 refreshEquipmentList()
             }
             exportBtn -> {
                 println("📤 Экспортируем БД в JSON (перезапись файла)")
                 database.exportAllToJson()
                 showToast("✅ БД экспортирована в JSON")
-                // Обновляем только маркеры (данные в БД уже актуальны)
                 refreshMarkers()
                 refreshEquipmentList()
             }
             cancelBtn, null -> {
                 println("❌ Синхронизация отменена - оставляем данные из БД")
-                // Данные из БД уже загружены через initEquipment()
-                // Ничего не делаем
             }
         }
     }
@@ -1015,6 +1001,8 @@ class DefectMapController {
         if (!enable) {
             currentEditingEquipmentId = null
             editModeMenuItem.text = "✏️ Режим редактирования"
+        } else {
+            editModeMenuItem.text = "🔒 Выйти из редактирования"
         }
 
         webView.engine.executeScript("""
@@ -1029,8 +1017,6 @@ class DefectMapController {
             document.body.style.cursor = 'default';
         }
     """.trimIndent())
-
-        editModeMenuItem.text = if (enable) "🔒 Выйти из редактирования" else "✏️ Режим редактирования"
     }
 
     // ======================== ЗУМ И ПАН ========================
@@ -1979,9 +1965,15 @@ class DefectMapController {
                                 })();
                             """.trimIndent())
 
-                                // Сохраняем в БД
-                                saveEquipment()
+                                // Сохраняем в БД (используем saveEquipmentDirect, который не проверяет внешние изменения)
+                                saveEquipmentDirect()
                                 syncWindowEquipment()
+
+                                // Сбрасываем только currentEditingEquipmentId
+                                currentEditingEquipmentId = null
+
+                                // Подтверждаем, что режим редактирования остаётся активным
+                                println("ℹ️ Режим редактирования остаётся активным")
 
                                 Platform.runLater {
                                     showToast("✅ Добавлено: $name")
@@ -1994,6 +1986,52 @@ class DefectMapController {
         } else {
             println("❌ Ошибка: результат null")
             showError("Не удалось определить позицию на схеме")
+        }
+    }
+
+    private fun saveEquipmentDirect() {
+        val result = webView.engine.executeScript("""
+        JSON.stringify(window.equipment || [])
+    """.trimIndent()) as? String
+
+        if (result != null) {
+            try {
+                val type = object : TypeToken<List<EquipmentData>>() {}.type
+                val equipment: List<EquipmentData> = gson.fromJson(result, type)
+
+                if (equipment.isEmpty()) {
+                    println("⚠️ Нет данных для сохранения")
+                    return
+                }
+
+                // Вычисляем хеш текущих данных
+                val currentHash = equipment.hashCode()
+
+                // Если данные не изменились - не сохраняем
+                if (currentHash == lastSavedHash && isInitialized) {
+                    println("ℹ️ Данные не изменились, пропускаем сохранение")
+                    return
+                }
+
+                println("💾 Сохраняем ${equipment.size} записей (прямое сохранение)")
+
+                // Сохраняем в БД
+                database.saveEquipment(equipment)
+                lastSavedHash = currentHash
+
+                // Экспортируем в JSON
+                database.exportAllToJson()
+                println("📤 Экспорт в JSON выполнен")
+
+                // Синхронизируем время файлов
+                syncFileTimestamps()
+
+            } catch (e: Exception) {
+                showError("Ошибка сохранения: ${e.message}")
+                e.printStackTrace()
+            }
+        } else {
+            println("❌ Ошибка: результат скрипта null")
         }
     }
 
@@ -2053,7 +2091,14 @@ class DefectMapController {
             """.trimIndent())
 
                 println("✅ Добавлен маркер для: ${equipment.name}")
-                showToast("✅ Маркер добавлен. Кликните ещё раз для следующего.")
+                showToast("✅ Маркер добавлен для ${equipment.name}")
+
+                // ===== СБРАСЫВАЕМ СОСТОЯНИЕ =====
+                currentEditingEquipmentId = null
+                isEditMode = false
+                toggleEditMode(false)
+                editModeMenuItem.text = "✏️ Режим редактирования"
+
             } else {
                 showError("Оборудование не найдено. ID: $equipmentId")
             }
@@ -3033,6 +3078,13 @@ class DefectMapController {
     private fun addMarkerToEquipment(equipmentId: String) {
         println("➕ Добавление маркера для: $equipmentId")
 
+        // Если уже в режиме добавления маркера - выходим
+        if (currentEditingEquipmentId != null) {
+            println("⚠️ Уже в режиме добавления маркера для: $currentEditingEquipmentId")
+            showToast("⚠️ Сначала завершите добавление текущего маркера")
+            return
+        }
+
         val allEquipment = loadEquipment()
         val equipment = allEquipment.find { it.id == equipmentId }
 
@@ -3048,6 +3100,8 @@ class DefectMapController {
 
         showToast("Кликните на схеме, чтобы добавить маркер для '${equipment.name}'")
     }
+
+
 
     // ======================== СОХРАНЕНИЕ / ЗАГРУЗКА ========================
 
