@@ -125,6 +125,8 @@ class DefectMapController {
     private fun initialize() {
         loadSvgIntoWebView()
 
+        toggleMarkersMenuItem.text = if (markersVisible) "👁️ Скрыть маркеры" else "👁️ Показать маркеры"
+
         webView.engine.getLoadWorker().stateProperty().addListener { _, _, newState ->
             if (newState == Worker.State.SUCCEEDED) {
                 Platform.runLater {
@@ -203,9 +205,46 @@ class DefectMapController {
     // ======================== ЗАГРУЗКА SVG ========================
 
     private fun loadSvgIntoWebView() {
-        val svgFile = javaClass.getResource("/org/example/defectmap/schema.svg")
-        if (svgFile != null) {
-            val html = """
+        try {
+            // Пробуем загрузить из ресурсов (внутри JAR)
+            val svgResource = javaClass.getResource("/org/example/defectmap/schema.svg")
+            if (svgResource != null) {
+                val svgContent = svgResource.readText()
+                val html = buildSvgHtml(svgContent)
+                webView.engine.loadContent(html)
+                println("✅ SVG загружен из ресурсов")
+                return
+            }
+
+            // Если в ресурсах нет — пробуем из файловой системы (для разработки)
+            val svgFile = File("src/main/resources/org/example/defectmap/schema.svg")
+            if (svgFile.exists()) {
+                val svgContent = svgFile.readText()
+                val html = buildSvgHtml(svgContent)
+                webView.engine.loadContent(html)
+                println("✅ SVG загружен из файловой системы: ${svgFile.absolutePath}")
+                return
+            }
+
+            // Если нет — пробуем из папки рядом с JAR (для портативной версии)
+            val jarSvgFile = File("schema.svg")
+            if (jarSvgFile.exists()) {
+                val svgContent = jarSvgFile.readText()
+                val html = buildSvgHtml(svgContent)
+                webView.engine.loadContent(html)
+                println("✅ SVG загружен из папки с JAR: ${jarSvgFile.absolutePath}")
+                return
+            }
+
+            println("❌ schema.svg не найден ни в ресурсах, ни в файловой системе")
+        } catch (e: Exception) {
+            println("❌ Ошибка загрузки SVG: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+
+    private fun buildSvgHtml(svgContent: String): String {
+        return """
         <!DOCTYPE html>
         <html>
           <head>
@@ -241,11 +280,13 @@ class DefectMapController {
                 max-width: 100%;
                 max-height: 100%;
                 transform-origin: center center;
+                width: 100%;
+                height: 100%;
               }
-              #image {
+              #image svg {
                 display: block;
-                max-width: 100%;
-                max-height: 100%;
+                width: 100%;
+                height: 100%;
                 object-fit: contain;
                 transform-origin: center center;
                 will-change: transform;
@@ -260,10 +301,7 @@ class DefectMapController {
                 height: 28px;
                 transition: all 0.2s ease;
               }
-              .equipment-marker:active {
-                cursor: grabbing;
-              }
-              /* Скрытый маркер — убираем всё визуальное, но оставляем область для наведения */
+              .equipment-marker:active { cursor: grabbing; }
               .equipment-marker.hidden .dot {
                   opacity: 0 !important;
                   pointer-events: none;
@@ -272,7 +310,6 @@ class DefectMapController {
                   opacity: 0 !important;
                   visibility: hidden !important;
               }
-              /* При наведении на скрытый маркер — показываем тултип */
               .equipment-marker.hidden:hover .tooltip-text {
                   opacity: 1 !important;
                   visibility: visible !important;
@@ -303,7 +340,6 @@ class DefectMapController {
               .equipment-marker.transformer .dot { background: #44bb44; }
               .equipment-marker.lightning .dot { background: #ffcc00; color: #333; }
               .equipment-marker.other .dot { background: #8888ff; }
-              
               .equipment-marker .tooltip-text {
                 visibility: hidden;
                 opacity: 0;
@@ -336,34 +372,12 @@ class DefectMapController {
                 visibility: visible;
                 opacity: 1;
               }
-              /* Размеры меток */
-              .equipment-marker.small {
-                  width: 20px;
-                  height: 20px;
-              }
-              .equipment-marker.small .dot {
-                  width: 16px;
-                  height: 16px;
-                  font-size: 8px;
-              }
-              .equipment-marker.normal {
-                  width: 28px;
-                  height: 28px;
-              }
-              .equipment-marker.normal .dot {
-                  width: 24px;
-                  height: 24px;
-                  font-size: 11px;
-              }
-              .equipment-marker.large {
-                  width: 36px;
-                  height: 36px;
-              }
-              .equipment-marker.large .dot {
-                  width: 32px;
-                  height: 32px;
-                  font-size: 14px;
-              }
+              .equipment-marker.small { width: 20px; height: 20px; }
+              .equipment-marker.small .dot { width: 16px; height: 16px; font-size: 8px; }
+              .equipment-marker.normal { width: 28px; height: 28px; }
+              .equipment-marker.normal .dot { width: 24px; height: 24px; font-size: 11px; }
+              .equipment-marker.large { width: 36px; height: 36px; }
+              .equipment-marker.large .dot { width: 32px; height: 32px; font-size: 14px; }
               .equipment-marker.marker-extra {
                   border: 2px dashed rgba(255, 255, 255, 0.5);
                   opacity: 0.85;
@@ -380,17 +394,13 @@ class DefectMapController {
           <body>
             <div id="container">
               <div id="image-wrapper">
-                <img id="image" src="${svgFile.toExternalForm()}" alt="Schema" />
+                <div id="image">$svgContent</div>
                 <div id="equipment-container"></div>
               </div>
             </div>
           </body>
         </html>
     """.trimIndent()
-            webView.engine.loadContent(html)
-        } else {
-            println("SVG file not found!")
-        }
     }
 
     private fun checkAndImportData() {

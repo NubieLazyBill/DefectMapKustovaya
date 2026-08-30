@@ -1,8 +1,8 @@
 [
   {
     "id": "equipment-1787307960772",
-    "left": 39.53450520833333,
-    "top": 152.40660189284029,
+    "left": 39.482421875,
+    "top": 152.5094696969697,
     "type": "s",
     "name": "1С-500",
     "letter": "С",
@@ -10,8 +10,8 @@
     "size": "large",
     "markers": [
       {
-        "left": 39.53450520833333,
-        "top": 152.40660189284029,
+        "left": 39.482421875,
+        "top": 152.5094696969697,
         "isMain": true
       },
       {
@@ -281,8 +281,8 @@
   },
   {
     "id": "equipment-1787054979873",
-    "left": 46.499837239583336,
-    "top": 77.85723615464994,
+    "left": 46.532388528188065,
+    "top": 77.72662072819664,
     "type": "autotransformer",
     "name": "2АТГ ф.А",
     "letter": "АТ",
@@ -290,8 +290,8 @@
     "size": "normal",
     "markers": [
       {
-        "left": 46.499837239583336,
-        "top": 77.85723615464994,
+        "left": 46.532388528188065,
+        "top": 77.72662072819664,
         "isMain": true
       }
     ],
@@ -1058,6 +1058,18 @@
     ],
     "defects": [
       {
+        "id": "defect-1787845083595",
+        "equipmentId": "marker-1787053880681",
+        "name": "232",
+        "description": "2323",
+        "severity": "medium",
+        "status": "open",
+        "detectionDate": 1787845083595,
+        "notes": "",
+        "markerLeft": 43.7330135891287,
+        "markerTop": 56.888888888888886
+      },
+      {
         "id": "defect-1787734921486",
         "equipmentId": "marker-1787053880681",
         "name": "1212",
@@ -1163,8 +1175,8 @@
   },
   {
     "id": "equipment-1787307696585",
-    "left": 62.39990234375,
-    "top": 34.28683385579937,
+    "left": 62.34781901041667,
+    "top": 34.39132706374085,
     "type": "Buildings",
     "name": "Здание артезианской скважины",
     "letter": "*",
@@ -1172,8 +1184,8 @@
     "size": "normal",
     "markers": [
       {
-        "left": 62.39990234375,
-        "top": 34.28683385579937,
+        "left": 62.34781901041667,
+        "top": 34.39132706374085,
         "isMain": true
       }
     ],
@@ -1228,6 +1240,24 @@
       {
         "left": 45.7,
         "top": 102.7,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787851121459",
+    "left": 45.6,
+    "top": 190.4,
+    "type": "Buildings",
+    "name": "КПП",
+    "letter": "*",
+    "cell": "другое",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 45.6,
+        "top": 190.4,
         "isMain": true
       }
     ],
@@ -1686,6 +1716,24 @@
     "defects": []
   },
   {
+    "id": "equipment-1787850426752",
+    "left": 58.4,
+    "top": 122.8,
+    "type": "Buildings",
+    "name": "МТС",
+    "letter": "*",
+    "cell": "ОПУ",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 58.4,
+        "top": 122.8,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
     "id": "equipment-1787307646203",
     "left": 54.4,
     "top": 27.3,
@@ -1698,6 +1746,24 @@
       {
         "left": 54.4,
         "top": 27.3,
+        "isMain": true
+      }
+    ],
+    "defects": []
+  },
+  {
+    "id": "equipment-1787845296648",
+    "left": 49.8,
+    "top": 101.7,
+    "type": "other",
+    "name": "Мачта освещения №32",
+    "letter": "О",
+    "cell": "ОПУ",
+    "size": "normal",
+    "markers": [
+      {
+        "left": 49.8,
+        "top": 101.7,
         "isMain": true
       }
     ],
