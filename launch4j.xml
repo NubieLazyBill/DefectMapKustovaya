@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch4jConfig>
+    <dontWrapJar>false</dontWrapJar>
+    <headerType>gui</headerType>
+    <jar>build/libs/DefectMap.jar</jar>
+    <outfile>build/exe/DefectMap.exe</outfile>
+    <errTitle>DefectMap</errTitle>
+    <classPath>
+        <mainClass>org.example.defectmap.DefectMapApp</mainClass>
+    </classPath>
+    <jre>
+        <minVersion>17.0.0</minVersion>
+        <jdkPreference>preferJre</jdkPreference>
+    </jre>
+    <versionInfo>
+        <fileVersion>1.0.0.0</fileVersion>
+        <txtFileVersion>1.0.0</txtFileVersion>
+        <fileDescription>Карта дефектов оборудования</fileDescription>
+        <copyright>2024</copyright>
+        <productVersion>1.0.0.0</productVersion>
+        <txtProductVersion>1.0.0</txtProductVersion>
+        <productName>DefectMap</productName>
+        <internalName>DefectMap</internalName>
+        <originalFilename>DefectMap.exe</originalFilename>
+    </versionInfo>
+</launch4jConfig>

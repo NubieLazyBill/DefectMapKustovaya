@@ -75,6 +75,15 @@ class EquipmentCardController(
     private fun createImagePanel(): VBox {
         val image = createEquipmentImage()
 
+        // Проверка на случай, если image всё-таки null (на всякий пожарный)
+        if (image == null) {
+            println("❌ Критическая ошибка: image = null, создаю панель с сообщением")
+            return VBox().apply {
+                children.add(Label("❌ Не удалось загрузить изображение"))
+                style = "-fx-padding: 20px; -fx-alignment: center;"
+            }
+        }
+
         val canvasWidth = 450.0
         val canvasHeight = 450.0
 
@@ -170,7 +179,13 @@ class EquipmentCardController(
         return imageContainer
     }
 
+    /**
+     * Загружает изображение для оборудования.
+     * Если картинка по типу не найдена — ищет equipment.jpg.
+     * Если и его нет — создаёт заглушку с текстом "Нет изображения".
+     */
     private fun createEquipmentImage(): Image {
+        // Определяем путь к картинке по типу оборудования
         val imagePath = when (equipment.type) {
             "v_500", "v_220", "v_35", "v_10" -> "/org/example/defectmap/ВВБК-500.jfif"
             "r_500", "r_220", "r_35", "r_10" -> "/org/example/defectmap/disconnector.jpg"
@@ -186,27 +201,66 @@ class EquipmentCardController(
             else -> null
         }
 
-        return try {
-            if (imagePath != null) {
-                val url = javaClass.getResource(imagePath)
+        // Пробуем загрузить картинку по типу
+        imagePath?.let {
+            try {
+                val url = javaClass.getResource(it)
                 if (url != null) {
-                    Image(url.toExternalForm())
+                    return Image(url.toExternalForm())
                 } else {
-                    // fallback
-                    val defaultUrl = javaClass.getResource("/org/example/defectmap/equipment.jpg")
-                    if (defaultUrl != null) Image(defaultUrl.toExternalForm())
-                    else throw RuntimeException("Нет ни одной картинки")
+                    println("⚠️ Ресурс не найден: $it")
                 }
+            } catch (e: Exception) {
+                println("⚠️ Не удалось загрузить $it: ${e.message}")
+            }
+        }
+
+        // Fallback 1: equipment.jpg
+        try {
+            val url = javaClass.getResource("/org/example/defectmap/equipment.jpg")
+            if (url != null) {
+                return Image(url.toExternalForm())
             } else {
-                val defaultUrl = javaClass.getResource("/org/example/defectmap/equipment.jpg")
-                if (defaultUrl != null) Image(defaultUrl.toExternalForm())
-                else throw RuntimeException("Нет ни одной картинки")
+                println("⚠️ Ресурс equipment.jpg не найден")
             }
         } catch (e: Exception) {
-            println("❌ Ошибка загрузки картинки: ${e.message}")
-            // Создаём пустое изображение 1x1
-            Image(javaClass.getResourceAsStream("/org/example/defectmap/equipment.jpg"))
+            println("⚠️ Не удалось загрузить equipment.jpg: ${e.message}")
         }
+
+        // Fallback 2: Заглушка
+        println("⚠️ Нет ни одной картинки, создаю заглушку")
+        return createPlaceholderImage()
+    }
+
+    /**
+     * Создаёт изображение-заглушку (серый квадрат с текстом "Нет изображения")
+     */
+    private fun createPlaceholderImage(): Image {
+        val width = 450
+        val height = 450
+        val bufferedImage = java.awt.image.BufferedImage(width, height, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        val graphics = bufferedImage.createGraphics()
+
+        // Серый фон
+        graphics.color = java.awt.Color(200, 200, 200)
+        graphics.fillRect(0, 0, width, height)
+
+        // Текст
+        graphics.color = java.awt.Color(100, 100, 100)
+        val font = java.awt.Font("Arial", java.awt.Font.BOLD, 24)
+        graphics.font = font
+        val metrics = graphics.fontMetrics
+        val text = "Нет изображения"
+        val x = (width - metrics.stringWidth(text)) / 2
+        val y = (height - metrics.height) / 2 + metrics.ascent
+        graphics.drawString(text, x, y)
+
+        graphics.dispose()
+
+        // Конвертируем BufferedImage в JavaFX Image
+        val baos = java.io.ByteArrayOutputStream()
+        javax.imageio.ImageIO.write(bufferedImage, "png", baos)
+        return Image(java.io.ByteArrayInputStream(baos.toByteArray()))
     }
 
     private fun loadMarkersOnCanvas(gc: javafx.scene.canvas.GraphicsContext) {
@@ -387,7 +441,6 @@ class EquipmentCardController(
                         text = null
                         tooltip = null
                     } else {
-                        // Убираем иконку важности, оставляем только статус
                         val statusText = when (defect.status) {
                             "open" -> "🟡 Обнаружен"
                             "fixed" -> "✅ Устранён"
@@ -406,7 +459,7 @@ class EquipmentCardController(
             }
         }
 
-        // ===== ДВОЙНОЙ КЛИК ПО ДЕФЕКТУ (ОТКРЫВАЕТ РЕДАКТИРОВАНИЕ) =====
+        // ===== ДВОЙНОЙ КЛИК ПО ДЕФЕКТУ =====
         defectsListView.setOnMouseClicked { event ->
             if (event.clickCount == 2) {
                 val selected = defectsListView.selectionModel.selectedItem
@@ -534,7 +587,6 @@ class EquipmentCardController(
         descField.prefHeight = 100.0
         descField.style = "-fx-padding: 8px 12px; -fx-font-size: 14px; -fx-border-color: #ced4da; -fx-border-radius: 4px;"
 
-        // ===== СТАТУС (только два пункта) =====
         val statusLabel = Label("Статус:")
         statusLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val statusCombo = ComboBox<String>()
@@ -563,7 +615,7 @@ class EquipmentCardController(
                     equipmentId = equipment.id,
                     name = name,
                     description = descField.text.trim(),
-                    severity = "medium",  // по умолчанию
+                    severity = "medium",
                     status = if (statusCombo.value == "устранён") "fixed" else "open"
                 )
                 database.saveDefect(newDefect)
@@ -597,12 +649,10 @@ class EquipmentCardController(
         descField.prefHeight = 80.0
         descField.style = "-fx-padding: 8px 12px; -fx-font-size: 14px; -fx-border-color: #ced4da; -fx-border-radius: 4px;"
 
-        // ===== СТАТУС (только два пункта) =====
         val statusLabel = Label("Статус:")
         statusLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val statusCombo = ComboBox<String>()
         statusCombo.items.addAll("обнаружен", "устранён")
-        // Устанавливаем текущее значение
         statusCombo.value = if (defect.status == "fixed") "устранён" else "обнаружен"
         statusCombo.style = "-fx-pref-width: 120px; -fx-padding: 6px; -fx-font-size: 14px;"
 
