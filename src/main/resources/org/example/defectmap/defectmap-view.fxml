@@ -43,7 +43,6 @@
             <items>
                 <MenuItem fx:id="editModeMenuItem" text="✏️ Режим редактирования" onAction="#toggleEditModeAction"/>
                 <MenuItem fx:id="toggleMarkersMenuItem" text="👁️ Скрыть маркеры" onAction="#toggleMarkersVisibility"/>
-                <MenuItem fx:id="forceImportMenuItem" text="🔄 Принудительный импорт из JSON" onAction="#onForceImport"/>
             </items>
         </MenuButton>
 

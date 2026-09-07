@@ -580,29 +580,19 @@ class DefectMapController {
                     setupZoom()
                     setupClickHandler()
                     setupButtons()
-
                     initEquipment()
-
-                    if (!isInitialized) {
-                        checkAndImportData()
-                        isInitialized = true
-                    }
-
-                    // ВСЕГДА принудительно обновляем маркеры после загрузки
+                    isInitialized = true
                     loadAndRefresh()
-
-                    // После loadAndRefresh() добавьте:
-                    Platform.runLater {
-                        val testEquipment = database.loadAllEquipment().find { it.name == "1ШР-220 Факел" }
-                        if (testEquipment != null) {
-                            val mainMarker = testEquipment.markers.firstOrNull() ?: MarkerPosition(testEquipment.left, testEquipment.top, true)
-                            println("🔍 1ШР-220: left=${mainMarker.left}%, top=${mainMarker.top}%")
-                            println("🔍 Всего маркеров: ${testEquipment.markers.size}")
-                        } else {
-                            println("❌ 1ШР-220 не найден в БД")
-                        }
-                    }
                 }
+            }
+        }
+
+        // ===== HOTKEY Ctrl+S для сохранения =====
+        webView.setOnKeyPressed { event ->
+            if (event.isControlDown && event.code == KeyCode.S) {
+                saveEquipment()
+                showToast("✅ Данные сохранены")
+                event.consume()
             }
         }
 
@@ -850,98 +840,6 @@ class DefectMapController {
     """.trimIndent()
     }
 
-    private fun checkAndImportData() {
-        // Если уже инициализированы - не проверяем
-        if (isInitialized) {
-            println("ℹ️ Приложение уже инициализировано, пропускаем проверку")
-            return
-        }
-
-        val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
-        val exportFile = File("equipment_export.json")
-
-        // ===== НОВАЯ ПРОВЕРКА: если БД пустая — не импортируем пустой JSON =====
-        if (dbFile.exists() && database.getCount() > 0) {
-            // Проверяем, что в БД есть дефекты (если есть оборудование)
-            if (!database.validateDataConsistency()) {
-                println("⚠️ БД повреждена или неполная, создаём резервную копию...")
-                val backupFile = File(System.getProperty("user.home"), ".defectmap/equipment_backup_${System.currentTimeMillis()}.db")
-                dbFile.copyTo(backupFile, overwrite = false)
-                println("💾 Резервная копия создана: ${backupFile.absolutePath}")
-            }
-        }
-
-        // Если БД пуста и есть JSON - импортируем без вопросов
-        if (!dbFile.exists() || database.getCount() == 0) {
-            if (exportFile.exists()) {
-                println("📥 БД пуста, импортируем из JSON")
-                val imported = database.importFromJson()
-                if (imported != null && imported.isNotEmpty()) {
-                    database.deleteAll()
-                    database.saveEquipment(imported)
-                    initEquipment()
-                }
-            }
-            return
-        }
-
-        // Если JSON не существует - экспортируем БД
-        if (!exportFile.exists()) {
-            println("📤 JSON не найден, экспортируем БД")
-            database.exportAllToJson()
-            return
-        }
-
-        // Загружаем данные для сравнения
-        val dbData = database.loadAllEquipment()
-        val jsonData = database.importFromJson()
-
-        if (jsonData == null || jsonData.isEmpty()) {
-            println("📤 JSON пуст, экспортируем БД")
-            database.exportAllToJson()
-            return
-        }
-
-        // Сравниваем данные
-        val dbIds = dbData.map { it.id }.toSet()
-        val jsonIds = jsonData.map { it.id }.toSet()
-
-        val added = jsonData.filter { it.id !in dbIds }
-        val removed = dbData.filter { it.id !in jsonIds }
-        val changed = jsonData.filter { new ->
-            dbData.find { it.id == new.id }?.let { old ->
-                old.name != new.name ||
-                        old.type != new.type ||
-                        old.letter != new.letter ||
-                        old.cell != new.cell ||
-                        old.size != new.size ||
-                        Math.abs(old.left - new.left) > 0.01 ||
-                        Math.abs(old.top - new.top) > 0.01 ||
-                        old.markers.size != new.markers.size ||
-                        old.markers.zip(new.markers).any { (a, b) ->
-                            Math.abs(a.left - b.left) > 0.01 ||
-                                    Math.abs(a.top - b.top) > 0.01 ||
-                                    a.isMain != b.isMain
-                        }
-            } ?: false
-        }
-
-        println("📊 Сравнение:")
-        println("  Добавлено: ${added.size}")
-        println("  Удалено: ${removed.size}")
-        println("  Изменено: ${changed.size}")
-
-        // Если изменений нет - выходим
-        if (added.isEmpty() && removed.isEmpty() && changed.isEmpty()) {
-            println("✅ Данные синхронизированы")
-            return
-        }
-
-        // Показываем диалог с деталями
-        Platform.runLater {
-            showSyncDialog(dbData, jsonData, "Обнаружены расхождения между БД и JSON")
-        }
-    }
 
     private fun loadAndRefresh() {
         // Проверяем, что WebView загружен
@@ -1048,289 +946,6 @@ class DefectMapController {
         """.trimIndent())
         }
     }
-
-    private fun showSyncDialog(dbData: List<EquipmentData>, jsonData: List<EquipmentData>, reason: String) {
-        val dbIds = dbData.map { it.id }.toSet()
-        val jsonIds = jsonData.map { it.id }.toSet()
-
-        val added = jsonData.filter { it.id !in dbIds }
-        val removed = dbData.filter { it.id !in jsonIds }
-        val changed = jsonData.filter { new ->
-            dbData.find { it.id == new.id }?.let { old ->
-                old.name != new.name ||
-                        old.type != new.type ||
-                        old.letter != new.letter ||
-                        old.cell != new.cell ||
-                        old.size != new.size ||
-                        Math.abs(old.left - new.left) > 0.01 ||
-                        Math.abs(old.top - new.top) > 0.01 ||
-                        old.markers.size != new.markers.size ||
-                        old.markers.zip(new.markers).any { (a, b) ->
-                            Math.abs(a.left - b.left) > 0.01 ||
-                                    Math.abs(a.top - b.top) > 0.01 ||
-                                    a.isMain != b.isMain
-                        }
-            } ?: false
-        }
-
-        // Строим детальное сообщение
-        val message = buildString {
-            append("📊 $reason\n\n")
-            append("📂 БД: ${dbData.size} записей\n")
-            append("📄 JSON: ${jsonData.size} записей\n\n")
-
-            if (added.isNotEmpty()) {
-                append("➕ ДОБАВЛЕНО В JSON (${added.size}):\n")
-                added.take(10).forEach { eq ->
-                    val marker = eq.markers.firstOrNull() ?: MarkerPosition(eq.left, eq.top, true)
-                    append("  • ${eq.name} (${eq.type}) → X=${marker.left}%, Y=${marker.top}%\n")
-                }
-                if (added.size > 10) append("  ... и ещё ${added.size - 10}\n")
-                append("\n")
-            }
-
-            if (removed.isNotEmpty()) {
-                append("➖ УДАЛЕНО ИЗ JSON (${removed.size}):\n")
-                removed.take(10).forEach { eq ->
-                    append("  • ${eq.name} (${eq.type})\n")
-                }
-                if (removed.size > 10) append("  ... и ещё ${removed.size - 10}\n")
-                append("\n")
-            }
-
-            if (changed.isNotEmpty()) {
-                append("🔄 ИЗМЕНЕНО (${changed.size}):\n")
-                changed.take(10).forEach { new ->
-                    val old = dbData.find { it.id == new.id }
-                    if (old != null) {
-                        val changes = mutableListOf<String>()
-                        if (old.name != new.name) changes.add("имя: ${old.name} → ${new.name}")
-                        if (old.type != new.type) changes.add("тип: ${old.type} → ${new.type}")
-                        if (old.cell != new.cell) changes.add("ячейка: ${old.cell} → ${new.cell}")
-                        if (old.size != new.size) changes.add("размер: ${old.size} → ${new.size}")
-
-                        val oldMarker = old.markers.firstOrNull() ?: MarkerPosition(old.left, old.top, true)
-                        val newMarker = new.markers.firstOrNull() ?: MarkerPosition(new.left, new.top, true)
-                        if (Math.abs(oldMarker.left - newMarker.left) > 0.01 || Math.abs(oldMarker.top - newMarker.top) > 0.01) {
-                            changes.add("позиция: (${oldMarker.left}%, ${oldMarker.top}%) → (${newMarker.left}%, ${newMarker.top}%)")
-                        }
-
-                        if (old.markers.size != new.markers.size) {
-                            changes.add("маркеров: ${old.markers.size} → ${new.markers.size}")
-                        }
-
-                        append("  • ${new.name}: ${changes.joinToString(", ")}\n")
-                    }
-                }
-                if (changed.size > 10) append("  ... и ещё ${changed.size - 10}\n")
-                append("\n")
-            }
-
-            append("Что делаем?")
-        }
-
-        val alert = Alert(AlertType.CONFIRMATION)
-        alert.title = "Синхронизация данных"
-        alert.headerText = "📊 Обнаружены расхождения"
-        alert.contentText = message
-        alert.isResizable = true
-        alert.width = 600.0
-        alert.height = 500.0
-
-        val importBtn = ButtonType("📥 Импорт из JSON (перезаписать БД)", ButtonBar.ButtonData.OK_DONE)
-        val exportBtn = ButtonType("📤 Экспорт в JSON (перезаписать файл)", ButtonBar.ButtonData.APPLY)
-        val cancelBtn = ButtonType("Отмена", ButtonBar.ButtonData.CANCEL_CLOSE)
-
-        alert.buttonTypes.setAll(importBtn, exportBtn, cancelBtn)
-
-        val result = alert.showAndWait()
-        when (result.orElse(null)) {
-            importBtn -> {
-                println("📥 Импортируем из JSON (перезапись БД)")
-                database.deleteAll()
-                database.saveEquipment(jsonData)
-                database.exportAllToJson()
-                showToast("✅ Импортировано ${jsonData.size} записей из JSON")
-                loadAndRefresh()
-                refreshEquipmentList()
-            }
-            exportBtn -> {
-                println("📤 Экспортируем БД в JSON (перезапись файла)")
-                database.exportAllToJson()
-                showToast("✅ БД экспортирована в JSON")
-                refreshMarkers()
-                refreshEquipmentList()
-            }
-            cancelBtn, null -> {
-                println("❌ Синхронизация отменена - оставляем данные из БД")
-            }
-        }
-    }
-
-
-    private fun importData() {
-        val imported = database.importFromJson()
-        if (imported != null && imported.isNotEmpty()) {
-            // Очищаем БД перед импортом, чтобы избежать дублирования
-            database.deleteAll()
-            database.saveEquipment(imported)
-            Platform.runLater {
-                val alert = Alert(AlertType.INFORMATION)
-                alert.title = "Импорт завершен"
-                alert.headerText = "✅ Данные успешно импортированы"
-                alert.contentText = """
-                Импортировано ${imported.size} записей.
-                
-                📊 Статистика:
-                - small: ${imported.count { it.size == "small" }}
-                - normal: ${imported.count { it.size == "normal" }}
-                - large: ${imported.count { it.size == "large" }}
-            """.trimIndent()
-                alert.showAndWait()
-
-                // Обновляем отображение
-                initEquipment()
-            }
-        } else {
-            Platform.runLater {
-                Alert(AlertType.WARNING).apply {
-                    title = "Импорт данных"
-                    headerText = "⚠️ Данные для импорта не найдены"
-                    contentText = "Файл экспорта пуст или отсутствует."
-                    showAndWait()
-                }
-            }
-        }
-    }
-
-    private fun showExportNotification(count: Int, message: String = "") {
-        val text = buildString {
-            append("💾 Экспортировано $count записей")
-            if (message.isNotEmpty()) append("\n$message")
-            append("\nФайл: ~/.defectmap/equipment_export.json")
-        }
-        showToast(text, javafx.util.Duration.seconds(2.5))
-    }
-
-    private fun showStatistics() {
-        val stats = database.getStatistics()
-        val total = database.getCount()
-
-        val sb = StringBuilder()
-        sb.append("📊 СТАТИСТИКА ОБОРУДОВАНИЯ\n")
-        sb.append("=".repeat(40) + "\n")
-        sb.append("Всего: $total шт.\n\n")
-
-        // stats уже содержит typeName -> count
-        stats.forEach { (typeName, count) ->
-            sb.append("  $typeName: $count шт.\n")
-        }
-
-        showInfo(sb.toString())
-    }
-
-    private fun refreshMarkers() {
-        val savedEquipment = loadEquipment()
-        if (savedEquipment.isEmpty()) return
-
-        val equipmentJson = gson.toJson(savedEquipment)
-        lastSavedHash = savedEquipment.hashCode()
-
-        // Полностью пересоздаём маркеры, а не просто обновляем позиции
-        webView.engine.executeScript("""
-        (function() {
-            // 1. Очищаем контейнер
-            var container = document.getElementById('equipment-container');
-            if (!container) {
-                var wrapper = document.getElementById('image-wrapper');
-                if (wrapper) {
-                    container = document.createElement('div');
-                    container.id = 'equipment-container';
-                    wrapper.appendChild(container);
-                }
-            }
-            if (container) {
-                container.innerHTML = '';
-            } else {
-                return;
-            }
-            
-            // 2. Загружаем данные
-            var savedData = $equipmentJson;
-            window.equipment = savedData;
-            
-            // 3. Создаём маркеры заново
-            savedData.forEach(function(item) {
-                var markers = item.markers;
-                if (!markers || markers.length === 0) {
-                    markers = [{left: item.left, top: item.top, isMain: true}];
-                }
-                
-                markers.forEach(function(markerPos, index) {
-                    var marker = document.createElement('div');
-                    var sizeClass = item.size || 'normal';
-                    marker.className = 'equipment-marker ' + item.type + ' ' + sizeClass;
-                    if (index > 0) marker.className += ' marker-extra';
-                    if (!${markersVisible}) {
-                        marker.className += ' hidden';
-                    }
-                    marker.id = item.id + '-marker-' + index;
-                    marker.style.left = markerPos.left + '%';
-                    marker.style.top = markerPos.top + '%';
-                    marker.dataset.equipmentId = item.id;
-                    marker.dataset.markerIndex = index;
-                    
-                    if (index > 0) {
-                        marker.style.border = '2px dashed rgba(255,255,255,0.5)';
-                    }
-                    
-                    marker.innerHTML = '<div class="dot">' + item.letter + '</div><span class="tooltip-text">' + item.name + '</span>';
-                    container.appendChild(marker);
-                });
-            });
-            
-            console.log('✅ Маркеры пересозданы: ' + savedData.length + ' единиц оборудования');
-        })();
-    """.trimIndent())
-    }
-
-    private fun refreshEquipmentList() {
-        Platform.runLater {
-            val stages = Stage.getWindows()
-            for (window in stages) {
-                if (window is Stage && window.title == "📋 Список оборудования") {
-                    val root = window.scene?.root
-                    if (root is VBox) {
-                        val tableView = findTableView(root)
-                        if (tableView != null) {
-                            @Suppress("UNCHECKED_CAST")
-                            val table = tableView as javafx.scene.control.TableView<EquipmentTableItem>
-
-                            val updatedData = loadEquipment()
-                            val items = updatedData.mapIndexed { index, eq ->
-                                val typeDisplayName = EquipmentTypes.ALL_TYPES.toMap()[eq.type] ?: eq.type
-                                EquipmentTableItem(
-                                    number = index + 1,
-                                    id = eq.id,
-                                    name = eq.name,
-                                    type = typeDisplayName,
-                                    cell = eq.cell,
-                                    left = eq.left,
-                                    top = eq.top
-                                )
-                            }
-                            table.items = javafx.collections.FXCollections.observableArrayList(items)
-
-                            val label = findCountLabel(root)
-                            label?.text = "Показано: ${updatedData.size} из ${updatedData.size}"
-                        }
-                    }
-                    break
-                }
-            }
-        }
-    }
-
     // ======================== ИНИЦИАЛИЗАЦИЯ ========================
 
     private fun initEquipment() {
@@ -1409,59 +1024,19 @@ class DefectMapController {
     }
     // ======================== КНОПКИ ========================
 
-    @FXML
-    private fun onForceImport() {
-        println("=".repeat(60))
-        println("📥 ПРИНУДИТЕЛЬНЫЙ ИМПОРТ")
-        println("=".repeat(60))
-
-        try {
-            val exportFile = File(System.getProperty("user.home"), ".defectmap/equipment_export.json")
-            if (!exportFile.exists()) {
-                showError("⚠️ Файл экспорта не найден:\n${exportFile.absolutePath}")
-                return
-            }
-
-            val imported = database.importFromJson()
-            if (imported == null || imported.isEmpty()) {
-                showError("⚠️ Данные для импорта не найдены или пустые")
-                return
-            }
-
-            val confirm = Alert(AlertType.CONFIRMATION)
-            confirm.title = "Принудительный импорт"
-            confirm.headerText = "📥 Импорт данных из JSON"
-            confirm.contentText = "Будет импортировано ${imported.size} записей.\n\nПродолжить?"
-
-            val result = confirm.showAndWait()
-            if (result.isPresent && result.get() == ButtonType.OK) {
-                // Очищаем БД и сохраняем новые данные
-                database.deleteAll()
-                database.saveEquipment(imported)
-                database.exportAllToJson()
-                database.syncFileTimestamps()
-
-                println("✅ Импортировано ${imported.size} записей в БД")
-
-                // Перезагружаем всё отображение
-                loadAndRefresh()
-                refreshEquipmentList()
-
-                showToast("✅ Импортировано ${imported.size} записей")
-            }
-
-        } catch (e: Exception) {
-            showError("Ошибка импорта: ${e.message}")
-            e.printStackTrace()
-        }
-    }
-
     private fun setupButtons() {
         viewEquipmentBtn.setOnAction { viewEquipmentList() }
         defectsBtn.setOnAction { showDefectsList() }
     }
 
     private fun toggleEditMode(enable: Boolean) {
+        // Если выключаем режим редактирования — сохраняем
+        if (!enable && isEditMode) {
+            println("💾 Сохраняем изменения при выходе из режима редактирования")
+            saveEquipment()
+            showToast("✅ Изменения сохранены")
+        }
+
         isEditMode = enable
 
         // Если выходим из режима редактирования — сбрасываем ID
@@ -2175,7 +1750,6 @@ class DefectMapController {
 
         database.saveEquipment(updatedList)
         syncWindowEquipment()
-        syncFileTimestamps()
         println("✅ Сохранено в БД для ${equipment.name}")
 
         // Обновляем маркер на схеме
@@ -2494,27 +2068,16 @@ class DefectMapController {
                     return
                 }
 
-                // Вычисляем хеш текущих данных
                 val currentHash = equipment.hashCode()
-
-                // Если данные не изменились - не сохраняем
                 if (currentHash == lastSavedHash && isInitialized) {
                     println("ℹ️ Данные не изменились, пропускаем сохранение")
                     return
                 }
 
                 println("💾 Сохраняем ${equipment.size} записей (прямое сохранение)")
-
-                // Сохраняем в БД
                 database.saveEquipment(equipment)
                 lastSavedHash = currentHash
-
-                // Экспортируем в JSON
-                database.exportAllToJson()
-                println("📤 Экспорт в JSON выполнен")
-
-                // Синхронизируем время файлов
-                syncFileTimestamps()
+                showToast("✅ Данные сохранены (${equipment.size} записей)")
 
             } catch (e: Exception) {
                 showError("Ошибка сохранения: ${e.message}")
@@ -3422,9 +2985,6 @@ class DefectMapController {
                 buttonPanel.alignment = Pos.CENTER_RIGHT
                 buttonPanel.style = "-fx-padding: 10px 0 0 0;"
 
-                val exportBtn = Button("📤 Экспорт CSV")
-                exportBtn.style = "-fx-background-color: #28a745; -fx-text-fill: white; -fx-font-size: 13px; -fx-padding: 6px 20px; -fx-background-radius: 4px;"
-                exportBtn.setOnAction { exportEquipmentToCsv() }
 
                 val closeBtn = Button("✕ Закрыть")
                 closeBtn.style = "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-font-size: 13px; -fx-padding: 6px 20px; -fx-background-radius: 4px;"
@@ -3437,7 +2997,7 @@ class DefectMapController {
                     searchField, cellSearchField
                 )
 
-                buttonPanel.children.addAll(exportBtn, closeBtn)
+                buttonPanel.children.addAll( closeBtn)
                 mainLayout.children.addAll(headerLabel, filterPanel, tableView, buttonPanel)
 
                 val popupStage = Stage()
@@ -3517,25 +3077,6 @@ class DefectMapController {
                 }
             })();
         """.trimIndent())
-    }
-
-    private fun exportEquipmentToCsv() {
-        // Загружаем данные ИЗ БД, а не из window.equipment
-        val equipment = database.loadAllEquipment()
-        if (equipment.isEmpty()) {
-            showInfo("Нет данных для экспорта")
-            return
-        }
-
-        val sb = StringBuilder()
-        sb.append("№;Наименование;Тип;Ячейка;X%;Y%;ID\n")
-        equipment.forEachIndexed { index, item ->
-            val mainMarker = item.markers.firstOrNull() ?: MarkerPosition(item.left, item.top, true)
-            sb.append("${index + 1};${item.name};${item.type};${item.cell};${mainMarker.left};${mainMarker.top};${item.id}\n")
-        }
-        val csvFile = File(System.getProperty("user.home"), ".defectmap/equipment_export.csv")
-        csvFile.writeText(sb.toString(), Charsets.UTF_8)
-        showInfo("✅ Экспортировано ${equipment.size} единиц оборудования в файл:\n${csvFile.absolutePath}")
     }
 
     // ======================== КЛИК ПО МЕТКЕ ========================
@@ -3619,13 +3160,6 @@ class DefectMapController {
     private var lastSavedHash = 0
 
     private fun saveEquipment() {
-        // Проверяем, не изменилась ли БД извне
-        if (database.checkExternalChanges()) {
-            println("⚠️ БД была изменена извне, перезагружаем данные")
-            initEquipment()
-            return
-        }
-
         val result = webView.engine.executeScript("""
         JSON.stringify(window.equipment || [])
     """.trimIndent()) as? String
@@ -3640,30 +3174,17 @@ class DefectMapController {
                     return
                 }
 
-                // Вычисляем хеш текущих данных
                 val currentHash = equipment.hashCode()
-
-                // Если данные не изменились - не сохраняем
                 if (currentHash == lastSavedHash && isInitialized) {
                     println("ℹ️ Данные не изменились, пропускаем сохранение")
                     return
                 }
 
                 println("💾 Сохраняем ${equipment.size} записей")
-
-                // Сохраняем в БД
                 database.saveEquipment(equipment)
                 lastSavedHash = currentHash
-
-                // Синхронизируем window.equipment с БД
                 syncWindowEquipment()
-
-                // Экспортируем в JSON
-                database.exportAllToJson()
-                println("📤 Экспорт в JSON выполнен")
-
-                // Синхронизируем время файлов
-                syncFileTimestamps()
+                showToast("✅ Данные сохранены (${equipment.size} записей)")
 
             } catch (e: Exception) {
                 showError("Ошибка сохранения: ${e.message}")

@@ -10,29 +10,15 @@ import java.io.File
 class Database {
     private var connection: Connection? = null
 
-    // В Database.kt
-    private var lastKnownDbModificationTime: Long = 0
+    // ===== ПОРТАТИВНЫЙ ПУТЬ: БД В ПАПКЕ С JAR =====
+    private val APP_DIR: String by lazy { getAppDirectory() }
 
-    fun checkExternalChanges(): Boolean {
-        val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
-        if (!dbFile.exists()) return false
-
-        val currentTime = dbFile.lastModified()
-        val hasChanged = currentTime != lastKnownDbModificationTime && lastKnownDbModificationTime != 0L
-
-        if (hasChanged) {
-            println("🔄 Обнаружено изменение БД извне: ${java.util.Date(currentTime)}")
-            // Обновляем внутреннее состояние
-            syncFromDb()
-        }
-
-        lastKnownDbModificationTime = currentTime
-        return hasChanged
+    private val DB_PATH: String by lazy {
+        File(APP_DIR, "equipment.db").absolutePath
     }
 
-    fun syncFromDb() {
-        // Принудительно синхронизируем window.equipment из БД
-        // Вызывается из контроллера
+    private val BACKUP_DIR: File by lazy {
+        File(APP_DIR, "backups").also { it.mkdirs() }
     }
 
     init {
@@ -45,58 +31,190 @@ class Database {
         migrateMarkerIds()
     }
 
+    // ======================== ОПРЕДЕЛЕНИЕ ПАПКИ ПРИЛОЖЕНИЯ ========================
+
+    private fun getAppDirectory(): String {
+        return try {
+            val codeSource = Database::class.java.protectionDomain.codeSource
+            val location = codeSource.location.toURI().path
+            val jarFile = File(location)
+
+            if (jarFile.isFile) {
+                jarFile.parent
+            } else {
+                System.getProperty("user.dir")
+            }
+        } catch (e: Exception) {
+            System.getProperty("user.dir")
+        }
+    }
+
+    // ======================== ПОДКЛЮЧЕНИЕ ========================
+
+    private fun connect() {
+        val dbFile = File(DB_PATH)
+        dbFile.parentFile?.mkdirs()
+        connection = DriverManager.getConnection("jdbc:sqlite:$DB_PATH")
+        connection?.autoCommit = true
+        println("✅ База данных подключена: $DB_PATH")
+    }
+
+    fun close() {
+        connection?.close()
+        println("🔒 База данных закрыта")
+    }
+
+    fun reconnect() {
+        close()
+        connect()
+        println("🔄 Соединение с БД переустановлено")
+    }
+
+    // ======================== ТАБЛИЦЫ ========================
+
+    private fun createTable() {
+        val sql = """
+            CREATE TABLE IF NOT EXISTS equipment (
+                id TEXT PRIMARY KEY,
+                type TEXT NOT NULL,
+                name TEXT NOT NULL,
+                letter TEXT NOT NULL,
+                cell TEXT DEFAULT '',
+                size TEXT DEFAULT 'normal',
+                markers TEXT DEFAULT '[]',
+                created_at INTEGER DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+            )
+        """.trimIndent()
+        executeUpdate(sql)
+        println("✅ Таблица equipment создана")
+    }
+
     private fun createDefectsTable() {
         val sql = """
-        CREATE TABLE IF NOT EXISTS defects (
-            id TEXT PRIMARY KEY,
-            equipment_id TEXT NOT NULL,
-            name TEXT NOT NULL,
-            description TEXT,
-            severity TEXT DEFAULT 'medium',
-            status TEXT DEFAULT 'open',
-            detection_date INTEGER,
-            repair_date INTEGER,
-            photo_path TEXT,
-            notes TEXT,
-            marker_left REAL,
-            marker_top REAL,
-            created_at INTEGER DEFAULT (strftime('%s', 'now')),
-            updated_at INTEGER DEFAULT (strftime('%s', 'now')),
-            FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE
-        )
-    """.trimIndent()
+            CREATE TABLE IF NOT EXISTS defects (
+                id TEXT PRIMARY KEY,
+                equipment_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT,
+                severity TEXT DEFAULT 'medium',
+                status TEXT DEFAULT 'open',
+                detection_date INTEGER,
+                repair_date INTEGER,
+                photo_path TEXT,
+                notes TEXT,
+                marker_left REAL,
+                marker_top REAL,
+                created_at INTEGER DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER DEFAULT (strftime('%s', 'now')),
+                FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE
+            )
+        """.trimIndent()
         executeUpdate(sql)
         println("✅ Таблица defects создана")
     }
 
-    // ======================== ДЕФЕКТЫ ========================
+    private fun addSizeColumnIfNotExists() {
+        try {
+            executeUpdate("ALTER TABLE equipment ADD COLUMN size TEXT DEFAULT 'normal'")
+            println("✅ Колонка size добавлена")
+        } catch (e: Exception) {
+            println("ℹ️ Колонка size уже существует")
+        }
+    }
+
+    private fun addMarkersColumnIfNotExists() {
+        try {
+            executeUpdate("ALTER TABLE equipment ADD COLUMN markers TEXT DEFAULT '[]'")
+            println("✅ Колонка markers добавлена")
+        } catch (e: Exception) {
+            println("ℹ️ Колонка markers уже существует")
+        }
+    }
+
+    // ======================== БЭКАП ========================
 
     fun autoBackup() {
-        val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
+        val dbFile = File(DB_PATH)
         if (!dbFile.exists()) return
 
-        val backupDir = File(System.getProperty("user.home"), ".defectmap/backups")
-        backupDir.mkdirs()
+        BACKUP_DIR.mkdirs()
 
         val timestamp = java.text.SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(java.util.Date())
-        val backupFile = File(backupDir, "equipment_$timestamp.db")
+        val backupFile = File(BACKUP_DIR, "equipment_$timestamp.db")
         dbFile.copyTo(backupFile, overwrite = false)
         println("💾 Автобэкап создан: ${backupFile.absolutePath}")
     }
 
-    fun validateDataConsistency(): Boolean {
-        val equipmentCount = getCount()
-        val defectsCount = getDefectsCount()
+    // ======================== ОБОРУДОВАНИЕ ========================
 
-        if (equipmentCount > 0 && defectsCount == 0) {
-            println("⚠️ Обнаружена БД с оборудованием, но без дефектов! Возможна потеря данных.")
-            return false
+    fun saveEquipment(equipment: List<EquipmentData>) {
+        if (equipment.isEmpty()) {
+            println("⚠️ Нет данных для сохранения")
+            return
         }
-        return true
+
+        val gson = GsonBuilder().create()
+        val sql = """
+            INSERT OR REPLACE INTO equipment 
+            (id, type, name, letter, cell, size, markers, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+        """.trimIndent()
+
+        connection?.prepareStatement(sql)?.use { stmt ->
+            equipment.forEach { item ->
+                val safeMarkers = item.markers
+                val markersJson = if (safeMarkers.isNotEmpty()) {
+                    gson.toJson(safeMarkers)
+                } else {
+                    gson.toJson(listOf(MarkerPosition(item.left, item.top, true)))
+                }
+
+                stmt.setString(1, item.id)
+                stmt.setString(2, item.type)
+                stmt.setString(3, item.name)
+                stmt.setString(4, item.letter)
+                stmt.setString(5, item.cell)
+                stmt.setString(6, item.size)
+                stmt.setString(7, markersJson)
+                stmt.addBatch()
+            }
+            stmt.executeBatch()
+        }
+        println("💾 Сохранено ${equipment.size} записей в БД")
     }
 
-    fun getDefectsCount(): Int {
-        val sql = "SELECT COUNT(*) as count FROM defects"
+    fun loadAllEquipment(): List<EquipmentData> {
+        val result = mutableListOf<EquipmentData>()
+        val sql = "SELECT * FROM equipment ORDER BY name"
+
+        connection?.prepareStatement(sql)?.use { stmt ->
+            val rs = stmt.executeQuery()
+            while (rs.next()) {
+                result.add(mapRowToEquipment(rs))
+            }
+        }
+        println("📂 Загружено ${result.size} записей из БД")
+        return result
+    }
+
+    fun deleteById(id: String): Boolean {
+        val sql = "DELETE FROM equipment WHERE id = ?"
+        return connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.setString(1, id)
+            stmt.executeUpdate() > 0
+        } ?: false
+    }
+
+    fun deleteAll(): Boolean {
+        val sql = "DELETE FROM equipment"
+        return connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.executeUpdate() > 0
+        } ?: false
+    }
+
+    fun getCount(): Int {
+        val sql = "SELECT COUNT(*) as count FROM equipment"
         connection?.prepareStatement(sql)?.use { stmt ->
             val rs = stmt.executeQuery()
             return rs.getInt("count")
@@ -104,12 +222,57 @@ class Database {
         return 0
     }
 
+    fun getStatistics(): Map<String, Int> {
+        val stats = mutableMapOf<String, Int>()
+        val sql = "SELECT type, COUNT(*) as count FROM equipment GROUP BY type ORDER BY count DESC"
+
+        connection?.prepareStatement(sql)?.use { stmt ->
+            val rs = stmt.executeQuery()
+            while (rs.next()) {
+                val type = rs.getString("type")
+                val count = rs.getInt("count")
+                val typeName = EquipmentTypes.getTypeName(type)
+                stats[typeName] = count
+            }
+        }
+        return stats
+    }
+
+    private fun mapRowToEquipment(rs: ResultSet): EquipmentData {
+        val gson = GsonBuilder().create()
+        val markersJson = rs.getString("markers") ?: "[]"
+        val markers: List<MarkerPosition> = try {
+            val type = object : TypeToken<List<MarkerPosition>>() {}.type
+            gson.fromJson(markersJson, type)
+        } catch (e: Exception) {
+            listOf(MarkerPosition(
+                rs.getDouble("left"),
+                rs.getDouble("top"),
+                true
+            ))
+        }
+
+        return EquipmentData(
+            id = rs.getString("id"),
+            left = markers.firstOrNull()?.left ?: rs.getDouble("left"),
+            top = markers.firstOrNull()?.top ?: rs.getDouble("top"),
+            type = rs.getString("type"),
+            name = rs.getString("name"),
+            letter = rs.getString("letter"),
+            cell = rs.getString("cell") ?: "",
+            size = rs.getString("size") ?: "normal",
+            markers = markers
+        )
+    }
+
+    // ======================== ДЕФЕКТЫ ========================
+
     fun saveDefect(defect: DefectData) {
         val sql = """
-        INSERT OR REPLACE INTO defects 
-        (id, equipment_id, name, description, severity, status, detection_date, repair_date, photo_path, notes, marker_left, marker_top, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
-    """.trimIndent()
+            INSERT OR REPLACE INTO defects 
+            (id, equipment_id, name, description, severity, status, detection_date, repair_date, photo_path, notes, marker_left, marker_top, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+        """.trimIndent()
 
         connection?.prepareStatement(sql)?.use { stmt ->
             stmt.setString(1, defect.id)
@@ -127,8 +290,6 @@ class Database {
             stmt.executeUpdate()
         }
         println("💾 Дефект сохранён: ${defect.name}")
-        // После сохранения — автоэкспорт
-        exportAllToJson()
     }
 
     fun getDefectsByEquipment(equipmentId: String): List<DefectData> {
@@ -152,11 +313,19 @@ class Database {
             stmt.executeUpdate()
         }
         println("🗑️ Дефект удалён: $defectId")
-        exportAllToJson()
     }
 
     fun updateDefect(defect: DefectData) {
         saveDefect(defect)
+    }
+
+    fun getDefectsCount(): Int {
+        val sql = "SELECT COUNT(*) as count FROM defects"
+        connection?.prepareStatement(sql)?.use { stmt ->
+            val rs = stmt.executeQuery()
+            return rs.getInt("count")
+        }
+        return 0
     }
 
     private fun mapRowToDefect(rs: ResultSet): DefectData {
@@ -176,272 +345,40 @@ class Database {
         )
     }
 
-    private fun addMarkersColumnIfNotExists() {
+    // ======================== МИГРАЦИЯ ========================
+
+    private fun migrateMarkerIds() {
         try {
-            executeUpdate("ALTER TABLE equipment ADD COLUMN markers TEXT DEFAULT '[]'")
-            println("✅ Колонка markers добавлена")
-        } catch (e: Exception) {
-            println("ℹ️ Колонка markers уже существует")
-        }
-    }
+            val sql = "SELECT id FROM equipment WHERE id LIKE 'marker-%'"
+            val stmt = connection?.prepareStatement(sql)
+            val rs = stmt?.executeQuery()
+            val idsToUpdate = mutableListOf<String>()
+            while (rs?.next() == true) {
+                idsToUpdate.add(rs.getString("id"))
+            }
+            rs?.close()
+            stmt?.close()
 
-    private fun connect() {
-        val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
-        dbFile.parentFile?.mkdirs()  // <-- СОЗДАЁМ ПАПКУ, ЕСЛИ ЕЁ НЕТ
-        val dbPath = dbFile.absolutePath
-        connection = DriverManager.getConnection("jdbc:sqlite:$dbPath")
-        connection?.autoCommit = true
-        println("✅ База данных подключена: $dbPath")
-    }
-
-    private fun createTable() {
-        val sql = """
-        CREATE TABLE IF NOT EXISTS equipment (
-            id TEXT PRIMARY KEY,
-            type TEXT NOT NULL,
-            name TEXT NOT NULL,
-            letter TEXT NOT NULL,
-            cell TEXT DEFAULT '',
-            size TEXT DEFAULT 'normal',
-            markers TEXT DEFAULT '[]',
-            created_at INTEGER DEFAULT (strftime('%s', 'now')),
-            updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-        )
-    """.trimIndent()
-        executeUpdate(sql)
-        println("✅ Таблица equipment создана")
-    }
-
-    private fun addSizeColumnIfNotExists() {
-        try {
-            executeUpdate("ALTER TABLE equipment ADD COLUMN size TEXT DEFAULT 'normal'")
-            println("✅ Колонка size добавлена")
-        } catch (e: Exception) {
-            println("ℹ️ Колонка size уже существует")
-        }
-    }
-
-    // ======================== СОХРАНЕНИЕ ========================
-
-    private val exportFile: File by lazy {
-        // ===== JSON В ПАПКЕ ПРОЕКТА (КОММИТИТСЯ В GIT) =====
-        File("equipment_export.json")
-    }
-
-    fun saveEquipment(equipment: List<EquipmentData>) {
-        if (equipment.isEmpty()) {
-            println("⚠️ Нет данных для сохранения")
-            return
-        }
-
-        val gson = GsonBuilder().create()
-        val sql = """
-        INSERT OR REPLACE INTO equipment 
-        (id, type, name, letter, cell, size, markers, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
-    """.trimIndent()
-
-        connection?.prepareStatement(sql)?.use { stmt ->
-            equipment.forEach { item ->
-                val safeMarkers = item.markers
-                val markersJson = if (safeMarkers.isNotEmpty()) {
-                    gson.toJson(safeMarkers)
-                } else {
-                    gson.toJson(listOf(MarkerPosition(0.0, 0.0, true)))
+            if (idsToUpdate.isNotEmpty()) {
+                println("🔄 Найдено ${idsToUpdate.size} записей с marker- ID, исправляем...")
+                idsToUpdate.forEach { oldId ->
+                    val newId = oldId.replace("marker-", "equipment-")
+                    val updateSql = "UPDATE equipment SET id = ? WHERE id = ?"
+                    connection?.prepareStatement(updateSql)?.use { updateStmt ->
+                        updateStmt.setString(1, newId)
+                        updateStmt.setString(2, oldId)
+                        updateStmt.executeUpdate()
+                        println("  ✅ $oldId → $newId")
+                    }
                 }
-
-                stmt.setString(1, item.id)
-                stmt.setString(2, item.type)
-                stmt.setString(3, item.name)
-                stmt.setString(4, item.letter)
-                stmt.setString(5, item.cell)
-                stmt.setString(6, item.size)
-                stmt.setString(7, markersJson)
-                stmt.addBatch()
+                println("✅ Миграция ID завершена")
             }
-            stmt.executeBatch()
-        }
-        println("💾 Сохранено ${equipment.size} записей в БД")
-        exportToJson(equipment)
-        println("📤 Автоэкспорт в JSON выполнен")
-    }
-
-    fun reconnect() {
-        close()
-        connect()
-        println("🔄 Соединение с БД переустановлено")
-    }
-
-
-
-    // ======================== ЗАГРУЗКА ========================
-
-    fun loadAllEquipment(): List<EquipmentData> {
-        val result = mutableListOf<EquipmentData>()
-        val sql = "SELECT * FROM equipment ORDER BY name"
-
-        connection?.prepareStatement(sql)?.use { stmt ->
-            val rs = stmt.executeQuery()
-            while (rs.next()) {
-                result.add(mapRowToEquipment(rs))
-            }
-        }
-        println("📂 Загружено ${result.size} записей из БД")
-        return result
-    }
-
-    fun findByType(type: String): List<EquipmentData> {
-        val result = mutableListOf<EquipmentData>()
-        val sql = "SELECT * FROM equipment WHERE type = ? ORDER BY name"
-
-        connection?.prepareStatement(sql)?.use { stmt ->
-            stmt.setString(1, type)
-            val rs = stmt.executeQuery()
-            while (rs.next()) {
-                result.add(mapRowToEquipment(rs))
-            }
-        }
-        return result
-    }
-
-    fun searchByName(query: String): List<EquipmentData> {
-        val result = mutableListOf<EquipmentData>()
-        val sql = "SELECT * FROM equipment WHERE name LIKE ? ORDER BY name"
-
-        connection?.prepareStatement(sql)?.use { stmt ->
-            stmt.setString(1, "%$query%")
-            val rs = stmt.executeQuery()
-            while (rs.next()) {
-                result.add(mapRowToEquipment(rs))
-            }
-        }
-        return result
-    }
-
-    fun findByCell(cell: String): List<EquipmentData> {
-        val result = mutableListOf<EquipmentData>()
-        val sql = "SELECT * FROM equipment WHERE cell = ? ORDER BY name"
-
-        connection?.prepareStatement(sql)?.use { stmt ->
-            stmt.setString(1, cell)
-            val rs = stmt.executeQuery()
-            while (rs.next()) {
-                result.add(mapRowToEquipment(rs))
-            }
-        }
-        return result
-    }
-
-    // ======================== УДАЛЕНИЕ ========================
-
-    fun deleteById(id: String): Boolean {
-        val sql = "DELETE FROM equipment WHERE id = ?"
-        return connection?.prepareStatement(sql)?.use { stmt ->
-            stmt.setString(1, id)
-            stmt.executeUpdate() > 0
-        } ?: false
-    }
-
-    fun deleteAll(): Boolean {
-        val sql = "DELETE FROM equipment"
-        return connection?.prepareStatement(sql)?.use { stmt ->
-            stmt.executeUpdate() > 0
-        } ?: false
-    }
-
-    // ======================== СТАТИСТИКА ========================
-
-    fun getStatistics(): Map<String, Int> {
-        val stats = mutableMapOf<String, Int>()
-        val sql = "SELECT type, COUNT(*) as count FROM equipment GROUP BY type ORDER BY count DESC"
-
-        connection?.prepareStatement(sql)?.use { stmt ->
-            val rs = stmt.executeQuery()
-            while (rs.next()) {
-                val type = rs.getString("type")
-                val count = rs.getInt("count")
-                val typeName = EquipmentTypes.getTypeName(type)
-                stats[typeName] = count
-            }
-        }
-        return stats
-    }
-
-    fun getCount(): Int {
-        val sql = "SELECT COUNT(*) as count FROM equipment"
-        connection?.prepareStatement(sql)?.use { stmt ->
-            val rs = stmt.executeQuery()
-            return rs.getInt("count")
-        }
-        return 0
-    }
-
-    fun getCountBySize(size: String): Int {
-        val sql = "SELECT COUNT(*) as count FROM equipment WHERE size = ?"
-        connection?.prepareStatement(sql)?.use { stmt ->
-            stmt.setString(1, size)
-            val rs = stmt.executeQuery()
-            return rs.getInt("count")
-        }
-        return 0
-    }
-
-    // ======================== ВСПОМОГАТЕЛЬНЫЕ ========================
-
-    private fun mapRowToEquipment(rs: ResultSet): EquipmentData {
-        val gson = GsonBuilder().create()
-        val markersJson = rs.getString("markers") ?: "[]"
-        val markers: List<MarkerPosition> = try {
-            val type = object : TypeToken<List<MarkerPosition>>() {}.type
-            gson.fromJson(markersJson, type)
         } catch (e: Exception) {
-            listOf(MarkerPosition(0.0, 0.0, true))
-        }
-
-        return EquipmentData(
-            id = rs.getString("id"),
-            left = markers.firstOrNull()?.left ?: 0.0,  // Берём из маркеров
-            top = markers.firstOrNull()?.top ?: 0.0,   // Берём из маркеров
-            type = rs.getString("type"),
-            name = rs.getString("name"),
-            letter = rs.getString("letter"),
-            cell = rs.getString("cell") ?: "",
-            size = rs.getString("size") ?: "normal",
-            markers = markers
-        )
-    }
-
-    private fun executeUpdate(sql: String) {
-        connection?.createStatement()?.use { stmt ->
-            stmt.executeUpdate(sql)
+            println("⚠️ Ошибка миграции ID: ${e.message}")
         }
     }
 
-    fun close() {
-        connection?.close()
-        println("🔒 База данных закрыта")
-    }
-
-    // ======================== ЭКСПОРТ/ИМПОРТ ========================
-
-    fun getLastExportTimestamp(): Long {
-        return if (exportFile.exists()) {
-            exportFile.lastModified()
-        } else {
-            0L
-        }
-    }
-
-    fun getLastDbUpdate(): Long {
-        val sql = "SELECT MAX(updated_at) as max_updated FROM equipment"
-        connection?.prepareStatement(sql)?.use { stmt ->
-            val rs = stmt.executeQuery()
-            if (rs.next()) {
-                return rs.getLong("max_updated") * 1000
-            }
-        }
-        return 0L
-    }
+    // ======================== РУЧНОЙ ИМПОРТ/ЭКСПОРТ (ПО ТРЕБОВАНИЮ) ========================
 
     fun exportToJson(equipment: List<EquipmentData>) {
         try {
@@ -462,8 +399,7 @@ class Database {
                 )
             }
             val json = gson.toJson(exportData)
-            // ===== СОХРАНЯЕМ В ПАПКУ ПРОЕКТА =====
-            val exportFile = File("equipment_export.json")
+            val exportFile = File(APP_DIR, "equipment_export.json")
             exportFile.writeText(json, Charsets.UTF_8)
             println("📤 Экспортировано ${equipment.size} записей с дефектами в JSON")
             println("📁 Файл: ${exportFile.absolutePath}")
@@ -472,11 +408,21 @@ class Database {
         }
     }
 
+    fun exportAllToJson() {
+        val allEquipment = loadAllEquipment()
+        println("📊 Экспортируем ${allEquipment.size} записей")
+        allEquipment.forEach { eq ->
+            val defects = getDefectsByEquipment(eq.id)
+            println("  📌 ${eq.name}: ${defects.size} дефектов")
+        }
+        exportToJson(allEquipment)
+    }
+
     fun importFromJson(): List<EquipmentData>? {
         try {
-            val importFile = File("equipment_export.json")
+            val importFile = File(APP_DIR, "equipment_export.json")
             if (!importFile.exists()) {
-                println("⚠️ Файл экспорта не найден")
+                println("⚠️ Файл экспорта не найден: ${importFile.absolutePath}")
                 return null
             }
 
@@ -491,7 +437,6 @@ class Database {
                 val id = map["id"] as? String ?: ""
                 if (id.isEmpty()) return@forEach
 
-                // Парсим маркеры
                 val markersData = map["markers"]
                 val markers: List<MarkerPosition> = when (markersData) {
                     is List<*> -> {
@@ -542,7 +487,6 @@ class Database {
                 result.add(equipment)
             }
 
-            // Импортируем дефекты
             data.forEach { map ->
                 val defectsJson = map["defects"] as? String ?: "[]"
                 try {
@@ -563,23 +507,12 @@ class Database {
         }
     }
 
-    fun getDbFileModificationTime(): Long {
-        val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
-        return if (dbFile.exists()) dbFile.lastModified() else 0L
-    }
-
-    fun getJsonFileModificationTime(): Long {
-        val jsonFile = File("equipment_export.json")
-        return if (jsonFile.exists()) jsonFile.lastModified() else 0L
-    }
-
     fun syncFileTimestamps() {
         try {
-            val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
-            val jsonFile = File("equipment_export.json")
-            if (dbFile.exists() && jsonFile.exists()) {
-                // Делаем время JSON равным времени БД
-                jsonFile.setLastModified(dbFile.lastModified())
+            val dbFile = File(DB_PATH)
+            val exportFile = File(APP_DIR, "equipment_export.json")
+            if (dbFile.exists() && exportFile.exists()) {
+                exportFile.setLastModified(dbFile.lastModified())
                 println("🔄 Время JSON синхронизировано с БД")
             }
         } catch (e: Exception) {
@@ -587,56 +520,11 @@ class Database {
         }
     }
 
-    // ======================== ЭКСПОРТ ВСЕХ ДАННЫХ ========================
+    // ======================== ВСПОМОГАТЕЛЬНЫЕ ========================
 
-    fun exportAllToJson() {
-        val allEquipment = loadAllEquipment()
-        println("📊 Экспортируем ${allEquipment.size} записей")
-        allEquipment.forEach { eq ->
-            val defects = getDefectsByEquipment(eq.id)
-            println("  📌 ${eq.name}: ${defects.size} дефектов")
-        }
-        exportToJson(allEquipment)
-    }
-
-    fun clearAndImport(equipment: List<EquipmentData>) {
-        // Очищаем таблицу
-        deleteAll()
-        // Сохраняем новые данные
-        saveEquipment(equipment)
-        // Экспортируем в JSON для синхронизации
-        exportAllToJson()
-        println("✅ Данные очищены и импортированы: ${equipment.size} записей")
-    }
-
-    private fun migrateMarkerIds() {
-        try {
-            val sql = "SELECT id FROM equipment WHERE id LIKE 'marker-%'"
-            val stmt = connection?.prepareStatement(sql)
-            val rs = stmt?.executeQuery()
-            val idsToUpdate = mutableListOf<String>()
-            while (rs?.next() == true) {
-                idsToUpdate.add(rs.getString("id"))
-            }
-            rs?.close()
-            stmt?.close()
-
-            if (idsToUpdate.isNotEmpty()) {
-                println("🔄 Найдено ${idsToUpdate.size} записей с marker- ID, исправляем...")
-                idsToUpdate.forEach { oldId ->
-                    val newId = oldId.replace("marker-", "equipment-")
-                    val updateSql = "UPDATE equipment SET id = ? WHERE id = ?"
-                    connection?.prepareStatement(updateSql)?.use { updateStmt ->
-                        updateStmt.setString(1, newId)
-                        updateStmt.setString(2, oldId)
-                        updateStmt.executeUpdate()
-                        println("  ✅ $oldId → $newId")
-                    }
-                }
-                println("✅ Миграция ID завершена")
-            }
-        } catch (e: Exception) {
-            println("⚠️ Ошибка миграции ID: ${e.message}")
+    private fun executeUpdate(sql: String) {
+        connection?.createStatement()?.use { stmt ->
+            stmt.executeUpdate(sql)
         }
     }
 }
