@@ -42,6 +42,7 @@ class Database {
         createDefectsTable()
         addSizeColumnIfNotExists()
         addMarkersColumnIfNotExists()
+        migrateMarkerIds()
     }
 
     private fun createDefectsTable() {
@@ -69,6 +70,39 @@ class Database {
     }
 
     // ======================== ДЕФЕКТЫ ========================
+
+    fun autoBackup() {
+        val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
+        if (!dbFile.exists()) return
+
+        val backupDir = File(System.getProperty("user.home"), ".defectmap/backups")
+        backupDir.mkdirs()
+
+        val timestamp = java.text.SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(java.util.Date())
+        val backupFile = File(backupDir, "equipment_$timestamp.db")
+        dbFile.copyTo(backupFile, overwrite = false)
+        println("💾 Автобэкап создан: ${backupFile.absolutePath}")
+    }
+
+    fun validateDataConsistency(): Boolean {
+        val equipmentCount = getCount()
+        val defectsCount = getDefectsCount()
+
+        if (equipmentCount > 0 && defectsCount == 0) {
+            println("⚠️ Обнаружена БД с оборудованием, но без дефектов! Возможна потеря данных.")
+            return false
+        }
+        return true
+    }
+
+    fun getDefectsCount(): Int {
+        val sql = "SELECT COUNT(*) as count FROM defects"
+        connection?.prepareStatement(sql)?.use { stmt ->
+            val rs = stmt.executeQuery()
+            return rs.getInt("count")
+        }
+        return 0
+    }
 
     fun saveDefect(defect: DefectData) {
         val sql = """
@@ -573,6 +607,37 @@ class Database {
         // Экспортируем в JSON для синхронизации
         exportAllToJson()
         println("✅ Данные очищены и импортированы: ${equipment.size} записей")
+    }
+
+    private fun migrateMarkerIds() {
+        try {
+            val sql = "SELECT id FROM equipment WHERE id LIKE 'marker-%'"
+            val stmt = connection?.prepareStatement(sql)
+            val rs = stmt?.executeQuery()
+            val idsToUpdate = mutableListOf<String>()
+            while (rs?.next() == true) {
+                idsToUpdate.add(rs.getString("id"))
+            }
+            rs?.close()
+            stmt?.close()
+
+            if (idsToUpdate.isNotEmpty()) {
+                println("🔄 Найдено ${idsToUpdate.size} записей с marker- ID, исправляем...")
+                idsToUpdate.forEach { oldId ->
+                    val newId = oldId.replace("marker-", "equipment-")
+                    val updateSql = "UPDATE equipment SET id = ? WHERE id = ?"
+                    connection?.prepareStatement(updateSql)?.use { updateStmt ->
+                        updateStmt.setString(1, newId)
+                        updateStmt.setString(2, oldId)
+                        updateStmt.executeUpdate()
+                        println("  ✅ $oldId → $newId")
+                    }
+                }
+                println("✅ Миграция ID завершена")
+            }
+        } catch (e: Exception) {
+            println("⚠️ Ошибка миграции ID: ${e.message}")
+        }
     }
 }
 

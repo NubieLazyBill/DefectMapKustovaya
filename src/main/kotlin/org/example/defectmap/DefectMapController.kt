@@ -44,7 +44,16 @@ import javafx.collections.FXCollections
 import javafx.scene.control.TableRow
 import javafx.scene.control.ButtonBar
 import javafx.animation.FadeTransition
+import javafx.scene.control.DatePicker
 import javafx.util.Duration
+import javafx.scene.control.Dialog
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.ZoneId
+import java.time.Instant
+
+
+
 
 
 class DefectMapController {
@@ -101,28 +110,466 @@ class DefectMapController {
 
     private var isInitialized = false  // <-- ДОБАВИТЬ
 
-    @FXML
-    private lateinit var forceRefreshBtn: Button
+    private var dragStartX = 0.0
+    private var dragStartY = 0.0
+    private val DRAG_THRESHOLD = 5.0  // пикселей
 
     @FXML
-    private fun onForceRefresh() {
-        println("🔄 ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ МАРКЕРОВ")
+    private fun onCreateReport() {
+        println("📊 СОЗДАНИЕ ОТЧЁТА")
 
-        // 1. Пересоздаём соединение с БД
-        database.close()
-        // Database создаётся через lazy, нужно пересоздать
-        // Просто вызываем метод, который переоткроет соединение
-        database.reconnect()
+        try {
+            // 1. Загружаем все данные
+            val allEquipment = loadEquipment()
+            if (allEquipment.isEmpty()) {
+                showInfo("📋 Нет данных для отчёта")
+                return
+            }
 
-        // 2. Загружаем данные из БД
-        val savedEquipment = database.loadAllEquipment()
-        println("📂 Загружено из БД: ${savedEquipment.size} шт.")
+            // 2. Собираем все дефекты с информацией об оборудовании
+            val reportData = mutableListOf<ReportItem>()
+            allEquipment.forEach { eq ->
+                val defects = database.getDefectsByEquipment(eq.id)
+                defects.forEach { defect ->
+                    reportData.add(
+                        ReportItem(
+                            equipmentName = eq.name,
+                            equipmentType = EquipmentTypes.getTypeName(eq.type),
+                            equipmentCell = eq.cell,
+                            defectName = defect.name,
+                            defectDescription = defect.description,
+                            defectStatus = if (defect.status == "fixed") "Устранён" else "Обнаружен",
+                            markerLeft = defect.markerLeft,
+                            markerTop = defect.markerTop,
+                            detectionDate = defect.detectionDate
+                        )
+                    )
+                }
+            }
 
-        // ... остальной код ...
+            if (reportData.isEmpty()) {
+                showInfo("📋 Нет зарегистрированных дефектов для отчёта")
+                return
+            }
+
+            // 3. Показываем диалог с фильтрами
+            showReportDialog(reportData)
+
+        } catch (e: Exception) {
+            showError("Ошибка создания отчёта: ${e.message}")
+            e.printStackTrace()
+        }
     }
+
+    private fun showReportDialog(reportData: List<ReportItem>) {
+        val reportStage = Stage()
+        reportStage.title = "📊 Создание отчёта"
+        reportStage.isResizable = true
+        reportStage.minWidth = 650.0
+        reportStage.minHeight = 580.0
+
+        val ownerStage = webView.scene.window as Stage
+        reportStage.initOwner(ownerStage)
+        reportStage.initModality(javafx.stage.Modality.NONE)
+
+        // ===== КОРНЕВОЙ КОНТЕЙНЕР (БЕЗ ПРОКРУТКИ) =====
+        val root = VBox(15.0)
+        root.style = "-fx-background-color: white; -fx-padding: 20px;"
+
+        // ===== ЗАГОЛОВОК =====
+        val headerLabel = Label("📊 Настройка отчёта")
+        headerLabel.style = "-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #333;"
+
+        // ===== КОНТЕЙНЕР С ФИЛЬТРАМИ =====
+        val filtersBox = VBox(10.0)
+        filtersBox.style = "-fx-padding: 10px 0;"
+
+        // ===== Фильтр по статусу =====
+        val statusLabel = Label("Статус дефектов:")
+        statusLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
+        val statusCombo = ComboBox<String>()
+        statusCombo.items.addAll("Все", "Обнаружен", "Устранён")
+        statusCombo.value = "Все"
+        statusCombo.style = "-fx-pref-width: 150px;"
+
+        // ===== Фильтр по типу оборудования =====
+        val typeLabel = Label("Тип оборудования:")
+        typeLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
+        val typeCombo = ComboBox<String>()
+        val allTypes = listOf("Все") + EquipmentTypes.ALL_TYPES.map { it.second }
+        typeCombo.items.addAll(allTypes)
+        typeCombo.value = "Все"
+        typeCombo.style = "-fx-pref-width: 180px;"
+
+        // ===== Фильтр по ячейке =====
+        val cellLabel = Label("Ячейка:")
+        cellLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
+        val cellField = TextField()
+        cellField.promptText = "Введите номер ячейки..."
+        cellField.style = "-fx-pref-width: 180px;"
+
+        // ===== Фильтр по дате =====
+        val dateLabel = Label("Период создания:")
+        dateLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
+        val dateFrom = DatePicker()
+        dateFrom.promptText = "с"
+        dateFrom.style = "-fx-pref-width: 130px;"
+        val dateTo = DatePicker()
+        dateTo.promptText = "по"
+        dateTo.style = "-fx-pref-width: 130px;"
+        val dateBox = HBox(10.0, dateFrom, dateTo)
+        dateBox.alignment = Pos.CENTER_LEFT
+
+        // ===== СЧЁТЧИК РЕЗУЛЬТАТОВ =====
+        val countLabel = Label("Найдено: ${reportData.size} дефектов")
+        countLabel.style = "-fx-font-size: 14px; -fx-text-fill: #28a745; -fx-font-weight: bold;"
+
+        // ===== ПРЕДПРОСМОТР =====
+        val previewLabel = Label("Первые 5 записей:")
+        previewLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
+        val previewText = TextArea()
+        previewText.isEditable = false
+        previewText.prefHeight = 100.0
+        previewText.style = "-fx-font-size: 12px; -fx-font-family: monospace;"
+
+        fun updatePreview() {
+            val filtered = filterReportData(
+                reportData,
+                statusCombo.value,
+                typeCombo.value,
+                cellField.text,
+                dateFrom.value,
+                dateTo.value
+            )
+            countLabel.text = "Найдено: ${filtered.size} дефектов"
+
+            if (filtered.isNotEmpty()) {
+                val preview = filtered.take(5).joinToString("\n") { item ->
+                    val dateStr = item.detectionDate?.let {
+                        Instant.ofEpochMilli(it)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                            .format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                    } ?: "—"
+                    "${item.equipmentName} | ${item.defectName} | ${item.defectStatus} | $dateStr"
+                }
+                previewText.text = preview + if (filtered.size > 5) "\n... и ещё ${filtered.size - 5}" else ""
+            } else {
+                previewText.text = "Нет дефектов по выбранным фильтрам"
+            }
+        }
+
+        statusCombo.valueProperty().addListener { _, _, _ -> updatePreview() }
+        typeCombo.valueProperty().addListener { _, _, _ -> updatePreview() }
+        cellField.textProperty().addListener { _, _, _ -> updatePreview() }
+        dateFrom.valueProperty().addListener { _, _, _ -> updatePreview() }
+        dateTo.valueProperty().addListener { _, _, _ -> updatePreview() }
+
+        // ===== КНОПКИ =====
+        val buttonBox = HBox(10.0)
+        buttonBox.alignment = Pos.CENTER_RIGHT
+        buttonBox.style = "-fx-padding: 15px 0 0 0;"
+
+        val createBtn = Button("📊 Создать отчёт")
+        createBtn.style = "-fx-background-color: #28a745; -fx-text-fill: white; -fx-padding: 8px 20px; -fx-background-radius: 4px; -fx-font-weight: bold; -fx-font-size: 13px;"
+        createBtn.setOnAction {
+            val status = statusCombo.value
+            val typeName = typeCombo.value
+            val cell = cellField.text.trim()
+            val from = dateFrom.value
+            val to = dateTo.value
+
+            val filtered = filterReportData(reportData, status, typeName, cell, from, to)
+            if (filtered.isEmpty()) {
+                showInfo("⚠️ Нет дефектов по выбранным фильтрам")
+                return@setOnAction
+            }
+            reportStage.close()
+            saveReportToExcel(filtered)
+        }
+
+        val cancelBtn = Button("✕ Закрыть")
+        cancelBtn.style = "-fx-background-color: #6c757d; -fx-text-fill: white; -fx-padding: 8px 20px; -fx-background-radius: 4px; -fx-font-size: 13px;"
+        cancelBtn.setOnAction { reportStage.close() }
+
+        buttonBox.children.addAll(createBtn, cancelBtn)
+
+        // ===== СБОРКА =====
+        filtersBox.children.addAll(
+            statusLabel, statusCombo,
+            typeLabel, typeCombo,
+            cellLabel, cellField,
+            dateLabel, dateBox
+        )
+
+        root.children.addAll(
+            headerLabel,
+            filtersBox,
+            countLabel,
+            previewLabel, previewText,
+            buttonBox
+        )
+
+        val scene = Scene(root, 650.0, 580.0)
+        reportStage.scene = scene
+
+        // ===== УСТАНАВЛИВАЕМ ФОКУС =====
+        reportStage.setOnShown {
+            Platform.runLater {
+                reportStage.requestFocus()
+                reportStage.toFront()
+                updatePreview()
+            }
+        }
+
+        reportStage.show()
+        reportStage.setOnHidden {
+            println("📊 Окно отчёта закрыто")
+        }
+    }
+
+    private fun filterReportData(
+        data: List<ReportItem>,
+        status: String?,
+        typeName: String?,
+        cell: String,
+        dateFrom: LocalDate?,
+        dateTo: LocalDate?
+    ): List<ReportItem> {
+        return data.filter { item ->
+            val statusMatch = status == null || status == "Все" ||
+                    (status == "Обнаружен" && item.defectStatus == "Обнаружен") ||
+                    (status == "Устранён" && item.defectStatus == "Устранён")
+
+            val typeMatch = typeName == null || typeName == "Все" || item.equipmentType == typeName
+
+            val cellMatch = cell.isEmpty() || item.equipmentCell.contains(cell, ignoreCase = true)
+
+            // Фильтр по дате
+            val dateMatch = if (dateFrom != null || dateTo != null) {
+                val detectionDate = item.detectionDate?.let {
+                    Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                }
+                val fromMatch = dateFrom == null || (detectionDate != null && !detectionDate.isBefore(dateFrom))
+                val toMatch = dateTo == null || (detectionDate != null && !detectionDate.isAfter(dateTo))
+                fromMatch && toMatch
+            } else true
+
+            statusMatch && typeMatch && cellMatch && dateMatch
+        }
+    }
+
+    private fun saveReportToExcel(data: List<ReportItem>) {
+        try {
+            val sortedData = data.sortedByDescending { it.defectStatus == "Обнаружен" }
+
+            val fileChooser = javafx.stage.FileChooser()
+            fileChooser.title = "Сохранить отчёт"
+            fileChooser.initialFileName = "report_defects_${LocalDate.now()}.xlsx"
+            fileChooser.extensionFilters.add(
+                javafx.stage.FileChooser.ExtensionFilter("Excel files (*.xlsx)", "*.xlsx")
+            )
+
+            val file = fileChooser.showSaveDialog(webView.scene.window)
+            if (file == null) {
+                println("❌ Сохранение отменено")
+                return
+            }
+
+            val workbook = org.apache.poi.xssf.usermodel.XSSFWorkbook()
+            val sheet = workbook.createSheet("Дефекты")
+
+            // ===== СТИЛИ =====
+            val headerStyle = workbook.createCellStyle().apply {
+                val font = workbook.createFont()
+                font.setBold(true)
+                font.fontHeightInPoints = 12
+                font.color = org.apache.poi.ss.usermodel.IndexedColors.WHITE.index
+                setFont(font)
+
+                fillForegroundColor = org.apache.poi.ss.usermodel.IndexedColors.DARK_BLUE.index
+                fillPattern = org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND
+                alignment = org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER
+                borderBottom = org.apache.poi.ss.usermodel.BorderStyle.THIN
+                borderTop = org.apache.poi.ss.usermodel.BorderStyle.THIN
+                borderLeft = org.apache.poi.ss.usermodel.BorderStyle.THIN
+                borderRight = org.apache.poi.ss.usermodel.BorderStyle.THIN
+            }
+
+            val dataStyle = workbook.createCellStyle().apply {
+                borderBottom = org.apache.poi.ss.usermodel.BorderStyle.THIN
+                borderTop = org.apache.poi.ss.usermodel.BorderStyle.THIN
+                borderLeft = org.apache.poi.ss.usermodel.BorderStyle.THIN
+                borderRight = org.apache.poi.ss.usermodel.BorderStyle.THIN
+                wrapText = true
+                alignment = org.apache.poi.ss.usermodel.HorizontalAlignment.LEFT
+                verticalAlignment = org.apache.poi.ss.usermodel.VerticalAlignment.CENTER
+            }
+
+            // Заголовки
+            val headers = arrayOf(
+                "№", "Оборудование", "Тип", "Ячейка",
+                "Дефект", "Описание", "Статус", "Дата создания", "X%", "Y%"
+            )
+
+            val headerRow = sheet.createRow(0)
+            headers.forEachIndexed { i, title ->
+                val cell = headerRow.createCell(i)
+                cell.setCellValue(title)
+                cell.cellStyle = headerStyle
+            }
+
+            // Данные
+            sortedData.forEachIndexed { index, item ->
+                val row = sheet.createRow(index + 1)
+
+                row.createCell(0).apply {
+                    setCellValue((index + 1).toDouble())
+                    cellStyle = dataStyle
+                }
+                row.createCell(1).apply {
+                    setCellValue(item.equipmentName)
+                    cellStyle = dataStyle
+                }
+                row.createCell(2).apply {
+                    setCellValue(item.equipmentType)
+                    cellStyle = dataStyle
+                }
+                row.createCell(3).apply {
+                    setCellValue(item.equipmentCell)
+                    cellStyle = dataStyle
+                }
+                row.createCell(4).apply {
+                    setCellValue(item.defectName)
+                    cellStyle = dataStyle
+                }
+                row.createCell(5).apply {
+                    setCellValue(item.defectDescription)
+                    cellStyle = dataStyle
+                }
+                row.createCell(6).apply {
+                    setCellValue(item.defectStatus)
+                    val statusStyle = if (item.defectStatus == "Устранён") {
+                        workbook.createCellStyle().apply {
+                            cloneStyleFrom(dataStyle)
+                            val font = workbook.createFont()
+                            font.setBold(true)
+                            font.color = org.apache.poi.ss.usermodel.IndexedColors.GREEN.index
+                            setFont(font)
+                        }
+                    } else {
+                        workbook.createCellStyle().apply {
+                            cloneStyleFrom(dataStyle)
+                            val font = workbook.createFont()
+                            font.setBold(true)
+                            font.color = org.apache.poi.ss.usermodel.IndexedColors.RED.index
+                            setFont(font)
+                        }
+                    }
+                    cellStyle = statusStyle
+                }
+                row.createCell(7).apply {
+                    val dateStr = item.detectionDate?.let {
+                        Instant.ofEpochMilli(it)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                            .format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                    } ?: "—"
+                    setCellValue(dateStr)
+                    cellStyle = dataStyle
+                }
+                row.createCell(8).apply {
+                    setCellValue(item.markerLeft?.let { String.format("%.1f", it) } ?: "-")
+                    cellStyle = dataStyle
+                }
+                row.createCell(9).apply {
+                    setCellValue(item.markerTop?.let { String.format("%.1f", it) } ?: "-")
+                    cellStyle = dataStyle
+                }
+            }
+
+            // ===== ИТОГОВАЯ СТАТИСТИКА =====
+            val totalDefects = sortedData.size
+            val fixedDefects = sortedData.count { it.defectStatus == "Устранён" }
+            val openDefects = totalDefects - fixedDefects
+
+            val statsRow = sheet.createRow(sortedData.size + 2)
+            val statsStyle = workbook.createCellStyle().apply {
+                cloneStyleFrom(dataStyle)
+                val font = workbook.createFont()
+                font.setBold(true)
+                font.fontHeightInPoints = 12
+                setFont(font)
+            }
+
+            statsRow.createCell(0).apply {
+                setCellValue("ИТОГО:")
+                cellStyle = statsStyle
+            }
+            statsRow.createCell(1).apply {
+                setCellValue("Всего дефектов: $totalDefects")
+                cellStyle = statsStyle
+            }
+            statsRow.createCell(2).apply {
+                setCellValue("Обнаружено: $openDefects")
+                val style = workbook.createCellStyle().apply {
+                    cloneStyleFrom(statsStyle)
+                    val font = workbook.createFont()
+                    font.setBold(true)
+                    font.color = org.apache.poi.ss.usermodel.IndexedColors.RED.index
+                    setFont(font)
+                }
+                cellStyle = style
+            }
+            statsRow.createCell(3).apply {
+                setCellValue("Устранено: $fixedDefects")
+                val style = workbook.createCellStyle().apply {
+                    cloneStyleFrom(statsStyle)
+                    val font = workbook.createFont()
+                    font.setBold(true)
+                    font.color = org.apache.poi.ss.usermodel.IndexedColors.GREEN.index
+                    setFont(font)
+                }
+                cellStyle = style
+            }
+
+            // Автоширина колонок
+            for (i in 0..9) {
+                sheet.autoSizeColumn(i)
+                val width = sheet.getColumnWidth(i)
+                if (width > 8000) sheet.setColumnWidth(i, 8000)
+                if (width < 3000) sheet.setColumnWidth(i, 3000)
+            }
+
+            workbook.write(file.outputStream())
+            workbook.close()
+
+            showInfo("✅ Отчёт сохранён:\n${file.absolutePath}\n\nВсего дефектов: $totalDefects\nОбнаружено: $openDefects\nУстранено: $fixedDefects")
+            println("✅ Отчёт сохранён: ${file.absolutePath}")
+
+        } catch (e: Exception) {
+            showError("Ошибка сохранения отчёта: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+
+    // ===== DATA CLASS ДЛЯ ОТЧЁТА =====
+    data class ReportItem(
+        val equipmentName: String,
+        val equipmentType: String,
+        val equipmentCell: String,
+        val defectName: String,
+        val defectDescription: String,
+        val defectStatus: String,
+        val markerLeft: Double?,
+        val markerTop: Double?,
+        val detectionDate: Long?,
+    )
+
 
     @FXML
     private fun initialize() {
+        database.autoBackup()
         loadSvgIntoWebView()
 
         toggleMarkersMenuItem.text = if (markersVisible) "👁️ Скрыть маркеры" else "👁️ Показать маркеры"
@@ -412,6 +859,17 @@ class DefectMapController {
 
         val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
         val exportFile = File("equipment_export.json")
+
+        // ===== НОВАЯ ПРОВЕРКА: если БД пустая — не импортируем пустой JSON =====
+        if (dbFile.exists() && database.getCount() > 0) {
+            // Проверяем, что в БД есть дефекты (если есть оборудование)
+            if (!database.validateDataConsistency()) {
+                println("⚠️ БД повреждена или неполная, создаём резервную копию...")
+                val backupFile = File(System.getProperty("user.home"), ".defectmap/equipment_backup_${System.currentTimeMillis()}.db")
+                dbFile.copyTo(backupFile, overwrite = false)
+                println("💾 Резервная копия создана: ${backupFile.absolutePath}")
+            }
+        }
 
         // Если БД пуста и есть JSON - импортируем без вопросов
         if (!dbFile.exists() || database.getCount() == 0) {
@@ -1001,7 +1459,6 @@ class DefectMapController {
     private fun setupButtons() {
         viewEquipmentBtn.setOnAction { viewEquipmentList() }
         defectsBtn.setOnAction { showDefectsList() }
-        // Режим редактирования теперь через меню
     }
 
     private fun toggleEditMode(enable: Boolean) {
@@ -1202,8 +1659,21 @@ class DefectMapController {
         closeBtn.style = "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-padding: 8px 20px; -fx-background-radius: 6px;"
         closeBtn.setOnAction { (closeBtn.scene.window as Stage).close() }
 
-        val bottomPanel = HBox(closeBtn)
+// ===== НОВАЯ КНОПКА "СОЗДАТЬ ОТЧЁТ" =====
+        val reportBtn = Button("📊 Создать отчёт")
+        reportBtn.style = "-fx-background-color: #ffc107; -fx-text-fill: #333; -fx-padding: 8px 20px; -fx-background-radius: 6px; -fx-font-weight: bold;"
+        reportBtn.setOnAction {
+            // Закрываем окно дефектов
+            val stage = reportBtn.scene.window as Stage
+            stage.close()
+            // Открываем диалог создания отчёта
+            onCreateReport()
+        }
+
+        val bottomPanel = HBox(20.0, reportBtn, closeBtn)
         bottomPanel.alignment = Pos.CENTER_RIGHT
+
+
 
         mainLayout.children.addAll(headerLabel, filterPanel, tableView, bottomPanel)
 
@@ -1233,9 +1703,12 @@ class DefectMapController {
                     isDragging = true
                     lastMouseX = event.x
                     lastMouseY = event.y
+                    // ===== ЗАПОМИНАЕМ НАЧАЛО DRAG =====
+                    dragStartX = event.x
+                    dragStartY = event.y
                     webView.engine.executeScript("""
-                    document.getElementById('container').classList.add('dragging');
-                """.trimIndent())
+            document.getElementById('container').classList.add('dragging');
+        """.trimIndent())
                 }
             } else {
                 if (event.isPrimaryButtonDown) {
@@ -1501,44 +1974,51 @@ class DefectMapController {
         // ============================================================
         webView.setOnMouseClicked { event: MouseEvent ->
             if (!isEditMode) {
+                // ===== ПРОВЕРЯЕМ: БЫЛ ЛИ ЭТО DRAG? =====
+                val dx = event.x - dragStartX
+                val dy = event.y - dragStartY
+                val distance = Math.sqrt(dx * dx + dy * dy)
+                val wasDrag = distance > DRAG_THRESHOLD
+
                 // === ОБЫЧНЫЙ РЕЖИМ: показываем карточку оборудования ===
-                if (event.clickCount == 1 && event.button == javafx.scene.input.MouseButton.PRIMARY) {
+                // Открываем карточку ТОЛЬКО если это не был drag
+                if (event.clickCount == 1 && event.button == javafx.scene.input.MouseButton.PRIMARY && !wasDrag) {
                     handleEquipmentClick(event.x, event.y)
                 }
-                // Двойной клик для сброса зума
+                // Двойной клик для сброса зума (drag не мешает)
                 if (event.clickCount == 2) {
                     zoomLevel = 1.0
                     currentTranslateX = 0.0
                     currentTranslateY = 0.0
                     webView.engine.executeScript("""
-                    document.getElementById('image-wrapper').style.transform = 'translate(0px, 0px) scale(1)';
-                    document.getElementById('image-wrapper').style.transformOrigin = 'center center';
-                """.trimIndent())
+            document.getElementById('image-wrapper').style.transform = 'translate(0px, 0px) scale(1)';
+            document.getElementById('image-wrapper').style.transformOrigin = 'center center';
+        """.trimIndent())
                 }
             } else {
                 // === РЕЖИМ РЕДАКТИРОВАНИЯ: добавляем оборудование ===
                 if (event.clickCount == 1 && event.button == javafx.scene.input.MouseButton.PRIMARY) {
                     // Проверяем, не кликнули ли по маркеру
                     val isMarker = webView.engine.executeScript("""
-                    (function() {
-                        var container = document.getElementById('container');
-                        var rect = container.getBoundingClientRect();
-                        var markers = document.querySelectorAll('.equipment-marker');
-                        var clickX = ${event.x};
-                        var clickY = ${event.y};
-                        for (var i = 0; i < markers.length; i++) {
-                            var marker = markers[i];
-                            var markerRect = marker.getBoundingClientRect();
-                            if (clickX >= markerRect.left - rect.left - 15 &&
-                                clickX <= markerRect.right - rect.left + 15 &&
-                                clickY >= markerRect.top - rect.top - 15 &&
-                                clickY <= markerRect.bottom - rect.top + 15) {
-                                return true;
-                            }
-                        }
-                        return false;
-                    })();
-                """.trimIndent()) as? Boolean ?: false
+            (function() {
+                var container = document.getElementById('container');
+                var rect = container.getBoundingClientRect();
+                var markers = document.querySelectorAll('.equipment-marker');
+                var clickX = ${event.x};
+                var clickY = ${event.y};
+                for (var i = 0; i < markers.length; i++) {
+                    var marker = markers[i];
+                    var markerRect = marker.getBoundingClientRect();
+                    if (clickX >= markerRect.left - rect.left - 15 &&
+                        clickX <= markerRect.right - rect.left + 15 &&
+                        clickY >= markerRect.top - rect.top - 15 &&
+                        clickY <= markerRect.bottom - rect.top + 15) {
+                        return true;
+                    }
+                }
+                return false;
+            })();
+        """.trimIndent()) as? Boolean ?: false
 
                     if (!isMarker) {
                         println("🖱️ Клик в режиме редактирования!")
@@ -2663,30 +3143,29 @@ class DefectMapController {
                 colId.cellValueFactory = PropertyValueFactory("id")
                 colId.prefWidth = 120.0
 
-                // ======================== КОЛОНКА: ДЕЙСТВИЯ (С КНОПКАМИ) ========================
+                // ======================== КОЛОНКА: ДЕЙСТВИЯ (ТОЛЬКО УДАЛИТЬ) ========================
 
                 val colActions = TableColumn<EquipmentTableItem, Void>("Действие")
-                colActions.prefWidth = 120.0
+                colActions.prefWidth = 80.0
                 colActions.style = "-fx-alignment: CENTER;"
 
                 colActions.setCellFactory {
                     object : TableCell<EquipmentTableItem, Void>() {
-                        private val editBtn = Button("✏️")
-                        private val deleteBtn = Button("🗑️")
-                        private val hbox = HBox(5.0, editBtn, deleteBtn)
+                        private val deleteBtn = Button("✕")
+                        private val hbox = HBox(5.0, deleteBtn)
 
                         init {
                             hbox.alignment = Pos.CENTER
 
-                            editBtn.style = "-fx-background-color: #007bff; -fx-text-fill: white; -fx-font-size: 11px; -fx-padding: 2px 8px; -fx-background-radius: 4px;"
-                            deleteBtn.style = "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-font-size: 11px; -fx-padding: 2px 8px; -fx-background-radius: 4px;"
-
-                            editBtn.setOnAction {
-                                val item = tableItem
-                                if (item != null) {
-                                    editEquipmentFromList(item.id)
-                                }
-                            }
+                            deleteBtn.style = """
+                            -fx-background-color: #dc3545;
+                            -fx-text-fill: white;
+                            -fx-font-size: 13px;
+                            -fx-font-weight: bold;
+                            -fx-padding: 2px 8px;
+                            -fx-background-radius: 4px;
+                            -fx-cursor: hand;
+                        """.trimIndent()
 
                             deleteBtn.setOnAction {
                                 val item = tableItem
@@ -2699,7 +3178,6 @@ class DefectMapController {
                                     val result = confirm.showAndWait()
                                     if (result.isPresent && result.get() == ButtonType.OK) {
                                         deleteEquipment(item.id)
-                                        // Обновляем таблицу через перезагрузку данных из БД
                                         val updatedData = loadEquipment()
                                         val updatedItems = updatedData.mapIndexed { index, eq ->
                                             val typeDisplayName = EquipmentTypes.ALL_TYPES.toMap()[eq.type] ?: eq.type
@@ -2714,33 +3192,36 @@ class DefectMapController {
                                             )
                                         }
                                         tableView.items = FXCollections.observableArrayList(updatedItems)
-                                        countLabel.text = "Показано: ${updatedData.size} из ${updatedData.size}"
+                                        countLabel.text = "Показано: ${updatedData.size} из ${allEquipment.size}"
                                     }
                                 }
                             }
 
-                            editBtn.hoverProperty().addListener { _, _, hovered ->
-                                editBtn.style = if (hovered)
-                                    "-fx-background-color: #0056b3; -fx-text-fill: white; -fx-font-size: 11px; -fx-padding: 2px 8px; -fx-background-radius: 4px;"
-                                else
-                                    "-fx-background-color: #007bff; -fx-text-fill: white; -fx-font-size: 11px; -fx-padding: 2px 8px; -fx-background-radius: 4px;"
-                            }
-
                             deleteBtn.hoverProperty().addListener { _, _, hovered ->
-                                deleteBtn.style = if (hovered)
-                                    "-fx-background-color: #c82333; -fx-text-fill: white; -fx-font-size: 11px; -fx-padding: 2px 8px; -fx-background-radius: 4px;"
-                                else
-                                    "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-font-size: 11px; -fx-padding: 2px 8px; -fx-background-radius: 4px;"
+                                deleteBtn.style = if (hovered) """
+                                -fx-background-color: #c82333;
+                                -fx-text-fill: white;
+                                -fx-font-size: 13px;
+                                -fx-font-weight: bold;
+                                -fx-padding: 2px 8px;
+                                -fx-background-radius: 4px;
+                                -fx-cursor: hand;
+                            """.trimIndent()
+                                else """
+                                -fx-background-color: #dc3545;
+                                -fx-text-fill: white;
+                                -fx-font-size: 13px;
+                                -fx-font-weight: bold;
+                                -fx-padding: 2px 8px;
+                                -fx-background-radius: 4px;
+                                -fx-cursor: hand;
+                            """.trimIndent()
                             }
                         }
 
                         override fun updateItem(item: Void?, empty: Boolean) {
                             super.updateItem(item, empty)
-                            if (empty) {
-                                graphic = null
-                            } else {
-                                graphic = hbox
-                            }
+                            graphic = if (empty) null else hbox
                         }
 
                         private val tableItem: EquipmentTableItem?
@@ -2818,13 +3299,8 @@ class DefectMapController {
 
                 // ======================== СЛУШАТЕЛИ ========================
 
-                searchField.textProperty().addListener { _, _, _ ->
-                    applyFilter()
-                }
-
-                cellSearchField.textProperty().addListener { _, _, _ ->
-                    applyFilter()
-                }
+                searchField.textProperty().addListener { _, _, _ -> applyFilter() }
+                cellSearchField.textProperty().addListener { _, _, _ -> applyFilter() }
 
                 // ======================== КНОПКИ ========================
 
@@ -2853,49 +3329,48 @@ class DefectMapController {
                     }
                 }
 
+                // ======================== СТИЛЬ ТАБЛИЦЫ ========================
+
+                tableView.style = """
+                -fx-font-size: 13px;
+                -fx-border-color: #dee2e6;
+                -fx-selection-bar: #d4edda;
+                -fx-selection-bar-text: black;
+            """.trimIndent()
+
                 // ======================== СТИЛЬ СТРОК ========================
 
                 tableView.setRowFactory {
                     val row = TableRow<EquipmentTableItem>()
+
                     row.hoverProperty().addListener { _, _, hovered ->
-                        if (hovered) {
-                            row.style = "-fx-background-color: #e8f4f8;"
-                        } else {
-                            row.style = "-fx-background-color: transparent;"
+                        if (hovered && !row.isSelected) {
+                            row.style = "-fx-background-color: #e8f4f8; -fx-text-fill: black;"
+                        } else if (!row.isSelected) {
+                            row.style = "-fx-background-color: transparent; -fx-text-fill: black;"
                         }
                     }
+
+                    row.selectedProperty().addListener { _, _, selected ->
+                        if (selected) {
+                            row.style = "-fx-background-color: #d4edda; -fx-text-fill: black; -fx-font-weight: bold;"
+                        } else {
+                            row.style = "-fx-background-color: transparent; -fx-text-fill: black;"
+                        }
+                    }
+
                     row
                 }
 
-                // ======================== КОНТЕКСТНОЕ МЕНЮ ========================
-
+                // ===== КОНТЕКСТНОЕ МЕНЮ =====
                 val contextMenu = ContextMenu()
                 val editMenuItem = MenuItem("✏️ Редактировать")
-                val deleteMenuItem = MenuItem("🗑️ Удалить")
                 val showMenuItem = MenuItem("📍 Показать на карте")
 
                 editMenuItem.setOnAction {
                     val selected = tableView.selectionModel.selectedItem
                     if (selected != null) {
                         editEquipmentFromList(selected.id)
-                    }
-                }
-
-                deleteMenuItem.setOnAction {
-                    val selected = tableView.selectionModel.selectedItem
-                    if (selected != null) {
-                        val confirm = Alert(AlertType.CONFIRMATION)
-                        confirm.title = "Удаление оборудования"
-                        confirm.headerText = "Удалить оборудование?"
-                        confirm.contentText = "Вы уверены, что хотите удалить '${selected.name}'?"
-                        val result = confirm.showAndWait()
-                        if (result.isPresent && result.get() == ButtonType.OK) {
-                            deleteEquipment(selected.id)
-                            val updatedData = loadEquipment()
-                            val updatedItems = toTableItems(updatedData)
-                            tableView.items = FXCollections.observableArrayList(updatedItems)
-                            countLabel.text = "Показано: ${updatedData.size} из ${allEquipment.size}"
-                        }
                     }
                 }
 
@@ -2907,8 +3382,35 @@ class DefectMapController {
                     }
                 }
 
-                contextMenu.items.addAll(editMenuItem, deleteMenuItem, showMenuItem)
-                tableView.contextMenu = contextMenu
+                contextMenu.items.addAll(editMenuItem, showMenuItem)
+
+// ===== ПРИ ПКМ ВЫДЕЛЯЕМ СТРОКУ =====
+                tableView.setOnMouseClicked { event ->
+                    if (event.isSecondaryButtonDown) {
+                        val row = tableView.lookup(".table-row-cell") as? TableRow<*>?
+                        if (row != null && row.item != null) {
+                            val index = row.index
+                            println("🔍 Найдена строка через lookup (clicked): index=$index")
+                            tableView.selectionModel.select(index)
+                            tableView.scrollTo(index)
+                        }
+                    }
+                }
+
+// ===== ПОКАЗЫВАЕМ КОНТЕКСТНОЕ МЕНЮ =====
+                tableView.setOnContextMenuRequested { event ->
+                    println("🔍 ПКМ контекстное меню: selectedItem=${tableView.selectionModel.selectedItem}")
+
+                    // Если выделение сбросилось — выделяем первую строку
+                    if (tableView.selectionModel.selectedItem == null && tableView.items.isNotEmpty()) {
+                        println("🔍 Выделение сбросилось, выделяем первую строку")
+                        tableView.selectionModel.select(0)
+                        tableView.scrollTo(0)
+                    }
+                    contextMenu.show(tableView, event.screenX, event.screenY)
+                }
+
+
 
                 // ======================== ПРИМЕНЯЕМ ФИЛЬТРЫ ПРИ ЗАПУСКЕ ========================
 
@@ -2945,7 +3447,6 @@ class DefectMapController {
                 popupStage.minWidth = 700.0
                 popupStage.minHeight = 500.0
 
-                // Сохраняем ссылку на окно
                 equipmentListStage = popupStage
                 popupStage.setOnHidden {
                     equipmentListStage = null

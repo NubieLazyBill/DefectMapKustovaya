@@ -17,6 +17,7 @@ import javafx.scene.input.MouseEvent
 import javafx.scene.paint.Color
 import javafx.animation.PauseTransition
 import javafx.util.Duration
+import java.io.File
 
 class EquipmentCardController(
     private val equipment: EquipmentData,
@@ -181,53 +182,72 @@ class EquipmentCardController(
 
     /**
      * Загружает изображение для оборудования.
-     * Если картинка по типу не найдена — ищет equipment.jpg.
-     * Если и его нет — создаёт заглушку с текстом "Нет изображения".
+     * Сначала ищет в ресурсах JAR, потом в папке images рядом с JAR.
+     * Если ничего нет — создаёт заглушку.
      */
     private fun createEquipmentImage(): Image {
         // Определяем путь к картинке по типу оборудования
         val imagePath = when (equipment.type) {
-            "v_500", "v_220", "v_35", "v_10" -> "/org/example/defectmap/ВВБК-500.jfif"
-            "r_500", "r_220", "r_35", "r_10" -> "/org/example/defectmap/disconnector.jpg"
-            "autotransformer", "transformer" -> "/org/example/defectmap/transformer.jpg"
-            "lightning", "lightning_rod" -> "/org/example/defectmap/lightning_rod.jpg"
-            "opn_500", "opn_220", "opn_35", "opn_10" -> "/org/example/defectmap/opn.jpg"
-            "tn_500", "tn_220", "tn_35", "tn_10" -> "/org/example/defectmap/tn.jpg"
-            "tt_500", "tt_220", "tt_35", "tt_10" -> "/org/example/defectmap/tt.jpg"
-            "ks_500", "ks_220", "coupling_capacitor" -> "/org/example/defectmap/capacitor.jpg"
-            "reactor_500", "reactor_220" -> "/org/example/defectmap/reactor.jpg"
-            "capacitor" -> "/org/example/defectmap/capacitor.jpg"
-            "compressor" -> "/org/example/defectmap/compressor.jpg"
+            "v_500", "v_220", "v_35", "v_10" -> "ВВБК-500.jfif"
+            "r_500", "r_220", "r_35", "r_10" -> "disconnector.jpg"
+            "autotransformer", "transformer" -> "transformer.jpg"
+            "lightning", "lightning_rod" -> "lightning_rod.jpg"
+            "opn_500", "opn_220", "opn_35", "opn_10" -> "opn.jpg"
+            "tn_500", "tn_220", "tn_35", "tn_10" -> "tn.jpg"
+            "tt_500", "tt_220", "tt_35", "tt_10" -> "tt.jpg"
+            "ks_500", "ks_220", "coupling_capacitor" -> "capacitor.jpg"
+            "reactor_500", "reactor_220" -> "reactor.jpg"
+            "capacitor" -> "capacitor.jpg"
+            "compressor" -> "compressor.jpg"
             else -> null
         }
 
-        // Пробуем загрузить картинку по типу
+        // 1. Пробуем загрузить из ресурсов JAR
         imagePath?.let {
+            val resourcePath = "/org/example/defectmap/$it"
             try {
-                val url = javaClass.getResource(it)
+                val url = javaClass.getResource(resourcePath)
                 if (url != null) {
                     return Image(url.toExternalForm())
-                } else {
-                    println("⚠️ Ресурс не найден: $it")
                 }
             } catch (e: Exception) {
-                println("⚠️ Не удалось загрузить $it: ${e.message}")
+                println("⚠️ Не удалось загрузить из ресурсов $it: ${e.message}")
             }
         }
 
-        // Fallback 1: equipment.jpg
+        // 2. Пробуем загрузить из папки images рядом с JAR (для портативной версии)
+        imagePath?.let {
+            try {
+                val file = File("images/$it")
+                if (file.exists()) {
+                    return Image(file.toURI().toURL().toExternalForm())
+                }
+            } catch (e: Exception) {
+                println("⚠️ Не удалось загрузить из файла images/$it: ${e.message}")
+            }
+        }
+
+        // 3. Fallback: equipment.jpg из ресурсов
         try {
             val url = javaClass.getResource("/org/example/defectmap/equipment.jpg")
             if (url != null) {
                 return Image(url.toExternalForm())
-            } else {
-                println("⚠️ Ресурс equipment.jpg не найден")
             }
         } catch (e: Exception) {
-            println("⚠️ Не удалось загрузить equipment.jpg: ${e.message}")
+            println("⚠️ Не удалось загрузить equipment.jpg из ресурсов: ${e.message}")
         }
 
-        // Fallback 2: Заглушка
+        // 4. Fallback: equipment.jpg из папки images
+        try {
+            val file = File("images/equipment.jpg")
+            if (file.exists()) {
+                return Image(file.toURI().toURL().toExternalForm())
+            }
+        } catch (e: Exception) {
+            println("⚠️ Не удалось загрузить images/equipment.jpg: ${e.message}")
+        }
+
+        // 5. Заглушка
         println("⚠️ Нет ни одной картинки, создаю заглушку")
         return createPlaceholderImage()
     }
