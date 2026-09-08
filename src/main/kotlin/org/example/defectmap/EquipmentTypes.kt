@@ -5,6 +5,7 @@ object EquipmentTypes {
     val ALL_TYPES = listOf(
         // --- 500 кВ ---
         "v_500" to "В-500",
+        "v_500_ABB" to "В-500",
         "r_500" to "Разъединитель 500 кВ",
         "autotransformer" to "АТГ",
         "tn_500" to "ТН-500",

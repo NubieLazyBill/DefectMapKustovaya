@@ -52,10 +52,6 @@ import java.time.format.DateTimeFormatter
 import java.time.ZoneId
 import java.time.Instant
 
-
-
-
-
 class DefectMapController {
     @FXML
     private lateinit var webView: WebView
@@ -79,12 +75,8 @@ class DefectMapController {
     private lateinit var defectsBtn: Button
 
     private var markersVisible = false
-
     private var isDraggingMarker = false
-
-    private var currentEditingEquipmentId: String? = null  // Для добавления маркеров
-
-
+    private var currentEditingEquipmentId: String? = null
     private var zoomLevel = 1.0
     private val MIN_ZOOM = 0.5
     private val MAX_ZOOM = 5.0
@@ -108,25 +100,24 @@ class DefectMapController {
         GsonBuilder().setPrettyPrinting().create()
     }
 
-    private var isInitialized = false  // <-- ДОБАВИТЬ
-
+    private var isInitialized = false
     private var dragStartX = 0.0
     private var dragStartY = 0.0
-    private val DRAG_THRESHOLD = 5.0  // пикселей
+    private val DRAG_THRESHOLD = 5.0
+
+    // ======================== ОТЧЁТЫ ========================
 
     @FXML
     private fun onCreateReport() {
         println("📊 СОЗДАНИЕ ОТЧЁТА")
 
         try {
-            // 1. Загружаем все данные
             val allEquipment = loadEquipment()
             if (allEquipment.isEmpty()) {
                 showInfo("📋 Нет данных для отчёта")
                 return
             }
 
-            // 2. Собираем все дефекты с информацией об оборудовании
             val reportData = mutableListOf<ReportItem>()
             allEquipment.forEach { eq ->
                 val defects = database.getDefectsByEquipment(eq.id)
@@ -152,7 +143,6 @@ class DefectMapController {
                 return
             }
 
-            // 3. Показываем диалог с фильтрами
             showReportDialog(reportData)
 
         } catch (e: Exception) {
@@ -172,19 +162,15 @@ class DefectMapController {
         reportStage.initOwner(ownerStage)
         reportStage.initModality(javafx.stage.Modality.NONE)
 
-        // ===== КОРНЕВОЙ КОНТЕЙНЕР (БЕЗ ПРОКРУТКИ) =====
         val root = VBox(15.0)
         root.style = "-fx-background-color: white; -fx-padding: 20px;"
 
-        // ===== ЗАГОЛОВОК =====
         val headerLabel = Label("📊 Настройка отчёта")
         headerLabel.style = "-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #333;"
 
-        // ===== КОНТЕЙНЕР С ФИЛЬТРАМИ =====
         val filtersBox = VBox(10.0)
         filtersBox.style = "-fx-padding: 10px 0;"
 
-        // ===== Фильтр по статусу =====
         val statusLabel = Label("Статус дефектов:")
         statusLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val statusCombo = ComboBox<String>()
@@ -192,7 +178,6 @@ class DefectMapController {
         statusCombo.value = "Все"
         statusCombo.style = "-fx-pref-width: 150px;"
 
-        // ===== Фильтр по типу оборудования =====
         val typeLabel = Label("Тип оборудования:")
         typeLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val typeCombo = ComboBox<String>()
@@ -201,14 +186,12 @@ class DefectMapController {
         typeCombo.value = "Все"
         typeCombo.style = "-fx-pref-width: 180px;"
 
-        // ===== Фильтр по ячейке =====
         val cellLabel = Label("Ячейка:")
         cellLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val cellField = TextField()
         cellField.promptText = "Введите номер ячейки..."
         cellField.style = "-fx-pref-width: 180px;"
 
-        // ===== Фильтр по дате =====
         val dateLabel = Label("Период создания:")
         dateLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val dateFrom = DatePicker()
@@ -220,11 +203,9 @@ class DefectMapController {
         val dateBox = HBox(10.0, dateFrom, dateTo)
         dateBox.alignment = Pos.CENTER_LEFT
 
-        // ===== СЧЁТЧИК РЕЗУЛЬТАТОВ =====
         val countLabel = Label("Найдено: ${reportData.size} дефектов")
         countLabel.style = "-fx-font-size: 14px; -fx-text-fill: #28a745; -fx-font-weight: bold;"
 
-        // ===== ПРЕДПРОСМОТР =====
         val previewLabel = Label("Первые 5 записей:")
         previewLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val previewText = TextArea()
@@ -265,7 +246,6 @@ class DefectMapController {
         dateFrom.valueProperty().addListener { _, _, _ -> updatePreview() }
         dateTo.valueProperty().addListener { _, _, _ -> updatePreview() }
 
-        // ===== КНОПКИ =====
         val buttonBox = HBox(10.0)
         buttonBox.alignment = Pos.CENTER_RIGHT
         buttonBox.style = "-fx-padding: 15px 0 0 0;"
@@ -294,7 +274,6 @@ class DefectMapController {
 
         buttonBox.children.addAll(createBtn, cancelBtn)
 
-        // ===== СБОРКА =====
         filtersBox.children.addAll(
             statusLabel, statusCombo,
             typeLabel, typeCombo,
@@ -313,7 +292,6 @@ class DefectMapController {
         val scene = Scene(root, 650.0, 580.0)
         reportStage.scene = scene
 
-        // ===== УСТАНАВЛИВАЕМ ФОКУС =====
         reportStage.setOnShown {
             Platform.runLater {
                 reportStage.requestFocus()
@@ -345,7 +323,6 @@ class DefectMapController {
 
             val cellMatch = cell.isEmpty() || item.equipmentCell.contains(cell, ignoreCase = true)
 
-            // Фильтр по дате
             val dateMatch = if (dateFrom != null || dateTo != null) {
                 val detectionDate = item.detectionDate?.let {
                     Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
@@ -379,7 +356,6 @@ class DefectMapController {
             val workbook = org.apache.poi.xssf.usermodel.XSSFWorkbook()
             val sheet = workbook.createSheet("Дефекты")
 
-            // ===== СТИЛИ =====
             val headerStyle = workbook.createCellStyle().apply {
                 val font = workbook.createFont()
                 font.setBold(true)
@@ -406,7 +382,6 @@ class DefectMapController {
                 verticalAlignment = org.apache.poi.ss.usermodel.VerticalAlignment.CENTER
             }
 
-            // Заголовки
             val headers = arrayOf(
                 "№", "Оборудование", "Тип", "Ячейка",
                 "Дефект", "Описание", "Статус", "Дата создания", "X%", "Y%"
@@ -419,7 +394,6 @@ class DefectMapController {
                 cell.cellStyle = headerStyle
             }
 
-            // Данные
             sortedData.forEachIndexed { index, item ->
                 val row = sheet.createRow(index + 1)
 
@@ -488,7 +462,6 @@ class DefectMapController {
                 }
             }
 
-            // ===== ИТОГОВАЯ СТАТИСТИКА =====
             val totalDefects = sortedData.size
             val fixedDefects = sortedData.count { it.defectStatus == "Устранён" }
             val openDefects = totalDefects - fixedDefects
@@ -533,7 +506,6 @@ class DefectMapController {
                 cellStyle = style
             }
 
-            // Автоширина колонок
             for (i in 0..9) {
                 sheet.autoSizeColumn(i)
                 val width = sheet.getColumnWidth(i)
@@ -553,7 +525,6 @@ class DefectMapController {
         }
     }
 
-    // ===== DATA CLASS ДЛЯ ОТЧЁТА =====
     data class ReportItem(
         val equipmentName: String,
         val equipmentType: String,
@@ -566,6 +537,7 @@ class DefectMapController {
         val detectionDate: Long?,
     )
 
+    // ======================== ИНИЦИАЛИЗАЦИЯ ========================
 
     @FXML
     private fun initialize() {
@@ -587,7 +559,6 @@ class DefectMapController {
             }
         }
 
-        // ===== HOTKEY Ctrl+S для сохранения =====
         webView.setOnKeyPressed { event ->
             if (event.isControlDown && event.code == KeyCode.S) {
                 saveEquipment()
@@ -609,7 +580,7 @@ class DefectMapController {
         }
     }
 
-    // ======================== РЕЖИМ РЕДАКТИРОВАНИЯ (из меню) ========================
+    // ======================== РЕЖИМ РЕДАКТИРОВАНИЯ ========================
 
     @FXML
     private fun toggleEditModeAction() {
@@ -635,7 +606,6 @@ class DefectMapController {
         })();
     """.trimIndent())
 
-        // Текст показывает ДЕЙСТВИЕ при следующем нажатии
         toggleMarkersMenuItem.text = if (markersVisible) "👁️ Скрыть маркеры" else "👁️ Показать маркеры"
     }
 
@@ -643,7 +613,6 @@ class DefectMapController {
 
     private fun loadSvgIntoWebView() {
         try {
-            // Пробуем загрузить из ресурсов (внутри JAR)
             val svgResource = javaClass.getResource("/org/example/defectmap/schema.svg")
             if (svgResource != null) {
                 val svgContent = svgResource.readText()
@@ -653,7 +622,6 @@ class DefectMapController {
                 return
             }
 
-            // Если в ресурсах нет — пробуем из файловой системы (для разработки)
             val svgFile = File("src/main/resources/org/example/defectmap/schema.svg")
             if (svgFile.exists()) {
                 val svgContent = svgFile.readText()
@@ -663,7 +631,6 @@ class DefectMapController {
                 return
             }
 
-            // Если нет — пробуем из папки рядом с JAR (для портативной версии)
             val jarSvgFile = File("schema.svg")
             if (jarSvgFile.exists()) {
                 val svgContent = jarSvgFile.readText()
@@ -840,9 +807,7 @@ class DefectMapController {
     """.trimIndent()
     }
 
-
     private fun loadAndRefresh() {
-        // Проверяем, что WebView загружен
         if (webView.engine.getLoadWorker().state != Worker.State.SUCCEEDED) {
             println("⚠️ WebView ещё не загружен, откладываем обновление")
             javafx.animation.PauseTransition(javafx.util.Duration.millis(300.0)).apply {
@@ -855,27 +820,18 @@ class DefectMapController {
         val savedEquipment = database.loadAllEquipment()
         println("📂 Перезагружено из БД: ${savedEquipment.size} шт.")
 
-        // Выводим ВСЕ записи 1ШР-220 для проверки
-        savedEquipment.filter { it.name.contains("1ШР-220") }.forEach { eq ->
-            val mainMarker = eq.markers.firstOrNull() ?: MarkerPosition(eq.left, eq.top, true)
-            println("📌 ${eq.name}: left=${mainMarker.left}%, top=${mainMarker.top}%")
-        }
-
         lastSavedHash = savedEquipment.hashCode()
 
         if (savedEquipment.isNotEmpty()) {
             val equipmentJson = gson.toJson(savedEquipment)
 
-            // ВАЖНО: используем уникальный ID для контейнера, чтобы пересоздать всё
             webView.engine.executeScript("""
             (function() {
-                // 1. ПОЛНОСТЬЮ УДАЛЯЕМ СТАРЫЙ КОНТЕЙНЕР
                 var oldContainer = document.getElementById('equipment-container');
                 if (oldContainer) {
                     oldContainer.remove();
                 }
                 
-                // 2. СОЗДАЁМ НОВЫЙ КОНТЕЙНЕР
                 var wrapper = document.getElementById('image-wrapper');
                 if (!wrapper) {
                     console.error('❌ image-wrapper не найден');
@@ -886,26 +842,13 @@ class DefectMapController {
                 container.id = 'equipment-container';
                 wrapper.appendChild(container);
                 
-                // 3. Загружаем данные
                 var savedData = $equipmentJson;
                 window.equipment = savedData;
                 
                 console.log('🔄 Пересоздаём маркеры для ' + savedData.length + ' записей');
                 
-                // 4. Выводим ВСЕ 1ШР-220 для проверки
                 savedData.forEach(function(item) {
-                    if (item.name.includes('1ШР-220')) {
-                        var markers = item.markers || [{left: item.left, top: item.top, isMain: true}];
-                        console.log('📌 ' + item.name + ': left=' + markers[0].left + '%, top=' + markers[0].top + '%');
-                    }
-                });
-                
-                // 5. Создаём маркеры
-                savedData.forEach(function(item) {
-                    var markers = item.markers;
-                    if (!markers || markers.length === 0) {
-                        markers = [{left: item.left, top: item.top, isMain: true}];
-                    }
+                    var markers = item.markers || [{left: item.left, top: item.top, isMain: true}];
                     
                     markers.forEach(function(markerPos, index) {
                         var marker = document.createElement('div');
@@ -915,7 +858,6 @@ class DefectMapController {
                         if (!${markersVisible}) {
                             marker.className += ' hidden';
                         }
-                        // ИСПОЛЬЗУЕМ УНИКАЛЬНЫЙ ID С TIMESTAMP
                         marker.id = item.id + '-marker-' + index + '-' + Date.now();
                         marker.style.left = markerPos.left + '%';
                         marker.style.top = markerPos.top + '%';
@@ -946,7 +888,8 @@ class DefectMapController {
         """.trimIndent())
         }
     }
-    // ======================== ИНИЦИАЛИЗАЦИЯ ========================
+
+    // ======================== ИНИЦИАЛИЗАЦИЯ ОБОРУДОВАНИЯ ========================
 
     private fun initEquipment() {
         val savedEquipment = database.loadAllEquipment()
@@ -959,7 +902,6 @@ class DefectMapController {
 
             webView.engine.executeScript("""
             (function() {
-                // Удаляем старый контейнер
                 var oldContainer = document.getElementById('equipment-container');
                 if (oldContainer) {
                     oldContainer.remove();
@@ -1022,6 +964,7 @@ class DefectMapController {
         """.trimIndent())
         }
     }
+
     // ======================== КНОПКИ ========================
 
     private fun setupButtons() {
@@ -1029,17 +972,18 @@ class DefectMapController {
         defectsBtn.setOnAction { showDefectsList() }
     }
 
+    // ======================== ПЕРЕКЛЮЧЕНИЕ РЕЖИМА РЕДАКТИРОВАНИЯ (ИСПРАВЛЕНО) ========================
+
     private fun toggleEditMode(enable: Boolean) {
-        // Если выключаем режим редактирования — сохраняем
-        if (!enable && isEditMode) {
-            println("💾 Сохраняем изменения при выходе из режима редактирования")
-            saveEquipment()
-            showToast("✅ Изменения сохранены")
-        }
+        // ===== УБРАНО АВТОСОХРАНЕНИЕ ПРИ ВЫХОДЕ =====
+        // if (!enable && isEditMode) {
+        //     println("💾 Сохраняем изменения при выходе из режима редактирования")
+        //     saveEquipment()
+        //     showToast("✅ Изменения сохранены")
+        // }
 
         isEditMode = enable
 
-        // Если выходим из режима редактирования — сбрасываем ID
         if (!enable) {
             currentEditingEquipmentId = null
             editModeMenuItem.text = "✏️ Режим редактирования"
@@ -1079,16 +1023,9 @@ class DefectMapController {
         }
     }
 
-    private fun setupPan() {
-        // Все обработчики теперь в setupClickHandler()
-        // Эта функция остаётся пустой или удаляем её вызов из initialize()
-        // Но оставляем для обратной совместимости
-    }
-
     // ======================== СПИСОК ДЕФЕКТОВ ========================
 
     private fun showDefectsList() {
-        // Если окно уже открыто — закрываем его
         defectsListStage?.close()
 
         val allDefects = mutableListOf<DefectViewItem>()
@@ -1124,7 +1061,6 @@ class DefectMapController {
         val headerLabel = Label("📊 ВСЕ ДЕФЕКТЫ (${allDefects.size})")
         headerLabel.style = "-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #333;"
 
-        // Фильтры
         val filterPanel = HBox(10.0)
         filterPanel.alignment = Pos.CENTER_LEFT
         filterPanel.style = "-fx-padding: 10px 0; -fx-background-color: #f8f9fa; -fx-border-color: #e9ecef; -fx-border-width: 0 0 1px 0;"
@@ -1142,7 +1078,6 @@ class DefectMapController {
         val tableView = TableView<DefectViewItem>()
         tableView.style = "-fx-font-size: 13px; -fx-border-color: #dee2e6;"
 
-        // Колонки
         val colEquipment = TableColumn<DefectViewItem, String>("Оборудование")
         colEquipment.cellValueFactory = PropertyValueFactory("equipmentName")
         colEquipment.prefWidth = 200.0
@@ -1213,7 +1148,6 @@ class DefectMapController {
             resetBtn
         )
 
-        // Двойной клик — открыть карточку оборудования
         tableView.setOnMouseClicked { event ->
             if (event.clickCount == 2) {
                 val selected = tableView.selectionModel.selectedItem
@@ -1234,21 +1168,16 @@ class DefectMapController {
         closeBtn.style = "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-padding: 8px 20px; -fx-background-radius: 6px;"
         closeBtn.setOnAction { (closeBtn.scene.window as Stage).close() }
 
-// ===== НОВАЯ КНОПКА "СОЗДАТЬ ОТЧЁТ" =====
         val reportBtn = Button("📊 Создать отчёт")
         reportBtn.style = "-fx-background-color: #ffc107; -fx-text-fill: #333; -fx-padding: 8px 20px; -fx-background-radius: 6px; -fx-font-weight: bold;"
         reportBtn.setOnAction {
-            // Закрываем окно дефектов
             val stage = reportBtn.scene.window as Stage
             stage.close()
-            // Открываем диалог создания отчёта
             onCreateReport()
         }
 
         val bottomPanel = HBox(20.0, reportBtn, closeBtn)
         bottomPanel.alignment = Pos.CENTER_RIGHT
-
-
 
         mainLayout.children.addAll(headerLabel, filterPanel, tableView, bottomPanel)
 
@@ -1257,7 +1186,6 @@ class DefectMapController {
         popupStage.scene = Scene(mainLayout, 920.0, 650.0)
         popupStage.isResizable = true
 
-        // Сохраняем ссылку на окно
         defectsListStage = popupStage
         popupStage.setOnHidden {
             defectsListStage = null
@@ -1278,7 +1206,6 @@ class DefectMapController {
                     isDragging = true
                     lastMouseX = event.x
                     lastMouseY = event.y
-                    // ===== ЗАПОМИНАЕМ НАЧАЛО DRAG =====
                     dragStartX = event.x
                     dragStartY = event.y
                     webView.engine.executeScript("""
@@ -1317,21 +1244,17 @@ class DefectMapController {
                         window.dragStartY = ${event.y};
                         var marker = document.getElementById('$markerId');
                         if (marker) {
-                            // Сохраняем ТЕКУЩУЮ позицию в процентах
                             var leftStr = marker.style.left;
                             var topStr = marker.style.top;
-                            // Убираем '%' и парсим как число
                             window.dragOrigLeftPercent = parseFloat(leftStr);
                             window.dragOrigTopPercent = parseFloat(topStr);
                             
-                            // Если не получилось - пробуем через getComputedStyle
                             if (isNaN(window.dragOrigLeftPercent) || isNaN(window.dragOrigTopPercent)) {
                                 var computed = window.getComputedStyle(marker);
                                 window.dragOrigLeftPercent = parseFloat(computed.left);
                                 window.dragOrigTopPercent = parseFloat(computed.top);
                             }
                             
-                            // Если всё ещё NaN - пробуем через bounding rect
                             if (isNaN(window.dragOrigLeftPercent) || isNaN(window.dragOrigTopPercent)) {
                                 var wrapper = document.getElementById('image-wrapper');
                                 var wrapperRect = wrapper.getBoundingClientRect();
@@ -1354,11 +1277,10 @@ class DefectMapController {
         }
 
         // ============================================================
-//  ОБРАБОТЧИК ДВИЖЕНИЯ МЫШИ (ИСПРАВЛЕННЫЙ)
-// ============================================================
+        //  ОБРАБОТЧИК ДВИЖЕНИЯ МЫШИ
+        // ============================================================
         webView.setOnMouseDragged { event: MouseEvent ->
             if (!isEditMode) {
-                // === ОБЫЧНЫЙ РЕЖИМ: панорамирование ===
                 if (isDragging) {
                     val deltaX = event.x - lastMouseX
                     val deltaY = event.y - lastMouseY
@@ -1374,34 +1296,27 @@ class DefectMapController {
                     event.consume()
                 }
             } else {
-                // === РЕЖИМ РЕДАКТИРОВАНИЯ: перетаскивание маркера ===
                 if (isDraggingMarker) {
                     webView.engine.executeScript("""
                 (function() {
                     var marker = document.getElementById(window.draggingMarkerId);
                     if (!marker) return;
                     
-                    // Получаем размеры wrapper
                     var wrapper = document.getElementById('image-wrapper');
                     var wrapperRect = wrapper.getBoundingClientRect();
                     
-                    // Вычисляем дельту в пикселях
                     var deltaX = ${event.x} - window.dragStartX;
                     var deltaY = ${event.y} - window.dragStartY;
                     
-                    // Переводим дельту в проценты
                     var deltaPercentX = (deltaX / wrapperRect.width) * 100;
                     var deltaPercentY = (deltaY / wrapperRect.height) * 100;
                     
-                    // Новая позиция в процентах (БЕЗ ОГРАНИЧЕНИЙ!)
                     var newLeftPercent = window.dragOrigLeftPercent + deltaPercentX;
                     var newTopPercent = window.dragOrigTopPercent + deltaPercentY;
                     
-                    // Применяем (без ограничений, чтобы можно было двигать за пределы)
                     marker.style.left = newLeftPercent + '%';
                     marker.style.top = newTopPercent + '%';
                     
-                    // Обновляем сохранённую позицию
                     window.dragOrigLeftPercent = newLeftPercent;
                     window.dragOrigTopPercent = newTopPercent;
                     window.dragStartX = ${event.x};
@@ -1414,8 +1329,8 @@ class DefectMapController {
         }
 
         // ============================================================
-//  ОБРАБОТЧИК ОТПУСКАНИЯ МЫШИ (ИСПРАВЛЕННЫЙ)
-// ============================================================
+        //  ОБРАБОТЧИК ОТПУСКАНИЯ МЫШИ (ОПТИМИЗИРОВАН)
+        // ============================================================
         webView.setOnMouseReleased { event: MouseEvent ->
             if (!isEditMode) {
                 if (isDragging) {
@@ -1425,142 +1340,102 @@ class DefectMapController {
             """.trimIndent())
                 }
             } else {
-                println("🔄 ОТПУСКАНИЕ: isDraggingMarker=$isDraggingMarker")
                 if (isDraggingMarker) {
-                    // Получаем ID маркера
                     val markerId = webView.engine.executeScript("""
                 (function() {
                     return window.draggingMarkerId || null;
                 })();
             """.trimIndent()) as? String
 
-                    println("🔍 markerId: $markerId")
-
-                    if (markerId == null) {
-                        println("❌ window.draggingMarkerId = null")
-                        isDraggingMarker = false
-                        return@setOnMouseReleased
-                    }
-
-                    // Получаем данные маркера через JSON (БЕЗ ОГРАНИЧЕНИЙ!)
-                    val jsonResult = webView.engine.executeScript("""
-                (function() {
-                    var marker = document.getElementById('$markerId');
-                    if (!marker) {
-                        return JSON.stringify({ error: 'marker_not_found' });
-                    }
-                    
-                    var equipmentId = marker.dataset.equipmentId;
-                    if (!equipmentId) {
-                        var parts = '$markerId'.split('-marker-');
-                        if (parts.length > 0) {
-                            equipmentId = parts[0];
+                    if (markerId != null) {
+                        val jsonResult = webView.engine.executeScript("""
+                    (function() {
+                        var marker = document.getElementById('$markerId');
+                        if (!marker) {
+                            return JSON.stringify({ error: 'marker_not_found' });
                         }
-                    }
-                    
-                    // Получаем позицию маркера
-                    var rect = marker.getBoundingClientRect();
-                    var wrapper = document.getElementById('image-wrapper');
-                    var wrapperRect = wrapper.getBoundingClientRect();
-                    
-                    // Центр маркера относительно wrapper в пикселях
-                    var leftPx = rect.left - wrapperRect.left + rect.width / 2;
-                    var topPx = rect.top - wrapperRect.top + rect.height / 2;
-                    
-                    // Вычисляем проценты (БЕЗ ОГРАНИЧЕНИЙ!)
-                    var leftPercent = (leftPx / wrapperRect.width) * 100;
-                    var topPercent = (topPx / wrapperRect.height) * 100;
-                    
-                    // НЕ ОГРАНИЧИВАЕМ значения!
-                    // leftPercent = Math.max(0, Math.min(100, leftPercent));
-                    // topPercent = Math.max(0, Math.min(100, topPercent));
-                    
-                    var data = {
-                        equipmentId: equipmentId,
-                        leftPercent: leftPercent,
-                        topPercent: topPercent,
-                        leftPx: leftPx,
-                        topPx: topPx,
-                        wrapperWidth: wrapperRect.width,
-                        wrapperHeight: wrapperRect.height
-                    };
-                    
-                    return JSON.stringify(data);
-                })();
-            """.trimIndent()) as? String
+                        
+                        var equipmentId = marker.dataset.equipmentId;
+                        if (!equipmentId) {
+                            var parts = '$markerId'.split('-marker-');
+                            if (parts.length > 0) {
+                                equipmentId = parts[0];
+                            }
+                        }
+                        
+                        var rect = marker.getBoundingClientRect();
+                        var wrapper = document.getElementById('image-wrapper');
+                        var wrapperRect = wrapper.getBoundingClientRect();
+                        
+                        var leftPx = rect.left - wrapperRect.left + rect.width / 2;
+                        var topPx = rect.top - wrapperRect.top + rect.height / 2;
+                        
+                        var leftPercent = (leftPx / wrapperRect.width) * 100;
+                        var topPercent = (topPx / wrapperRect.height) * 100;
+                        
+                        var data = {
+                            equipmentId: equipmentId,
+                            leftPercent: leftPercent,
+                            topPercent: topPercent
+                        };
+                        
+                        return JSON.stringify(data);
+                    })();
+                """.trimIndent()) as? String
 
-                    println("📊 JSON результат: $jsonResult")
+                        if (jsonResult != null && jsonResult != "null" && !jsonResult.contains("error")) {
+                            try {
+                                val type = object : TypeToken<Map<String, Any>>() {}.type
+                                val data: Map<String, Any> = gson.fromJson(jsonResult, type)
 
-                    if (jsonResult != null && jsonResult != "null" && !jsonResult.contains("error")) {
-                        try {
-                            val gson = Gson()
-                            val type = object : TypeToken<Map<String, Any>>() {}.type
-                            val data: Map<String, Any> = gson.fromJson(jsonResult, type)
+                                val equipmentId = data["equipmentId"] as? String ?: ""
+                                val leftPercent = (data["leftPercent"] as? Double) ?: 0.0
+                                val topPercent = (data["topPercent"] as? Double) ?: 0.0
 
-                            val equipmentId = data["equipmentId"] as? String ?: ""
-                            val leftPercent = (data["leftPercent"] as? Double) ?: 0.0
-                            val topPercent = (data["topPercent"] as? Double) ?: 0.0
-                            val leftPx = (data["leftPx"] as? Double) ?: 0.0
-                            val topPx = (data["topPx"] as? Double) ?: 0.0
-                            val wrapperWidth = (data["wrapperWidth"] as? Double) ?: 1.0
-                            val wrapperHeight = (data["wrapperHeight"] as? Double) ?: 1.0
-
-                            println("📊 ПАРСИНГ УСПЕШЕН:")
-                            println("  equipmentId: $equipmentId")
-                            println("  leftPx: $leftPx, topPx: $topPx")
-                            println("  wrapperWidth: $wrapperWidth, wrapperHeight: $wrapperHeight")
-                            println("  leftPercent: $leftPercent%, topPercent: $topPercent%")
-
-                            if (equipmentId.isNotEmpty()) {
-                                saveMarkerPosition(equipmentId, markerId, leftPercent, topPercent)
-                                showToast("✅ Маркер перемещён")
-                            } else {
-                                println("❌ Неверные данные: equipmentId=$equipmentId")
+                                if (equipmentId.isNotEmpty()) {
+                                    // ===== ОПТИМИЗИРОВАННОЕ СОХРАНЕНИЕ =====
+                                    saveMarkerPositionOptimized(equipmentId, markerId, leftPercent, topPercent)
+                                    showToast("✅ Маркер перемещён")
+                                } else {
+                                    showToast("⚠️ Ошибка при перетаскивании маркера")
+                                }
+                            } catch (e: Exception) {
+                                println("❌ Ошибка парсинга JSON: ${e.message}")
                                 showToast("⚠️ Ошибка при перетаскивании маркера")
                             }
-                        } catch (e: Exception) {
-                            println("❌ Ошибка парсинга JSON: ${e.message}")
-                            e.printStackTrace()
+                        } else {
                             showToast("⚠️ Ошибка при перетаскивании маркера")
                         }
-                    } else {
-                        println("❌ Невалидный JSON: $jsonResult")
-                        showToast("⚠️ Ошибка при перетаскивании маркера")
-                    }
 
-                    // Очищаем состояние
-                    webView.engine.executeScript("""
-                window.draggingMarkerId = null;
-                window.dragStartX = null;
-                window.dragStartY = null;
-                window.dragOrigLeftPercent = null;
-                window.dragOrigTopPercent = null;
-                var marker = document.getElementById('$markerId');
-                if (marker) marker.style.cursor = 'grab';
-            """.trimIndent())
-                    isDraggingMarker = false
-                    event.consume()
+                        webView.engine.executeScript("""
+                    window.draggingMarkerId = null;
+                    window.dragStartX = null;
+                    window.dragStartY = null;
+                    window.dragOrigLeftPercent = null;
+                    window.dragOrigTopPercent = null;
+                    var marker = document.getElementById('$markerId');
+                    if (marker) marker.style.cursor = 'grab';
+                """.trimIndent())
+                        isDraggingMarker = false
+                        event.consume()
+                    }
                 }
             }
         }
 
         // ============================================================
-        //  КЛИК (добавление оборудования в режиме редактирования)
+        //  КЛИК
         // ============================================================
         webView.setOnMouseClicked { event: MouseEvent ->
             if (!isEditMode) {
-                // ===== ПРОВЕРЯЕМ: БЫЛ ЛИ ЭТО DRAG? =====
                 val dx = event.x - dragStartX
                 val dy = event.y - dragStartY
                 val distance = Math.sqrt(dx * dx + dy * dy)
                 val wasDrag = distance > DRAG_THRESHOLD
 
-                // === ОБЫЧНЫЙ РЕЖИМ: показываем карточку оборудования ===
-                // Открываем карточку ТОЛЬКО если это не был drag
                 if (event.clickCount == 1 && event.button == javafx.scene.input.MouseButton.PRIMARY && !wasDrag) {
                     handleEquipmentClick(event.x, event.y)
                 }
-                // Двойной клик для сброса зума (drag не мешает)
                 if (event.clickCount == 2) {
                     zoomLevel = 1.0
                     currentTranslateX = 0.0
@@ -1571,9 +1446,7 @@ class DefectMapController {
         """.trimIndent())
                 }
             } else {
-                // === РЕЖИМ РЕДАКТИРОВАНИЯ: добавляем оборудование ===
                 if (event.clickCount == 1 && event.button == javafx.scene.input.MouseButton.PRIMARY) {
-                    // Проверяем, не кликнули ли по маркеру
                     val isMarker = webView.engine.executeScript("""
             (function() {
                 var container = document.getElementById('container');
@@ -1604,7 +1477,7 @@ class DefectMapController {
         }
 
         // ============================================================
-        //  КОНТЕКСТНОЕ МЕНЮ (только в режиме редактирования)
+        //  КОНТЕКСТНОЕ МЕНЮ
         // ============================================================
         webView.setOnContextMenuRequested { event ->
             if (isEditMode) {
@@ -1635,9 +1508,6 @@ class DefectMapController {
             }
         }
 
-        // ============================================================
-        //  ВЫХОД МЫШИ ЗА ПРЕДЕЛЫ
-        // ============================================================
         webView.setOnMouseExited {
             if (!isEditMode && isDragging) {
                 isDragging = false
@@ -1648,40 +1518,22 @@ class DefectMapController {
         }
     }
 
-    // В saveMarkerPosition уберите ограничение или сделайте его более широким:
-    private fun saveMarkerPosition(equipmentId: String, markerId: String, newLeftPercent: Double, newTopPercent: Double) {
-        println("=".repeat(60))
-        println("💾 saveMarkerPosition вызван")
-        println("  equipmentId: $equipmentId")
-        println("  markerId: $markerId")
-        println("  newLeftPercent: $newLeftPercent%, newTopPercent: $newTopPercent%")
-        println("=".repeat(60))
+    // ======================== ОПТИМИЗИРОВАННОЕ СОХРАНЕНИЕ МАРКЕРА ========================
+
+    private fun saveMarkerPositionOptimized(equipmentId: String, markerId: String, newLeftPercent: Double, newTopPercent: Double) {
+        println("💾 saveMarkerPositionOptimized: $equipmentId -> ($newLeftPercent%, $newTopPercent%)")
 
         if (equipmentId.isEmpty()) {
-            println("❌ equipmentId пустой, пропускаем сохранение")
+            println("❌ equipmentId пустой")
             return
         }
 
-        // Загружаем все оборудование из БД
         val allEquipment = loadEquipment()
-
-        // Ищем оборудование по ID
         var equipment = allEquipment.find { it.id == equipmentId }
 
-        // Если не нашли - пробуем найти по ID маркера (отрезаем -marker-N)
         if (equipment == null) {
             val baseId = markerId.replace(Regex("-marker-\\d+(-\\d+)?$"), "")
             equipment = allEquipment.find { it.id == baseId }
-            println("🔍 Ищем по baseId: $baseId, найдено: ${equipment?.name ?: "нет"}")
-        }
-
-        // Если всё ещё не нашли - ищем по части ID
-        if (equipment == null) {
-            val found = allEquipment.find { equipmentId.startsWith(it.id) }
-            if (found != null) {
-                equipment = found
-                println("🔍 Найдено по части ID: ${found.id} (${found.name})")
-            }
         }
 
         if (equipment == null) {
@@ -1690,88 +1542,79 @@ class DefectMapController {
             return
         }
 
-        println("📊 Найдено оборудование: ${equipment.name} (${equipment.id})")
-        println("📊 Текущие маркеры: ${equipment.markers.size}")
-
-        // Находим индекс маркера
         var markerIndex = -1
-
-        // Сначала ищем по ID маркера
         val idParts = markerId.split("-marker-")
         if (idParts.size > 1) {
             val indexFromId = idParts[1].split("-").firstOrNull()?.toIntOrNull()
             if (indexFromId != null && indexFromId < equipment.markers.size) {
                 markerIndex = indexFromId
-                println("📊 Найден маркер по ID: индекс $markerIndex")
             }
         }
 
-        // Если не нашли - ищем по координатам (с допуском)
         if (markerIndex == -1) {
             for (i in equipment.markers.indices) {
                 val m = equipment.markers[i]
                 if (Math.abs(m.left - newLeftPercent) < 0.5 && Math.abs(m.top - newTopPercent) < 0.5) {
                     markerIndex = i
-                    println("📊 Найден маркер по координатам: индекс $markerIndex")
                     break
                 }
             }
         }
 
-        // Если не нашли - берём первый маркер
         if (markerIndex == -1 && equipment.markers.isNotEmpty()) {
             markerIndex = 0
-            println("📊 Используем первый маркер (основной): индекс $markerIndex")
         }
 
         if (markerIndex == -1) {
-            println("❌ Маркер не найден, добавляем новый")
             val newMarkers = equipment.markers + MarkerPosition(newLeftPercent, newTopPercent, isMain = false)
             val updatedEquipment = equipment.copy(markers = newMarkers)
             val updatedList = allEquipment.map { if (it.id == equipment.id) updatedEquipment else it }
             database.saveEquipment(updatedList)
-            syncWindowEquipment()
+
+            // Обновляем только window.equipment, НЕ перерисовываем все маркеры
+            val updatedJson = gson.toJson(updatedList)
+            webView.engine.executeScript("window.equipment = $updatedJson;")
+
             println("✅ Добавлен новый маркер для ${equipment.name}")
             showToast("✅ Маркер добавлен для ${equipment.name}")
             return
         }
 
-        println("📊 Обновляем маркер с индексом: $markerIndex")
-
-        // Обновляем маркер (БЕЗ ОГРАНИЧЕНИЙ)
         val updatedMarkers = equipment.markers.toMutableList()
         updatedMarkers[markerIndex] = updatedMarkers[markerIndex].copy(left = newLeftPercent, top = newTopPercent)
 
-        // Обновляем оборудование - ТОЛЬКО markers, без left/top
         val updatedEquipment = equipment.copy(markers = updatedMarkers)
         val updatedList = allEquipment.map {
             if (it.id == equipment.id) updatedEquipment else it
         }
 
         database.saveEquipment(updatedList)
-        syncWindowEquipment()
-        println("✅ Сохранено в БД для ${equipment.name}")
 
-        // Обновляем маркер на схеме
+        // ===== ОПТИМИЗАЦИЯ: обновляем ТОЛЬКО этот маркер, а не все =====
         webView.engine.executeScript("""
         (function() {
+            // Обновляем позицию маркера
             var marker = document.getElementById('$markerId');
             if (marker) {
                 marker.style.left = '${newLeftPercent}%';
                 marker.style.top = '${newTopPercent}%';
-                marker.dataset.equipmentId = '${equipment.id}';
-                console.log('✅ Маркер обновлён на схеме');
             }
             
+            // Обновляем данные в window.equipment
             var allEquipment = ${gson.toJson(updatedList)};
             window.equipment = allEquipment;
+            
+            console.log('✅ Маркер обновлён (оптимизированно)');
         })();
-    """.trimIndent())
+        """.trimIndent())
 
+        println("✅ Сохранено в БД для ${equipment.name}")
         val formattedLeft = "%.1f".format(newLeftPercent)
         val formattedTop = "%.1f".format(newTopPercent)
-        showToast("✅ Маркер ${equipment.name} перемещён на ${formattedLeft}%, ${formattedTop}%")
+        showToast("✅ Маркер перемещён на ${formattedLeft}%, ${formattedTop}%")
     }
+
+    // ======================== ОСТАЛЬНЫЕ МЕТОДЫ (БЕЗ ИЗМЕНЕНИЙ) ========================
 
     private fun showContextMenu(x: Double, y: Double, equipmentId: String) {
         println("🔍 showContextMenu: equipmentId = $equipmentId")
@@ -1781,15 +1624,12 @@ class DefectMapController {
         var isExtraMarker = false
         var markerId = equipmentId
 
-        // 1. Проверяем, есть ли data-equipment-id у маркера
         val markerInfo = webView.engine.executeScript("""
         (function() {
             var marker = document.getElementById('$equipmentId');
             if (!marker) return null;
             
-            // Получаем equipmentId из data-атрибута
             var realEquipmentId = marker.dataset.equipmentId || null;
-            // Если data-equipment-id нет — пробуем найти по ID маркера (отрезаем -marker-N)
             if (!realEquipmentId) {
                 var parts = '$equipmentId'.split('-marker-');
                 if (parts.length > 0 && parts[0].startsWith('equipment-')) {
@@ -1810,15 +1650,11 @@ class DefectMapController {
             isExtraMarker = markerInfo["isExtra"] as? Boolean ?: false
             markerId = markerInfo["markerId"] as? String ?: equipmentId
 
-            println("🔍 realId: $realId, isExtraMarker: $isExtraMarker")
-
             if (realId != null) {
                 equipment = loadEquipment().find { it.id == realId }
-                println("🔍 Найдено оборудование по data-equipment-id: ${equipment?.name}")
             }
         }
 
-        // 2. Если не нашли — ищем по позиции (старый способ)
         if (equipment == null) {
             val foundId = webView.engine.executeScript("""
             (function() {
@@ -1849,18 +1685,13 @@ class DefectMapController {
 
             if (foundId != null) {
                 equipment = loadEquipment().find { it.id == foundId }
-                println("🔍 Найдено оборудование по позиции: ${equipment?.name}")
             }
         }
 
-        // 3. Если всё ещё не нашли — пробуем отрезать суффикс от ID маркера
         if (equipment == null) {
             val baseId = equipmentId.replace(Regex("-marker-\\d+$"), "")
             if (baseId != equipmentId) {
                 equipment = loadEquipment().find { it.id == baseId }
-                if (equipment != null) {
-                    println("🔍 Найдено оборудование по ID маркера (без суффикса): ${equipment.name}")
-                }
             }
         }
 
@@ -1872,9 +1703,6 @@ class DefectMapController {
         val freshEquipment = loadEquipment().find { it.id == equipment.id }
         val markersCount = freshEquipment?.markers?.size ?: 1
 
-        println("🔍 Найдено оборудование: ${equipment.name}, маркеров: $markersCount, isExtraMarker: $isExtraMarker")
-
-        // ===== ПУНКТЫ МЕНЮ =====
         val editItem = MenuItem("✏️ Редактировать")
         editItem.setOnAction {
             editEquipment(equipment.id)
@@ -1895,7 +1723,6 @@ class DefectMapController {
 
         contextMenu.items.addAll(editItem, deleteItem, addMarkerItem)
 
-        // ===== Показываем "Удалить маркер" ТОЛЬКО для дополнительных маркеров =====
         if (isExtraMarker && markersCount > 1) {
             val deleteMarkerItem = MenuItem("🗑️ Удалить маркер")
             deleteMarkerItem.setOnAction {
@@ -1903,20 +1730,14 @@ class DefectMapController {
                 contextMenu.hide()
             }
             contextMenu.items.add(deleteMarkerItem)
-            println("➕ Добавлен пункт 'Удалить маркер'")
-        } else {
-            println("ℹ️ Пункт 'Удалить маркер' НЕ добавлен: isExtraMarker=$isExtraMarker, markersCount=$markersCount")
         }
 
         contextMenu.show(webView, x, y)
     }
 
-    // ======================== ДОБАВЛЕНИЕ ========================
-
     private fun addEquipmentAtPosition(x: Double, y: Double) {
         println("📍 Добавление оборудования: x=$x, y=$y")
 
-        // Если мы в режиме добавления маркера к существующему оборудованию
         if (currentEditingEquipmentId != null) {
             addMarkerToExistingEquipment(x, y)
             return
@@ -1938,7 +1759,6 @@ class DefectMapController {
             val top = parts[1]
 
             Platform.runLater {
-                // 1. Диалог для названия
                 val nameDialog = TextInputDialog()
                 nameDialog.title = "Новое оборудование"
                 nameDialog.headerText = "Введите диспетчерское наименование"
@@ -1950,14 +1770,12 @@ class DefectMapController {
                     val name = nameResult.get().trim()
                     if (name.isNotEmpty()) {
 
-                        // 2. Выбор ячейки
                         val cell = selectCell()
                         if (cell == null) {
                             println("❌ Выбор ячейки отменён")
                             return@runLater
                         }
 
-                        // 3. Диалог для типа
                         val typeDialog = ChoiceDialog(
                             EquipmentTypes.ALL_TYPES.find { it.first == "v_500" }?.second ?: "Выключатель 500 кВ",
                             EquipmentTypes.ALL_TYPES.map { it.second }
@@ -1972,7 +1790,6 @@ class DefectMapController {
                             val type = EquipmentTypes.ALL_TYPES.find { it.second == typeName }?.first ?: "other"
                             val typeLabel = EquipmentTypes.getLetter(type)
 
-                            // 4. Диалог для размера
                             val sizeDialog = ChoiceDialog("normal", listOf("small", "normal", "large"))
                             sizeDialog.title = "Размер метки"
                             sizeDialog.headerText = "Выберите размер метки на схеме"
@@ -1988,7 +1805,6 @@ class DefectMapController {
                                 val escapedName = name.replace("'", "\\'")
                                 val escapedCell = cell.replace("'", "\\'")
 
-                                // Создаём маркер в DOM с процентами
                                 webView.engine.executeScript("""
                                 (function() {
                                     var container = document.getElementById('equipment-container');
@@ -2029,15 +1845,10 @@ class DefectMapController {
                                 })();
                             """.trimIndent())
 
-                                // Сохраняем в БД (используем saveEquipmentDirect, который не проверяет внешние изменения)
                                 saveEquipmentDirect()
                                 syncWindowEquipment()
 
-                                // Сбрасываем только currentEditingEquipmentId
                                 currentEditingEquipmentId = null
-
-                                // Подтверждаем, что режим редактирования остаётся активным
-                                println("ℹ️ Режим редактирования остаётся активным")
 
                                 Platform.runLater {
                                     showToast("✅ Добавлено: $name")
@@ -2146,7 +1957,6 @@ class DefectMapController {
                 println("✅ Добавлен маркер для: ${equipment.name}")
                 showToast("✅ Маркер добавлен для ${equipment.name}")
 
-                // ===== СБРАСЫВАЕМ СОСТОЯНИЕ =====
                 currentEditingEquipmentId = null
                 isEditMode = false
                 toggleEditMode(false)
@@ -2167,12 +1977,11 @@ class DefectMapController {
     """.trimIndent())
     }
 
-    // ======================== ВСПЛЫВАЮЩАЯ ПОДСКАЗКА (TOAST) ========================
+    // ======================== TOAST ========================
 
-    private fun showToast(message: String, duration: javafx.util.Duration = javafx.util.Duration.seconds(2.5)) {
+    private fun showToast(message: String, duration: Duration = Duration.seconds(2.5)) {
         Platform.runLater {
             try {
-                // Создаём контейнер для тоста
                 val toastContainer = StackPane()
                 toastContainer.isMouseTransparent = true
                 toastContainer.style = "-fx-background-color: transparent;"
@@ -2201,7 +2010,6 @@ class DefectMapController {
                 if (scene != null) {
                     val root = scene.root as? javafx.scene.layout.Pane
                     if (root != null) {
-                        // Удаляем старые тосты
                         root.children.filter { it is StackPane && it.isMouseTransparent && it.children.size == 1 && it.children[0] is Label }
                             .forEach { root.children.remove(it) }
 
@@ -2211,17 +2019,15 @@ class DefectMapController {
                         StackPane.setAlignment(toastContainer, Pos.TOP_CENTER)
                         StackPane.setMargin(toastContainer, Insets(60.0, 20.0, 0.0, 20.0))
 
-                        // Анимация появления
                         toast.opacityProperty().set(0.0)
-                        val fadeIn = javafx.animation.FadeTransition(javafx.util.Duration.millis(300.0), toast)
+                        val fadeIn = FadeTransition(Duration.millis(300.0), toast)
                         fadeIn.fromValue = 0.0
                         fadeIn.toValue = 1.0
                         fadeIn.play()
 
-                        // Автоматическое скрытие
                         val pause = PauseTransition(duration)
                         pause.setOnFinished {
-                            val fadeOut = javafx.animation.FadeTransition(javafx.util.Duration.millis(300.0), toast)
+                            val fadeOut = FadeTransition(Duration.millis(300.0), toast)
                             fadeOut.fromValue = 1.0
                             fadeOut.toValue = 0.0
                             fadeOut.setOnFinished {
@@ -2234,7 +2040,6 @@ class DefectMapController {
                 }
             } catch (e: Exception) {
                 println("❌ Ошибка отображения Toast: ${e.message}")
-                // fallback - используем Alert
                 Platform.runLater {
                     Alert(AlertType.INFORMATION).apply {
                         title = "Уведомление"
@@ -2250,7 +2055,6 @@ class DefectMapController {
     private fun deleteMarker(equipmentId: String, markerId: String) {
         println("🗑️ Удаление маркера: $markerId для оборудования: $equipmentId")
 
-        // Загружаем оборудование
         val allEquipment = loadEquipment()
         val equipment = allEquipment.find { it.id == equipmentId }
 
@@ -2259,13 +2063,11 @@ class DefectMapController {
             return
         }
 
-        // Проверяем, есть ли у оборудования несколько маркеров
         if (equipment.markers.size <= 1) {
             showInfo("⚠️ Нельзя удалить единственный маркер оборудования. Используйте 'Удалить оборудование'")
             return
         }
 
-        // Находим индекс маркера по ID (храним в data-marker-index)
         val markerIndex = webView.engine.executeScript("""
         (function() {
             var marker = document.getElementById('$markerId');
@@ -2281,25 +2083,21 @@ class DefectMapController {
             return
         }
 
-        // Удаляем маркер из списка
         val newMarkers = equipment.markers.toMutableList()
         newMarkers.removeAt(markerIndex)
 
-        // Если удалённый маркер был основным (isMain=true) — делаем первый маркер основным
         val updatedMarkers = newMarkers.mapIndexed { index, pos ->
             if (index == 0) pos.copy(isMain = true) else pos.copy(isMain = false)
         }
 
         val updatedEquipment = equipment.copy(markers = updatedMarkers)
 
-        // Сохраняем
         val updatedList = allEquipment.map {
             if (it.id == equipmentId) updatedEquipment else it
         }
         database.saveEquipment(updatedList)
         syncWindowEquipment()
 
-        // Удаляем маркер из DOM
         webView.engine.executeScript("""
         (function() {
             var marker = document.getElementById('$markerId');
@@ -2308,7 +2106,6 @@ class DefectMapController {
         })();
     """.trimIndent())
 
-        // Обновляем window.equipment
         val updatedList2 = loadEquipment()
         val equipmentJson = gson.toJson(updatedList2)
         webView.engine.executeScript("window.equipment = $equipmentJson;")
@@ -2316,8 +2113,6 @@ class DefectMapController {
         equipmentCounter = updatedList2.size
         showInfo("🗑️ Маркер удалён")
     }
-
-    // ======================== РЕДАКТИРОВАНИЕ ========================
 
     private fun editEquipment(equipmentId: String) {
         println("=".repeat(60))
@@ -2339,7 +2134,6 @@ class DefectMapController {
         val currentSize = equipment.size
 
         Platform.runLater {
-            // 1. Диалог для названия
             val nameDialog = TextInputDialog()
             nameDialog.title = "Редактирование оборудования"
             nameDialog.headerText = "Введите новое название"
@@ -2351,14 +2145,12 @@ class DefectMapController {
                 val newName = nameResult.get().trim()
                 if (newName.isNotEmpty()) {
 
-                    // 2. Выбор ячейки (ОБЩАЯ ФУНКЦИЯ!)
                     val newCell = selectCell(currentCell)
                     if (newCell == null) {
                         println("❌ Выбор ячейки отменён")
                         return@runLater
                     }
 
-                    // 3. Диалог для типа
                     val typeDialog = ChoiceDialog(
                         EquipmentTypes.ALL_TYPES.find { it.first == currentType }?.second ?: currentType,
                         EquipmentTypes.ALL_TYPES.map { it.second }
@@ -2373,7 +2165,6 @@ class DefectMapController {
                         val newType = EquipmentTypes.ALL_TYPES.find { it.second == typeName }?.first ?: "other"
                         val newLetter = EquipmentTypes.getLetter(newType)
 
-                        // 4. Диалог для размера
                         val sizeDialog = ChoiceDialog(currentSize, listOf("small", "normal", "large"))
                         sizeDialog.title = "Размер метки"
                         sizeDialog.headerText = "Выберите размер метки на схеме"
@@ -2383,7 +2174,6 @@ class DefectMapController {
                         if (sizeResult.isPresent) {
                             val newSize = sizeResult.get()
 
-                            // Обновляем список
                             val updatedList = allEquipment.map { item ->
                                 if (item.id == equipmentId) {
                                     item.copy(
@@ -2405,14 +2195,12 @@ class DefectMapController {
                             webView.engine.executeScript("window.equipment = $equipmentJson;")
                             println("✅ База данных обновлена")
 
-                            // Экранируем строки для JavaScript
                             val escapedName = newName.replace("'", "\\'")
                             val escapedType = newType.replace("'", "\\'")
                             val escapedLetter = newLetter.replace("'", "\\'")
                             val escapedCell = newCell.replace("'", "\\'")
                             val escapedSize = newSize.replace("'", "\\'")
 
-                            // Обновляем в DOM
                             webView.engine.executeScript("""
                         (function() {
                             var id = '$equipmentId';
@@ -2444,7 +2232,6 @@ class DefectMapController {
                             equipmentCounter = updatedList.size
                             showInfo("Оборудование обновлено: $newName (размер: $newSize)")
 
-                            // ===== ОБНОВЛЯЕМ ОКНО СПИСКА =====
                             Platform.runLater {
                                 val stages = Stage.getWindows()
                                 for (window in stages) {
@@ -2454,7 +2241,7 @@ class DefectMapController {
                                             val tableView = findTableView(root)
                                             if (tableView != null) {
                                                 @Suppress("UNCHECKED_CAST")
-                                                val table = tableView as javafx.scene.control.TableView<EquipmentTableItem>
+                                                val table = tableView as TableView<EquipmentTableItem>
 
                                                 val updatedData = loadEquipment()
                                                 val items = updatedData.mapIndexed { index, eq ->
@@ -2469,7 +2256,7 @@ class DefectMapController {
                                                         top = eq.top
                                                     )
                                                 }
-                                                table.items = javafx.collections.FXCollections.observableArrayList(items)
+                                                table.items = FXCollections.observableArrayList(items)
 
                                                 val label = findCountLabel(root)
                                                 label?.text = "Показано: ${updatedData.size} из ${updatedData.size}"
@@ -2486,10 +2273,8 @@ class DefectMapController {
         }
     }
 
-// ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ПОИСКА В ОКНЕ =====
-
-    private fun findTableView(node: javafx.scene.Node): javafx.scene.control.TableView<*>? {
-        if (node is javafx.scene.control.TableView<*>) {
+    private fun findTableView(node: javafx.scene.Node): TableView<*>? {
+        if (node is TableView<*>) {
             return node
         }
         if (node is javafx.scene.layout.Pane) {
@@ -2518,25 +2303,14 @@ class DefectMapController {
         return database.loadAllEquipment()
     }
 
-    // ======================== ОБЩАЯ ФУНКЦИЯ ДЛЯ ВЫБОРА ЯЧЕЙКИ ========================
-
-    /**
-     * Открывает диалог выбора ячейки.
-     * @param currentCell Текущая ячейка (для редактирования). Если пустая, будет предложено выбрать или создать.
-     * @return Выбранная ячейка или null, если пользователь отменил выбор.
-     */
     private fun selectCell(currentCell: String = ""): String? {
-        // Загружаем все существующие ячейки из БД
         val allEquipment = loadEquipment()
         val existingCells = allEquipment
             .mapNotNull { it.cell.takeIf { cell -> cell.isNotEmpty() } }
             .distinct()
             .sorted()
 
-        // Создаём список для выбора: существующие ячейки + "➕ Создать новую"
         val cellOptions = existingCells + "➕ Создать новую"
-
-        // Если есть текущая ячейка и она не пустая — выбираем её по умолчанию
         val defaultCell = if (currentCell.isNotEmpty() && existingCells.contains(currentCell)) {
             currentCell
         } else {
@@ -2553,7 +2327,6 @@ class DefectMapController {
             val selectedCell = cellResult.get()
 
             if (selectedCell == "➕ Создать новую") {
-                // Если выбрано "Создать новую" — открываем диалог для ввода
                 val newCellDialog = TextInputDialog()
                 newCellDialog.title = "Новая ячейка"
                 newCellDialog.headerText = "Введите номер новой ячейки"
@@ -2573,9 +2346,7 @@ class DefectMapController {
         return null
     }
 
-    // Вместо deleteEquipment()
     private fun deleteEquipment(equipmentId: String) {
-        // ===== ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ =====
         val confirm = Alert(AlertType.CONFIRMATION)
         confirm.title = "Удаление оборудования"
         confirm.headerText = "🗑️ Вы уверены?"
@@ -2587,11 +2358,9 @@ class DefectMapController {
             return
         }
 
-        // Удаляем из БД
         database.deleteById(equipmentId)
         syncWindowEquipment()
 
-        // Удаляем все маркеры из DOM (по data-equipment-id)
         webView.engine.executeScript("""
         (function() {
             var markers = document.querySelectorAll('[data-equipment-id="$equipmentId"]');
@@ -2616,10 +2385,9 @@ class DefectMapController {
         showToast("🗑️ Оборудование удалено")
     }
 
-    // ======================== СПИСОК И ЭКСПОРТ ========================
+    // ======================== СПИСОК ОБОРУДОВАНИЯ ========================
 
     private fun viewEquipmentList() {
-        // Если окно уже открыто — закрываем его
         equipmentListStage?.close()
 
         val result = webView.engine.executeScript("""
@@ -2668,11 +2436,8 @@ class DefectMapController {
                 searchField.promptText = "🔍 Поиск по названию или ID..."
                 searchField.style = "-fx-pref-width: 250px; -fx-font-size: 13px; -fx-padding: 6px 10px; -fx-background-radius: 4px; -fx-border-color: #ced4da; -fx-border-radius: 4px;"
 
-                // Таблица
                 val tableView = TableView<EquipmentTableItem>()
                 tableView.style = "-fx-font-size: 13px; -fx-border-color: #dee2e6;"
-
-                // ======================== КОЛОНКИ ТАБЛИЦЫ ========================
 
                 val colNumber = TableColumn<EquipmentTableItem, Int>("№")
                 colNumber.cellValueFactory = PropertyValueFactory("number")
@@ -2705,8 +2470,6 @@ class DefectMapController {
                 val colId = TableColumn<EquipmentTableItem, String>("ID")
                 colId.cellValueFactory = PropertyValueFactory("id")
                 colId.prefWidth = 120.0
-
-                // ======================== КОЛОНКА: ДЕЙСТВИЯ (ТОЛЬКО УДАЛИТЬ) ========================
 
                 val colActions = TableColumn<EquipmentTableItem, Void>("Действие")
                 colActions.prefWidth = 80.0
@@ -2792,13 +2555,9 @@ class DefectMapController {
                     }
                 }
 
-                // ======================== ДОБАВЛЯЕМ ВСЕ КОЛОНКИ ========================
-
                 tableView.columns.addAll(
                     colNumber, colName, colType, colCell, colX, colY, colId, colActions
                 )
-
-                // ======================== ПРЕОБРАЗОВАНИЕ ДАННЫХ ========================
 
                 fun toTableItems(data: List<EquipmentData>): List<EquipmentTableItem> {
                     return data.mapIndexed { index, item ->
@@ -2815,25 +2574,18 @@ class DefectMapController {
                     }
                 }
 
-                // ======================== ФУНКЦИЯ ОБНОВЛЕНИЯ ТАБЛИЦЫ ========================
-
                 fun updateTable(data: List<EquipmentData>) {
                     val items = toTableItems(data)
                     tableView.items = FXCollections.observableArrayList(items)
                     countLabel.text = "Показано: ${data.size} из ${allEquipment.size}"
                 }
 
-                // ======================== ФУНКЦИЯ ПРИМЕНЕНИЯ ФИЛЬТРОВ ========================
-
                 fun applyFilter() {
                     val selectedType = typeFilter.value
-                    println("🔍 Выбран тип: $selectedType")
-
                     val typeKey = when (selectedType) {
                         "Все типы" -> "all"
                         else -> EquipmentTypes.ALL_TYPES.find { it.second == selectedType }?.first ?: "all"
                     }
-                    println("🔑 Ключ типа: $typeKey")
 
                     var filtered = allEquipment.filter { item ->
                         val typeMatch = typeKey == "all" || item.type == typeKey
@@ -2856,16 +2608,11 @@ class DefectMapController {
                         }
                     }
 
-                    println("📊 Найдено: ${filtered.size} из ${allEquipment.size}")
                     updateTable(filtered)
                 }
 
-                // ======================== СЛУШАТЕЛИ ========================
-
                 searchField.textProperty().addListener { _, _, _ -> applyFilter() }
                 cellSearchField.textProperty().addListener { _, _, _ -> applyFilter() }
-
-                // ======================== КНОПКИ ========================
 
                 val applyBtn = Button("Применить")
                 applyBtn.style = "-fx-background-color: #007bff; -fx-text-fill: white; -fx-font-size: 13px; -fx-padding: 4px 16px; -fx-background-radius: 4px;"
@@ -2880,8 +2627,6 @@ class DefectMapController {
                     applyFilter()
                 }
 
-                // ======================== ДВОЙНОЙ КЛИК ПО СТРОКЕ ========================
-
                 tableView.setOnMouseClicked { event ->
                     if (event.clickCount == 2) {
                         val selected = tableView.selectionModel.selectedItem
@@ -2892,16 +2637,12 @@ class DefectMapController {
                     }
                 }
 
-                // ======================== СТИЛЬ ТАБЛИЦЫ ========================
-
                 tableView.style = """
                 -fx-font-size: 13px;
                 -fx-border-color: #dee2e6;
                 -fx-selection-bar: #d4edda;
                 -fx-selection-bar-text: black;
             """.trimIndent()
-
-                // ======================== СТИЛЬ СТРОК ========================
 
                 tableView.setRowFactory {
                     val row = TableRow<EquipmentTableItem>()
@@ -2925,7 +2666,6 @@ class DefectMapController {
                     row
                 }
 
-                // ===== КОНТЕКСТНОЕ МЕНЮ =====
                 val contextMenu = ContextMenu()
                 val editMenuItem = MenuItem("✏️ Редактировать")
                 val showMenuItem = MenuItem("📍 Показать на карте")
@@ -2947,57 +2687,41 @@ class DefectMapController {
 
                 contextMenu.items.addAll(editMenuItem, showMenuItem)
 
-// ===== ПРИ ПКМ ВЫДЕЛЯЕМ СТРОКУ =====
                 tableView.setOnMouseClicked { event ->
                     if (event.isSecondaryButtonDown) {
                         val row = tableView.lookup(".table-row-cell") as? TableRow<*>?
                         if (row != null && row.item != null) {
                             val index = row.index
-                            println("🔍 Найдена строка через lookup (clicked): index=$index")
                             tableView.selectionModel.select(index)
                             tableView.scrollTo(index)
                         }
                     }
                 }
 
-// ===== ПОКАЗЫВАЕМ КОНТЕКСТНОЕ МЕНЮ =====
                 tableView.setOnContextMenuRequested { event ->
-                    println("🔍 ПКМ контекстное меню: selectedItem=${tableView.selectionModel.selectedItem}")
-
-                    // Если выделение сбросилось — выделяем первую строку
                     if (tableView.selectionModel.selectedItem == null && tableView.items.isNotEmpty()) {
-                        println("🔍 Выделение сбросилось, выделяем первую строку")
                         tableView.selectionModel.select(0)
                         tableView.scrollTo(0)
                     }
                     contextMenu.show(tableView, event.screenX, event.screenY)
                 }
 
-
-
-                // ======================== ПРИМЕНЯЕМ ФИЛЬТРЫ ПРИ ЗАПУСКЕ ========================
-
                 applyFilter()
-
-                // ======================== ПАНЕЛЬ КНОПОК ========================
 
                 val buttonPanel = HBox(10.0)
                 buttonPanel.alignment = Pos.CENTER_RIGHT
                 buttonPanel.style = "-fx-padding: 10px 0 0 0;"
 
-
                 val closeBtn = Button("✕ Закрыть")
                 closeBtn.style = "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-font-size: 13px; -fx-padding: 6px 20px; -fx-background-radius: 4px;"
                 closeBtn.setOnAction { (closeBtn.scene.window as Stage).close() }
-
-                // ======================== СБОРКА ОКНА ========================
 
                 filterPanel.children.addAll(
                     filterLabel, typeFilter, applyBtn, resetBtn, countLabel,
                     searchField, cellSearchField
                 )
 
-                buttonPanel.children.addAll( closeBtn)
+                buttonPanel.children.addAll(closeBtn)
                 mainLayout.children.addAll(headerLabel, filterPanel, tableView, buttonPanel)
 
                 val popupStage = Stage()
@@ -3024,34 +2748,7 @@ class DefectMapController {
 
     private fun editEquipmentFromList(equipmentId: String) {
         println("✏️ Редактирование из списка: $equipmentId")
-
-        val allEquipment = loadEquipment()
-        val equipment = allEquipment.find { it.id == equipmentId }
-
-        if (equipment == null) {
-            showError("Оборудование не найдено. ID: $equipmentId")
-            return
-        }
-
-        // Просто открываем диалог редактирования, НЕ закрывая окно списка
         editEquipment(equipmentId)
-    }
-
-    private fun getVoltageFromType(type: String): String {
-        return when {
-            type.contains("500") || type == "v_500" || type == "r_500" || type == "autotransformer" ||
-                    type == "tn_500" || type == "tt_500" || type == "ks_500" || type == "opn_500" || type == "reactor_500" -> "500 кВ"
-            type.contains("220") || type == "v_220" || type == "r_220" || type == "opn_220" ||
-                    type == "tn_220" || type == "tt_220" || type == "ks_220" || type == "line_220" -> "220 кВ"
-            type.contains("110") || type == "v_110" || type == "r_110" || type == "opn_110" ||
-                    type == "tn_110" || type == "tt_110" -> "110 кВ"
-            type.contains("35") || type == "v_35" || type == "r_35" || type == "opn_35" ||
-                    type == "tn_35" || type == "tt_35" -> "35 кВ"
-            type.contains("10") || type == "v_10" || type == "r_10" || type == "opn_10" ||
-                    type == "tn_10" || type == "tt_10" -> "10 кВ"
-            type == "lightning" || type == "lightning_rod" -> "Без напряжения"
-            else -> "Без напряжения"
-        }
     }
 
     private fun showEquipmentOnMap(equipmentId: String) {
@@ -3079,8 +2776,6 @@ class DefectMapController {
         """.trimIndent())
     }
 
-    // ======================== КЛИК ПО МЕТКЕ ========================
-
     private fun handleEquipmentClick(x: Double, y: Double) {
         val result = webView.engine.executeScript("""
         (function() {
@@ -3104,7 +2799,6 @@ class DefectMapController {
     """.trimIndent()) as? String
 
         if (result != null) {
-            // Ищем оборудование по ID маркера
             val equipmentId = webView.engine.executeScript("""
             (function() {
                 var marker = document.getElementById('$result');
@@ -3117,7 +2811,7 @@ class DefectMapController {
                 val equipment = loadEquipment().find { it.id == equipmentId }
                 if (equipment != null) {
                     val cardController = EquipmentCardController(equipment, database) {
-                        // Callback после изменения дефектов (обновляем схему при необходимости)
+                        // Callback после изменения дефектов
                     }
                     cardController.show()
                 } else {
@@ -3130,7 +2824,6 @@ class DefectMapController {
     private fun addMarkerToEquipment(equipmentId: String) {
         println("➕ Добавление маркера для: $equipmentId")
 
-        // Если уже в режиме добавления маркера - выходим
         if (currentEditingEquipmentId != null) {
             println("⚠️ Уже в режиме добавления маркера для: $currentEditingEquipmentId")
             showToast("⚠️ Сначала завершите добавление текущего маркера")
@@ -3152,8 +2845,6 @@ class DefectMapController {
 
         showToast("Кликните на схеме, чтобы добавить маркер для '${equipment.name}'")
     }
-
-
 
     // ======================== СОХРАНЕНИЕ / ЗАГРУЗКА ========================
 
@@ -3199,10 +2890,8 @@ class DefectMapController {
         val freshData = loadEquipment()
         val freshJson = gson.toJson(freshData)
 
-        // Полностью пересоздаём маркеры
         webView.engine.executeScript("""
         (function() {
-            // 1. Очищаем контейнер
             var container = document.getElementById('equipment-container');
             if (!container) {
                 var wrapper = document.getElementById('image-wrapper');
@@ -3218,11 +2907,9 @@ class DefectMapController {
                 return;
             }
             
-            // 2. Загружаем данные
             var savedData = $freshJson;
             window.equipment = savedData;
             
-            // 3. Создаём маркеры заново
             savedData.forEach(function(item) {
                 var markers = item.markers;
                 if (!markers || markers.length === 0) {
@@ -3255,19 +2942,6 @@ class DefectMapController {
             console.log('🔄 Синхронизация: пересоздано ' + savedData.length + ' маркеров');
         })();
     """.trimIndent())
-    }
-
-    private fun syncFileTimestamps() {
-        try {
-            val dbFile = File(System.getProperty("user.home"), ".defectmap/equipment.db")
-            val exportFile = File("equipment_export.json")
-            if (dbFile.exists() && exportFile.exists()) {
-                exportFile.setLastModified(dbFile.lastModified())
-                println("🔄 Время JSON синхронизировано с БД")
-            }
-        } catch (e: Exception) {
-            println("⚠️ Не удалось синхронизировать время файлов: ${e.message}")
-        }
     }
 
     // ======================== ВСПОМОГАТЕЛЬНЫЕ ========================

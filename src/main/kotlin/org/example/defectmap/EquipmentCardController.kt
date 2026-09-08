@@ -188,11 +188,18 @@ class EquipmentCardController(
     private fun createEquipmentImage(): Image {
         // Определяем путь к картинке по типу оборудования
         val imagePath = when (equipment.type) {
-            "v_500", "v_220", "v_35", "v_10" -> "ВВБК-500.jfif"
+            "v_500" -> "ВВБК-500.jfif"
+            "v_220" -> "ВВБК-500.jfif"
+            "v_35" -> "ВВБК-500.jfif"
+            "v_10" -> "ВВБК-500.jfif"
             "r_500", "r_220", "r_35", "r_10" -> "disconnector.jpg"
-            "autotransformer", "transformer" -> "transformer.jpg"
+            "autotransformer" -> "atg.jpg"
+            "transformer" -> "transformer.jpg"
             "lightning", "lightning_rod" -> "lightning_rod.jpg"
-            "opn_500", "opn_220", "opn_35", "opn_10" -> "opn.jpg"
+            "opn_500" -> "opn-500.jpg"
+            "opn_220" -> "opn-220.jpg"
+            "opn_35" -> "opn-35.jpg"
+            "opn_10" -> "opn-10.jpg"
             "tn_500", "tn_220", "tn_35", "tn_10" -> "tn.jpg"
             "tt_500", "tt_220", "tt_35", "tt_10" -> "tt.jpg"
             "ks_500", "ks_220", "coupling_capacitor" -> "capacitor.jpg"
