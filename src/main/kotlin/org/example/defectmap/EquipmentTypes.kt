@@ -5,7 +5,7 @@ object EquipmentTypes {
     val ALL_TYPES = listOf(
         // --- 500 кВ ---
         "v_500" to "В-500",
-        "v_500_ABB" to "В-500",
+        "v_500_ABB" to "В-500 элегаз",
         "r_500" to "Разъединитель 500 кВ",
         "autotransformer" to "АТГ",
         "tn_500" to "ТН-500",
@@ -13,6 +13,7 @@ object EquipmentTypes {
         "ks_500" to "КС-500",
         "opn_500" to "ОПН-500",
         "reactor_500" to "Р-500",
+        "fpz_500" to "ФПЗ-500",
         "s" to "С",
         "ls" to "ЛС",
         // --- 220 кВ ---
@@ -23,6 +24,8 @@ object EquipmentTypes {
         "tt_220" to "ТТ 220 кВ",
         "ks_220" to "КС 220 кВ",
         "line_220" to "ВЛ 220 кВ",
+        "fp_220" to "ФП-220",
+        "zn_KC_220" to "ЗН КС-220",
         // --- 35 кВ ---
         "v_35" to "В-35",
         "r_35" to "Разъединитель 35 кВ (Р-35)",
@@ -36,6 +39,7 @@ object EquipmentTypes {
 
         "lightning" to "Молниеотвод (М)",
         // --- Другое оборудование ---
+        "MO" to "Мачта освещения",
         "capacitor" to "Конденсатор (К)",
         "arrester" to "Разрядник (РВ)",
         "line_trap" to "Заградитель (З)",
@@ -78,6 +82,7 @@ object EquipmentTypes {
         "s" to "С",
         "ls" to "ЛС",
         "lightning" to "М",
+        "MO" to "MO",
         "capacitor" to "К",
         "arrester" to "РВ",
         "line_trap" to "З",

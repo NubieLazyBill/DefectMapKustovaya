@@ -1196,6 +1196,8 @@ class DefectMapController {
 
     // ======================== КЛИКИ ========================
 
+    // ======================== КЛИКИ (ПОЛНОСТЬЮ ПЕРЕПИСАНЫ) ========================
+
     private fun setupClickHandler() {
         // ============================================================
         //  ОБРАБОТЧИК НАЖАТИЯ МЫШИ
@@ -1209,32 +1211,12 @@ class DefectMapController {
                     dragStartX = event.x
                     dragStartY = event.y
                     webView.engine.executeScript("""
-            document.getElementById('container').classList.add('dragging');
-        """.trimIndent())
+                    document.getElementById('container').classList.add('dragging');
+                """.trimIndent())
                 }
             } else {
                 if (event.isPrimaryButtonDown) {
-                    val markerId = webView.engine.executeScript("""
-                    (function() {
-                        var container = document.getElementById('container');
-                        var rect = container.getBoundingClientRect();
-                        var markers = document.querySelectorAll('.equipment-marker');
-                        var clickX = ${event.x};
-                        var clickY = ${event.y};
-                        for (var i = 0; i < markers.length; i++) {
-                            var marker = markers[i];
-                            var markerRect = marker.getBoundingClientRect();
-                            if (clickX >= markerRect.left - rect.left - 15 &&
-                                clickX <= markerRect.right - rect.left + 15 &&
-                                clickY >= markerRect.top - rect.top - 15 &&
-                                clickY <= markerRect.bottom - rect.top + 15) {
-                                return marker.id;
-                            }
-                        }
-                        return null;
-                    })();
-                """.trimIndent()) as? String
-
+                    val markerId = findClosestMarker(event.x, event.y)
                     if (markerId != null) {
                         println("🖱️ НАЖАТИЕ НА МАРКЕР: $markerId")
                         isDraggingMarker = true
@@ -1289,40 +1271,40 @@ class DefectMapController {
                     lastMouseX = event.x
                     lastMouseY = event.y
                     webView.engine.executeScript("""
-                var wrapper = document.getElementById('image-wrapper');
-                wrapper.style.transform = 'translate(${currentTranslateX}px, ${currentTranslateY}px) scale($zoomLevel)';
-                wrapper.style.transformOrigin = 'center center';
-            """.trimIndent())
+                    var wrapper = document.getElementById('image-wrapper');
+                    wrapper.style.transform = 'translate(${currentTranslateX}px, ${currentTranslateY}px) scale($zoomLevel)';
+                    wrapper.style.transformOrigin = 'center center';
+                """.trimIndent())
                     event.consume()
                 }
             } else {
                 if (isDraggingMarker) {
                     webView.engine.executeScript("""
-                (function() {
-                    var marker = document.getElementById(window.draggingMarkerId);
-                    if (!marker) return;
-                    
-                    var wrapper = document.getElementById('image-wrapper');
-                    var wrapperRect = wrapper.getBoundingClientRect();
-                    
-                    var deltaX = ${event.x} - window.dragStartX;
-                    var deltaY = ${event.y} - window.dragStartY;
-                    
-                    var deltaPercentX = (deltaX / wrapperRect.width) * 100;
-                    var deltaPercentY = (deltaY / wrapperRect.height) * 100;
-                    
-                    var newLeftPercent = window.dragOrigLeftPercent + deltaPercentX;
-                    var newTopPercent = window.dragOrigTopPercent + deltaPercentY;
-                    
-                    marker.style.left = newLeftPercent + '%';
-                    marker.style.top = newTopPercent + '%';
-                    
-                    window.dragOrigLeftPercent = newLeftPercent;
-                    window.dragOrigTopPercent = newTopPercent;
-                    window.dragStartX = ${event.x};
-                    window.dragStartY = ${event.y};
-                })();
-            """.trimIndent())
+                    (function() {
+                        var marker = document.getElementById(window.draggingMarkerId);
+                        if (!marker) return;
+                        
+                        var wrapper = document.getElementById('image-wrapper');
+                        var wrapperRect = wrapper.getBoundingClientRect();
+                        
+                        var deltaX = ${event.x} - window.dragStartX;
+                        var deltaY = ${event.y} - window.dragStartY;
+                        
+                        var deltaPercentX = (deltaX / wrapperRect.width) * 100;
+                        var deltaPercentY = (deltaY / wrapperRect.height) * 100;
+                        
+                        var newLeftPercent = window.dragOrigLeftPercent + deltaPercentX;
+                        var newTopPercent = window.dragOrigTopPercent + deltaPercentY;
+                        
+                        marker.style.left = newLeftPercent + '%';
+                        marker.style.top = newTopPercent + '%';
+                        
+                        window.dragOrigLeftPercent = newLeftPercent;
+                        window.dragOrigTopPercent = newTopPercent;
+                        window.dragStartX = ${event.x};
+                        window.dragStartY = ${event.y};
+                    })();
+                """.trimIndent())
                     event.consume()
                 }
             }
@@ -1336,52 +1318,52 @@ class DefectMapController {
                 if (isDragging) {
                     isDragging = false
                     webView.engine.executeScript("""
-                document.getElementById('container').classList.remove('dragging');
-            """.trimIndent())
+                    document.getElementById('container').classList.remove('dragging');
+                """.trimIndent())
                 }
             } else {
                 if (isDraggingMarker) {
                     val markerId = webView.engine.executeScript("""
-                (function() {
-                    return window.draggingMarkerId || null;
-                })();
-            """.trimIndent()) as? String
+                    (function() {
+                        return window.draggingMarkerId || null;
+                    })();
+                """.trimIndent()) as? String
 
                     if (markerId != null) {
                         val jsonResult = webView.engine.executeScript("""
-                    (function() {
-                        var marker = document.getElementById('$markerId');
-                        if (!marker) {
-                            return JSON.stringify({ error: 'marker_not_found' });
-                        }
-                        
-                        var equipmentId = marker.dataset.equipmentId;
-                        if (!equipmentId) {
-                            var parts = '$markerId'.split('-marker-');
-                            if (parts.length > 0) {
-                                equipmentId = parts[0];
+                        (function() {
+                            var marker = document.getElementById('$markerId');
+                            if (!marker) {
+                                return JSON.stringify({ error: 'marker_not_found' });
                             }
-                        }
-                        
-                        var rect = marker.getBoundingClientRect();
-                        var wrapper = document.getElementById('image-wrapper');
-                        var wrapperRect = wrapper.getBoundingClientRect();
-                        
-                        var leftPx = rect.left - wrapperRect.left + rect.width / 2;
-                        var topPx = rect.top - wrapperRect.top + rect.height / 2;
-                        
-                        var leftPercent = (leftPx / wrapperRect.width) * 100;
-                        var topPercent = (topPx / wrapperRect.height) * 100;
-                        
-                        var data = {
-                            equipmentId: equipmentId,
-                            leftPercent: leftPercent,
-                            topPercent: topPercent
-                        };
-                        
-                        return JSON.stringify(data);
-                    })();
-                """.trimIndent()) as? String
+                            
+                            var equipmentId = marker.dataset.equipmentId;
+                            if (!equipmentId) {
+                                var parts = '$markerId'.split('-marker-');
+                                if (parts.length > 0) {
+                                    equipmentId = parts[0];
+                                }
+                            }
+                            
+                            var rect = marker.getBoundingClientRect();
+                            var wrapper = document.getElementById('image-wrapper');
+                            var wrapperRect = wrapper.getBoundingClientRect();
+                            
+                            var leftPx = rect.left - wrapperRect.left + rect.width / 2;
+                            var topPx = rect.top - wrapperRect.top + rect.height / 2;
+                            
+                            var leftPercent = (leftPx / wrapperRect.width) * 100;
+                            var topPercent = (topPx / wrapperRect.height) * 100;
+                            
+                            var data = {
+                                equipmentId: equipmentId,
+                                leftPercent: leftPercent,
+                                topPercent: topPercent
+                            };
+                            
+                            return JSON.stringify(data);
+                        })();
+                    """.trimIndent()) as? String
 
                         if (jsonResult != null && jsonResult != "null" && !jsonResult.contains("error")) {
                             try {
@@ -1393,7 +1375,6 @@ class DefectMapController {
                                 val topPercent = (data["topPercent"] as? Double) ?: 0.0
 
                                 if (equipmentId.isNotEmpty()) {
-                                    // ===== ОПТИМИЗИРОВАННОЕ СОХРАНЕНИЕ =====
                                     saveMarkerPositionOptimized(equipmentId, markerId, leftPercent, topPercent)
                                     showToast("✅ Маркер перемещён")
                                 } else {
@@ -1408,14 +1389,14 @@ class DefectMapController {
                         }
 
                         webView.engine.executeScript("""
-                    window.draggingMarkerId = null;
-                    window.dragStartX = null;
-                    window.dragStartY = null;
-                    window.dragOrigLeftPercent = null;
-                    window.dragOrigTopPercent = null;
-                    var marker = document.getElementById('$markerId');
-                    if (marker) marker.style.cursor = 'grab';
-                """.trimIndent())
+                        window.draggingMarkerId = null;
+                        window.dragStartX = null;
+                        window.dragStartY = null;
+                        window.dragOrigLeftPercent = null;
+                        window.dragOrigTopPercent = null;
+                        var marker = document.getElementById('$markerId');
+                        if (marker) marker.style.cursor = 'grab';
+                    """.trimIndent())
                         isDraggingMarker = false
                         event.consume()
                     }
@@ -1441,33 +1422,13 @@ class DefectMapController {
                     currentTranslateX = 0.0
                     currentTranslateY = 0.0
                     webView.engine.executeScript("""
-            document.getElementById('image-wrapper').style.transform = 'translate(0px, 0px) scale(1)';
-            document.getElementById('image-wrapper').style.transformOrigin = 'center center';
-        """.trimIndent())
+                    document.getElementById('image-wrapper').style.transform = 'translate(0px, 0px) scale(1)';
+                    document.getElementById('image-wrapper').style.transformOrigin = 'center center';
+                """.trimIndent())
                 }
             } else {
                 if (event.clickCount == 1 && event.button == javafx.scene.input.MouseButton.PRIMARY) {
-                    val isMarker = webView.engine.executeScript("""
-            (function() {
-                var container = document.getElementById('container');
-                var rect = container.getBoundingClientRect();
-                var markers = document.querySelectorAll('.equipment-marker');
-                var clickX = ${event.x};
-                var clickY = ${event.y};
-                for (var i = 0; i < markers.length; i++) {
-                    var marker = markers[i];
-                    var markerRect = marker.getBoundingClientRect();
-                    if (clickX >= markerRect.left - rect.left - 15 &&
-                        clickX <= markerRect.right - rect.left + 15 &&
-                        clickY >= markerRect.top - rect.top - 15 &&
-                        clickY <= markerRect.bottom - rect.top + 15) {
-                        return true;
-                    }
-                }
-                return false;
-            })();
-        """.trimIndent()) as? Boolean ?: false
-
+                    val isMarker = isClickOnMarker(event.x, event.y)
                     if (!isMarker) {
                         println("🖱️ Клик в режиме редактирования!")
                         addEquipmentAtPosition(event.x, event.y)
@@ -1481,29 +1442,9 @@ class DefectMapController {
         // ============================================================
         webView.setOnContextMenuRequested { event ->
             if (isEditMode) {
-                val result = webView.engine.executeScript("""
-                (function() {
-                    var container = document.getElementById('container');
-                    var rect = container.getBoundingClientRect();
-                    var markers = document.querySelectorAll('.equipment-marker');
-                    var clickX = ${event.x};
-                    var clickY = ${event.y};
-                    for (var i = 0; i < markers.length; i++) {
-                        var marker = markers[i];
-                        var markerRect = marker.getBoundingClientRect();
-                        if (clickX >= markerRect.left - rect.left - 15 &&
-                            clickX <= markerRect.right - rect.left + 15 &&
-                            clickY >= markerRect.top - rect.top - 15 &&
-                            clickY <= markerRect.bottom - rect.top + 15) {
-                            return marker.id;
-                        }
-                    }
-                    return null;
-                })();
-            """.trimIndent()) as? String
-
-                if (result != null) {
-                    showContextMenu(event.x, event.y, result)
+                val markerId = findClosestMarker(event.x, event.y)
+                if (markerId != null) {
+                    showContextMenu(event.x, event.y, markerId)
                 }
             }
         }
@@ -1516,122 +1457,246 @@ class DefectMapController {
             """.trimIndent())
             }
         }
+
+        // ===== ДОБАВЛЯЕМ ПОДСВЕТКУ ПРИ НАВЕДЕНИИ =====
+        setupMarkerHighlight()
     }
 
-    // ======================== ОПТИМИЗИРОВАННОЕ СОХРАНЕНИЕ МАРКЕРА ========================
+// ======================== ПОИСК БЛИЖАЙШЕГО МАРКЕРА ========================
 
-    private fun saveMarkerPositionOptimized(equipmentId: String, markerId: String, newLeftPercent: Double, newTopPercent: Double) {
-        println("💾 saveMarkerPositionOptimized: $equipmentId -> ($newLeftPercent%, $newTopPercent%)")
-
-        if (equipmentId.isEmpty()) {
-            println("❌ equipmentId пустой")
-            return
-        }
-
-        val allEquipment = loadEquipment()
-        var equipment = allEquipment.find { it.id == equipmentId }
-
-        if (equipment == null) {
-            val baseId = markerId.replace(Regex("-marker-\\d+(-\\d+)?$"), "")
-            equipment = allEquipment.find { it.id == baseId }
-        }
-
-        if (equipment == null) {
-            println("❌ Оборудование не найдено: $equipmentId")
-            showToast("⚠️ Оборудование не найдено")
-            return
-        }
-
-        var markerIndex = -1
-        val idParts = markerId.split("-marker-")
-        if (idParts.size > 1) {
-            val indexFromId = idParts[1].split("-").firstOrNull()?.toIntOrNull()
-            if (indexFromId != null && indexFromId < equipment.markers.size) {
-                markerIndex = indexFromId
+    private fun findClosestMarker(x: Double, y: Double): String? {
+        return webView.engine.executeScript("""
+        (function() {
+            var container = document.getElementById('container');
+            var rect = container.getBoundingClientRect();
+            var markers = document.querySelectorAll('.equipment-marker');
+            var clickX = $x;
+            var clickY = $y;
+            
+            var closestMarker = null;
+            var closestDistance = Infinity;
+            var HIT_RADIUS = 30; // Радиус поиска в пикселях
+            
+            for (var i = 0; i < markers.length; i++) {
+                var marker = markers[i];
+                var markerRect = marker.getBoundingClientRect();
+                
+                // Центр маркера относительно container
+                var centerX = markerRect.left + markerRect.width / 2 - rect.left;
+                var centerY = markerRect.top + markerRect.height / 2 - rect.top;
+                
+                // Расстояние от клика до центра маркера
+                var dx = clickX - centerX;
+                var dy = clickY - centerY;
+                var distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Размер маркера + запас
+                var halfSize = Math.max(markerRect.width, markerRect.height) / 2 + 10;
+                var maxDistance = Math.max(halfSize, HIT_RADIUS);
+                
+                if (distance < maxDistance && distance < closestDistance) {
+                    closestMarker = marker;
+                    closestDistance = distance;
+                }
             }
-        }
+            
+            return closestMarker ? closestMarker.id : null;
+        })();
+    """.trimIndent()) as? String
+    }
 
-        if (markerIndex == -1) {
-            for (i in equipment.markers.indices) {
-                val m = equipment.markers[i]
-                if (Math.abs(m.left - newLeftPercent) < 0.5 && Math.abs(m.top - newTopPercent) < 0.5) {
-                    markerIndex = i
-                    break
+// ======================== ПРОВЕРКА КЛИКА ПО МАРКЕРУ ========================
+
+    private fun isClickOnMarker(x: Double, y: Double): Boolean {
+        return webView.engine.executeScript("""
+        (function() {
+            var container = document.getElementById('container');
+            var rect = container.getBoundingClientRect();
+            var markers = document.querySelectorAll('.equipment-marker');
+            var clickX = $x;
+            var clickY = $y;
+            var HIT_RADIUS = 30;
+            
+            for (var i = 0; i < markers.length; i++) {
+                var marker = markers[i];
+                var markerRect = marker.getBoundingClientRect();
+                
+                var centerX = markerRect.left + markerRect.width / 2 - rect.left;
+                var centerY = markerRect.top + markerRect.height / 2 - rect.top;
+                
+                var dx = clickX - centerX;
+                var dy = clickY - centerY;
+                var distance = Math.sqrt(dx * dx + dy * dy);
+                var halfSize = Math.max(markerRect.width, markerRect.height) / 2 + 10;
+                var maxDistance = Math.max(halfSize, HIT_RADIUS);
+                
+                if (distance < maxDistance) {
+                    return true;
+                }
+            }
+            return false;
+        })();
+    """.trimIndent()) as? Boolean ?: false
+    }
+
+// ======================== ПОДСВЕТКА МАРКЕРОВ ПРИ НАВЕДЕНИИ (ИСПРАВЛЕНА) ========================
+
+    private fun setupMarkerHighlight() {
+        webView.engine.executeScript("""
+        (function() {
+            // Добавляем CSS для подсветки
+            var style = document.createElement('style');
+            style.textContent = `
+                .equipment-marker {
+                    transition: all 0.2s ease;
+                    z-index: 10;
+                }
+                /* Маркеры скрыты, но при наведении появляются */
+                .equipment-marker.hidden {
+                    opacity: 0.3;
+                    pointer-events: auto !important;
+                    transition: all 0.2s ease;
+                }
+                .equipment-marker.hidden .dot {
+                    opacity: 0.3 !important;
+                    pointer-events: auto !important;
+                }
+                .equipment-marker.hidden .tooltip-text {
+                    opacity: 0 !important;
+                    visibility: hidden !important;
+                    transition: all 0.2s ease;
+                }
+                /* При наведении на скрытый маркер — он появляется */
+                .equipment-marker.hidden:hover {
+                    opacity: 1 !important;
+                    transform: translate(-50%, -50%) scale(1.15) !important;
+                    z-index: 15 !important;
+                }
+                .equipment-marker.hidden:hover .dot {
+                    opacity: 1 !important;
+                }
+                .equipment-marker.hidden:hover .tooltip-text {
+                    opacity: 1 !important;
+                    visibility: visible !important;
+                }
+                /* Подсветка при наведении (для всех маркеров) */
+                .equipment-marker.highlighted {
+                    transform: translate(-50%, -50%) scale(1.3) !important;
+                    z-index: 20 !important;
+                    filter: brightness(1.3);
+                }
+                .equipment-marker.highlighted .dot {
+                    box-shadow: 0 0 20px rgba(255, 255, 0, 0.6) !important;
+                    border-color: #ffeb3b !important;
+                }
+                .equipment-marker .dot {
+                    transition: all 0.2s ease;
+                }
+                /* Подсветка для скрытых маркеров */
+                .equipment-marker.hidden.highlighted {
+                    opacity: 1 !important;
+                    transform: translate(-50%, -50%) scale(1.3) !important;
+                    z-index: 25 !important;
+                }
+                .equipment-marker.hidden.highlighted .dot {
+                    opacity: 1 !important;
+                    box-shadow: 0 0 20px rgba(255, 255, 0, 0.6) !important;
+                    border-color: #ffeb3b !important;
+                }
+                .equipment-marker.hidden.highlighted .tooltip-text {
+                    opacity: 1 !important;
+                    visibility: visible !important;
+                }
+            `;
+            document.head.appendChild(style);
+            
+            // Функция для добавления обработчиков на маркер
+            function addHighlightListeners(marker) {
+                if (marker.classList.contains('has-listener')) return;
+                marker.classList.add('has-listener');
+                
+                marker.addEventListener('mouseenter', function() {
+                    // Убираем подсветку со всех маркеров
+                    document.querySelectorAll('.equipment-marker').forEach(function(m) {
+                        m.classList.remove('highlighted');
+                    });
+                    this.classList.add('highlighted');
+                });
+                
+                marker.addEventListener('mouseleave', function() {
+                    this.classList.remove('highlighted');
+                });
+            }
+            
+            // Добавляем обработчики на существующие маркеры
+            var markers = document.querySelectorAll('.equipment-marker');
+            markers.forEach(function(marker) {
+                addHighlightListeners(marker);
+            });
+            
+            // Обновляем подсветку при добавлении новых маркеров
+            var observer = new MutationObserver(function() {
+                var markers = document.querySelectorAll('.equipment-marker:not(.has-listener)');
+                markers.forEach(function(marker) {
+                    addHighlightListeners(marker);
+                });
+            });
+            
+            var container = document.getElementById('equipment-container');
+            if (container) {
+                observer.observe(container, { childList: true, subtree: true });
+            }
+            
+            console.log('✅ Подсветка маркеров настроена (включая скрытые)');
+        })();
+    """.trimIndent())
+    }
+
+// ======================== ОБРАБОТЧИК КЛИКА ПО МАРКЕРУ (ДЛЯ ОТКРЫТИЯ КАРТОЧКИ) ========================
+
+    private fun handleEquipmentClick(x: Double, y: Double) {
+        val markerId = findClosestMarker(x, y)
+
+        if (markerId != null) {
+            val equipmentId = webView.engine.executeScript("""
+            (function() {
+                var marker = document.getElementById('$markerId');
+                if (!marker) return null;
+                return marker.dataset.equipmentId || marker.id;
+            })();
+        """.trimIndent()) as? String
+
+            if (equipmentId != null) {
+                val equipment = loadEquipment().find { it.id == equipmentId }
+                if (equipment != null) {
+                    val cardController = EquipmentCardController(equipment, database) {
+                        // Callback после изменения дефектов
+                    }
+                    cardController.show()
+                } else {
+                    showError("Оборудование не найдено")
                 }
             }
         }
-
-        if (markerIndex == -1 && equipment.markers.isNotEmpty()) {
-            markerIndex = 0
-        }
-
-        if (markerIndex == -1) {
-            val newMarkers = equipment.markers + MarkerPosition(newLeftPercent, newTopPercent, isMain = false)
-            val updatedEquipment = equipment.copy(markers = newMarkers)
-            val updatedList = allEquipment.map { if (it.id == equipment.id) updatedEquipment else it }
-            database.saveEquipment(updatedList)
-
-            // Обновляем только window.equipment, НЕ перерисовываем все маркеры
-            val updatedJson = gson.toJson(updatedList)
-            webView.engine.executeScript("window.equipment = $updatedJson;")
-
-            println("✅ Добавлен новый маркер для ${equipment.name}")
-            showToast("✅ Маркер добавлен для ${equipment.name}")
-            return
-        }
-
-        val updatedMarkers = equipment.markers.toMutableList()
-        updatedMarkers[markerIndex] = updatedMarkers[markerIndex].copy(left = newLeftPercent, top = newTopPercent)
-
-        val updatedEquipment = equipment.copy(markers = updatedMarkers)
-        val updatedList = allEquipment.map {
-            if (it.id == equipment.id) updatedEquipment else it
-        }
-
-        database.saveEquipment(updatedList)
-
-        // ===== ОПТИМИЗАЦИЯ: обновляем ТОЛЬКО этот маркер, а не все =====
-        webView.engine.executeScript("""
-        (function() {
-            // Обновляем позицию маркера
-            var marker = document.getElementById('$markerId');
-            if (marker) {
-                marker.style.left = '${newLeftPercent}%';
-                marker.style.top = '${newTopPercent}%';
-            }
-            
-            // Обновляем данные в window.equipment
-            var allEquipment = ${gson.toJson(updatedList)};
-            window.equipment = allEquipment;
-            
-            console.log('✅ Маркер обновлён (оптимизированно)');
-        })();
-        """.trimIndent())
-
-        println("✅ Сохранено в БД для ${equipment.name}")
-        val formattedLeft = "%.1f".format(newLeftPercent)
-        val formattedTop = "%.1f".format(newTopPercent)
-        showToast("✅ Маркер перемещён на ${formattedLeft}%, ${formattedTop}%")
     }
 
-    // ======================== ОСТАЛЬНЫЕ МЕТОДЫ (БЕЗ ИЗМЕНЕНИЙ) ========================
+// ======================== КОНТЕКСТНОЕ МЕНЮ (ПЕРЕПИСАНО) ========================
 
-    private fun showContextMenu(x: Double, y: Double, equipmentId: String) {
-        println("🔍 showContextMenu: equipmentId = $equipmentId")
+    private fun showContextMenu(x: Double, y: Double, markerId: String) {
+        println("🔍 showContextMenu: markerId = $markerId")
         val contextMenu = ContextMenu()
 
         var equipment: EquipmentData? = null
         var isExtraMarker = false
-        var markerId = equipmentId
 
         val markerInfo = webView.engine.executeScript("""
         (function() {
-            var marker = document.getElementById('$equipmentId');
+            var marker = document.getElementById('$markerId');
             if (!marker) return null;
             
             var realEquipmentId = marker.dataset.equipmentId || null;
             if (!realEquipmentId) {
-                var parts = '$equipmentId'.split('-marker-');
+                var parts = '$markerId'.split('-marker-');
                 if (parts.length > 0 && parts[0].startsWith('equipment-')) {
                     realEquipmentId = parts[0];
                 }
@@ -1639,8 +1704,7 @@ class DefectMapController {
             
             return {
                 equipmentId: realEquipmentId,
-                isExtra: marker.classList.contains('marker-extra'),
-                markerId: marker.id
+                isExtra: marker.classList.contains('marker-extra')
             };
         })();
     """.trimIndent()) as? Map<*, *>
@@ -1648,7 +1712,6 @@ class DefectMapController {
         if (markerInfo != null) {
             val realId = markerInfo["equipmentId"] as? String
             isExtraMarker = markerInfo["isExtra"] as? Boolean ?: false
-            markerId = markerInfo["markerId"] as? String ?: equipmentId
 
             if (realId != null) {
                 equipment = loadEquipment().find { it.id == realId }
@@ -1656,9 +1719,10 @@ class DefectMapController {
         }
 
         if (equipment == null) {
+            // Ищем по позиции
             val foundId = webView.engine.executeScript("""
             (function() {
-                var marker = document.getElementById('$equipmentId');
+                var marker = document.getElementById('$markerId');
                 if (!marker) return null;
                 
                 var left = parseFloat(marker.style.left);
@@ -1689,14 +1753,14 @@ class DefectMapController {
         }
 
         if (equipment == null) {
-            val baseId = equipmentId.replace(Regex("-marker-\\d+$"), "")
-            if (baseId != equipmentId) {
+            val baseId = markerId.replace(Regex("-marker-\\d+$"), "")
+            if (baseId != markerId) {
                 equipment = loadEquipment().find { it.id == baseId }
             }
         }
 
         if (equipment == null) {
-            showError("Оборудование не найдено. ID: $equipmentId")
+            showError("Оборудование не найдено. ID: $markerId")
             return
         }
 
@@ -1735,11 +1799,19 @@ class DefectMapController {
         contextMenu.show(webView, x, y)
     }
 
+// ======================== ДОБАВЛЕНИЕ ОБОРУДОВАНИЯ (ПРОВЕРКА КЛИКА ПО МАРКЕРУ) ========================
+
     private fun addEquipmentAtPosition(x: Double, y: Double) {
         println("📍 Добавление оборудования: x=$x, y=$y")
 
         if (currentEditingEquipmentId != null) {
             addMarkerToExistingEquipment(x, y)
+            return
+        }
+
+        // Проверяем, не кликнули ли по маркеру
+        if (isClickOnMarker(x, y)) {
+            println("⚠️ Клик по маркеру, пропускаем добавление")
             return
         }
 
@@ -1863,6 +1935,104 @@ class DefectMapController {
             showError("Не удалось определить позицию на схеме")
         }
     }
+
+    // ======================== ОПТИМИЗИРОВАННОЕ СОХРАНЕНИЕ МАРКЕРА ========================
+
+    private fun saveMarkerPositionOptimized(equipmentId: String, markerId: String, newLeftPercent: Double, newTopPercent: Double) {
+        println("💾 saveMarkerPositionOptimized: $equipmentId -> ($newLeftPercent%, $newTopPercent%)")
+
+        if (equipmentId.isEmpty()) {
+            println("❌ equipmentId пустой")
+            return
+        }
+
+        val allEquipment = loadEquipment()
+        var equipment = allEquipment.find { it.id == equipmentId }
+
+        if (equipment == null) {
+            val baseId = markerId.replace(Regex("-marker-\\d+(-\\d+)?$"), "")
+            equipment = allEquipment.find { it.id == baseId }
+        }
+
+        if (equipment == null) {
+            println("❌ Оборудование не найдено: $equipmentId")
+            showToast("⚠️ Оборудование не найдено")
+            return
+        }
+
+        var markerIndex = -1
+        val idParts = markerId.split("-marker-")
+        if (idParts.size > 1) {
+            val indexFromId = idParts[1].split("-").firstOrNull()?.toIntOrNull()
+            if (indexFromId != null && indexFromId < equipment.markers.size) {
+                markerIndex = indexFromId
+            }
+        }
+
+        if (markerIndex == -1) {
+            for (i in equipment.markers.indices) {
+                val m = equipment.markers[i]
+                if (Math.abs(m.left - newLeftPercent) < 0.5 && Math.abs(m.top - newTopPercent) < 0.5) {
+                    markerIndex = i
+                    break
+                }
+            }
+        }
+
+        if (markerIndex == -1 && equipment.markers.isNotEmpty()) {
+            markerIndex = 0
+        }
+
+        if (markerIndex == -1) {
+            val newMarkers = equipment.markers + MarkerPosition(newLeftPercent, newTopPercent, isMain = false)
+            val updatedEquipment = equipment.copy(markers = newMarkers)
+            val updatedList = allEquipment.map { if (it.id == equipment.id) updatedEquipment else it }
+            database.saveEquipment(updatedList)
+
+            // Обновляем только window.equipment, НЕ перерисовываем все маркеры
+            val updatedJson = gson.toJson(updatedList)
+            webView.engine.executeScript("window.equipment = $updatedJson;")
+
+            println("✅ Добавлен новый маркер для ${equipment.name}")
+            showToast("✅ Маркер добавлен для ${equipment.name}")
+            return
+        }
+
+        val updatedMarkers = equipment.markers.toMutableList()
+        updatedMarkers[markerIndex] = updatedMarkers[markerIndex].copy(left = newLeftPercent, top = newTopPercent)
+
+        val updatedEquipment = equipment.copy(markers = updatedMarkers)
+        val updatedList = allEquipment.map {
+            if (it.id == equipment.id) updatedEquipment else it
+        }
+
+        database.saveEquipment(updatedList)
+
+        // ===== ОПТИМИЗАЦИЯ: обновляем ТОЛЬКО этот маркер, а не все =====
+        webView.engine.executeScript("""
+        (function() {
+            // Обновляем позицию маркера
+            var marker = document.getElementById('$markerId');
+            if (marker) {
+                marker.style.left = '${newLeftPercent}%';
+                marker.style.top = '${newTopPercent}%';
+            }
+            
+            // Обновляем данные в window.equipment
+            var allEquipment = ${gson.toJson(updatedList)};
+            window.equipment = allEquipment;
+            
+            console.log('✅ Маркер обновлён (оптимизированно)');
+        })();
+        """.trimIndent())
+
+        println("✅ Сохранено в БД для ${equipment.name}")
+        val formattedLeft = "%.1f".format(newLeftPercent)
+        val formattedTop = "%.1f".format(newTopPercent)
+        showToast("✅ Маркер перемещён на ${formattedLeft}%, ${formattedTop}%")
+    }
+
+    // ======================== ОСТАЛЬНЫЕ МЕТОДЫ (БЕЗ ИЗМЕНЕНИЙ) ========================
 
     private fun saveEquipmentDirect() {
         val result = webView.engine.executeScript("""
@@ -2774,51 +2944,6 @@ class DefectMapController {
                 }
             })();
         """.trimIndent())
-    }
-
-    private fun handleEquipmentClick(x: Double, y: Double) {
-        val result = webView.engine.executeScript("""
-        (function() {
-            var container = document.getElementById('container');
-            var rect = container.getBoundingClientRect();
-            var markers = document.querySelectorAll('.equipment-marker');
-            var clickX = $x;
-            var clickY = $y;
-            for (var i = 0; i < markers.length; i++) {
-                var marker = markers[i];
-                var markerRect = marker.getBoundingClientRect();
-                if (clickX >= markerRect.left - rect.left - 15 &&
-                    clickX <= markerRect.right - rect.left + 15 &&
-                    clickY >= markerRect.top - rect.top - 15 &&
-                    clickY <= markerRect.bottom - rect.top + 15) {
-                    return marker.id;
-                }
-            }
-            return null;
-        })();
-    """.trimIndent()) as? String
-
-        if (result != null) {
-            val equipmentId = webView.engine.executeScript("""
-            (function() {
-                var marker = document.getElementById('$result');
-                if (!marker) return null;
-                return marker.dataset.equipmentId || marker.id;
-            })();
-        """.trimIndent()) as? String
-
-            if (equipmentId != null) {
-                val equipment = loadEquipment().find { it.id == equipmentId }
-                if (equipment != null) {
-                    val cardController = EquipmentCardController(equipment, database) {
-                        // Callback после изменения дефектов
-                    }
-                    cardController.show()
-                } else {
-                    showError("Оборудование не найдено")
-                }
-            }
-        }
     }
 
     private fun addMarkerToEquipment(equipmentId: String) {
