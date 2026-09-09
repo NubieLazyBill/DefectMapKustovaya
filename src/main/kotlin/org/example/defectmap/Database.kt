@@ -6,6 +6,7 @@ import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.ResultSet
 import java.io.File
+import kotlin.io.use
 
 class Database {
     private var connection: Connection? = null
@@ -26,6 +27,7 @@ class Database {
         connect()
         createTable()
         createDefectsTable()
+        createTypesTable()
         addSizeColumnIfNotExists()
         addMarkersColumnIfNotExists()
         migrateMarkerIds()
@@ -527,6 +529,88 @@ class Database {
             stmt.executeUpdate(sql)
         }
     }
+
+    // Добавить в Database.kt
+
+// ======================== ТИПЫ ОБОРУДОВАНИЯ (ДИНАМИЧЕСКИЕ) ========================
+
+    private fun createTypesTable() {
+        val sql = """
+        CREATE TABLE IF NOT EXISTS equipment_types (
+            key TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL,
+            letter TEXT NOT NULL,
+            sort_order INTEGER DEFAULT 0,
+            created_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+    """.trimIndent()
+        executeUpdate(sql)
+        println("✅ Таблица equipment_types создана")
+    }
+
+    fun loadAllTypes(): List<EquipmentTypeData> {
+        val result = mutableListOf<EquipmentTypeData>()
+        val sql = "SELECT * FROM equipment_types ORDER BY sort_order, display_name"
+
+        connection?.prepareStatement(sql)?.use { stmt ->
+            val rs = stmt.executeQuery()
+            while (rs.next()) {
+                result.add(
+                    EquipmentTypeData(
+                        key = rs.getString("key"),
+                        displayName = rs.getString("display_name"),
+                        letter = rs.getString("letter"),
+                        sortOrder = rs.getInt("sort_order")
+                    )
+                )
+            }
+        }
+        return result
+    }
+
+    fun saveType(type: EquipmentTypeData) {
+        val sql = """
+        INSERT OR REPLACE INTO equipment_types (key, display_name, letter, sort_order)
+        VALUES (?, ?, ?, ?)
+    """.trimIndent()
+        connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.setString(1, type.key)
+            stmt.setString(2, type.displayName)
+            stmt.setString(3, type.letter)
+            stmt.setInt(4, type.sortOrder)
+            stmt.executeUpdate()
+        }
+        println("💾 Тип сохранён: ${type.key} → ${type.displayName}")
+    }
+
+    fun deleteType(key: String) {
+        val sql = "DELETE FROM equipment_types WHERE key = ?"
+        connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.setString(1, key)
+            stmt.executeUpdate()
+        }
+        println("🗑️ Тип удалён: $key")
+    }
+
+    fun restoreDefaultTypes() {
+        // Очищаем таблицу
+        executeUpdate("DELETE FROM equipment_types")
+
+        // Добавляем дефолтные типы из EquipmentTypes.ALL_TYPES
+        EquipmentTypes.ALL_TYPES.forEachIndexed { index, (key, displayName) ->
+            val letter = EquipmentTypes.TYPE_TO_LETTER[key] ?: "О"
+            saveType(
+                EquipmentTypeData(
+                    key = key,
+                    displayName = displayName,
+                    letter = letter,
+                    sortOrder = index
+                )
+            )
+        }
+        println("✅ Дефолтные типы восстановлены (${EquipmentTypes.ALL_TYPES.size} шт.)")
+    }
+
 }
 
 // ======================== DATA CLASSES ========================
@@ -559,3 +643,14 @@ data class EquipmentTableItem(
     val cell: String,
     val size: String = "normal"
 )
+
+// ===== В КОНЦЕ ФАЙЛА, ПОСЛЕ ЗАКРЫТИЯ КЛАССА Database =====
+
+data class EquipmentTypeData(
+    val key: String,
+    val displayName: String,
+    val letter: String,
+    val sortOrder: Int = 0
+)
+
+

@@ -74,6 +74,10 @@ class DefectMapController {
     @FXML
     private lateinit var defectsBtn: Button
 
+    @FXML
+    private lateinit var manageTypesMenuItem: MenuItem
+
+
     private var markersVisible = false
     private var isDraggingMarker = false
     private var currentEditingEquipmentId: String? = null
@@ -542,9 +546,17 @@ class DefectMapController {
     @FXML
     private fun initialize() {
         database.autoBackup()
+
+        // ===== ЗАГРУЖАЕМ ТИПЫ ИЗ БД =====
+        EquipmentTypes.loadFromDatabase(database)
+
         loadSvgIntoWebView()
 
         toggleMarkersMenuItem.text = if (markersVisible) "👁️ Скрыть маркеры" else "👁️ Показать маркеры"
+
+        // ===== ОБРАБОТЧИК ДЛЯ УПРАВЛЕНИЯ ТИПАМИ =====
+        manageTypesMenuItem.setOnAction { showManageTypesDialog() }
+
 
         webView.engine.getLoadWorker().stateProperty().addListener { _, _, newState ->
             if (newState == Worker.State.SUCCEEDED) {
@@ -649,162 +661,162 @@ class DefectMapController {
 
     private fun buildSvgHtml(svgContent: String): String {
         return """
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <style>
-              * { 
-                  margin: 0; 
-                  padding: 0; 
-                  user-select: none;
-                  -webkit-user-select: none;
-                  -moz-user-select: none;
-                  -ms-user-select: none;
-              }
-              html, body { 
-                  width: 100%; 
-                  height: 100%; 
-                  overflow: hidden;
-                  background: white;
-              }
-              #container {
-                width: 100%;
-                height: 100%;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                overflow: hidden;
-                cursor: grab;
-                position: relative;
-              }
-              #container.dragging { cursor: grabbing; }
-              #image-wrapper {
-                position: relative;
-                display: inline-block;
-                max-width: 100%;
-                max-height: 100%;
-                transform-origin: center center;
-                width: 100%;
-                height: 100%;
-              }
-              #image svg {
-                display: block;
-                width: 100%;
-                height: 100%;
-                object-fit: contain;
-                transform-origin: center center;
-                will-change: transform;
-              }
-              .equipment-marker {
-                position: absolute;
-                cursor: grab;
-                z-index: 10;
-                pointer-events: auto;
-                transform: translate(-50%, -50%);
-                width: 28px;
-                height: 28px;
-                transition: all 0.2s ease;
-              }
-              .equipment-marker:active { cursor: grabbing; }
-              .equipment-marker.hidden .dot {
-                  opacity: 0 !important;
-                  pointer-events: none;
-              }
-              .equipment-marker.hidden .tooltip-text {
-                  opacity: 0 !important;
-                  visibility: hidden !important;
-              }
-              .equipment-marker.hidden:hover .tooltip-text {
-                  opacity: 1 !important;
-                  visibility: visible !important;
-              }
-              .equipment-marker .dot {
-                width: 24px;
-                height: 24px;
-                border-radius: 50%;
-                border: 2px solid rgba(255, 255, 255, 0.8);
-                box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                color: white;
-                font-weight: bold;
-                font-size: 11px;
-                font-family: Arial, sans-serif;
-                background: rgba(0, 0, 0, 0.5);
-                backdrop-filter: blur(2px);
-                transition: all 0.2s ease;
-              }
-              .equipment-marker:hover .dot {
-                background: rgba(0, 0, 0, 0.8);
-                border-color: white;
-              }
-              .equipment-marker.breaker .dot { background: #ff4444; }
-              .equipment-marker.disconnector .dot { background: #ff8800; }
-              .equipment-marker.transformer .dot { background: #44bb44; }
-              .equipment-marker.lightning .dot { background: #ffcc00; color: #333; }
-              .equipment-marker.other .dot { background: #8888ff; }
-              .equipment-marker .tooltip-text {
-                visibility: hidden;
-                opacity: 0;
-                position: absolute;
-                bottom: calc(100% + 10px);
-                left: 50%;
-                transform: translateX(-50%);
-                background: rgba(0, 0, 0, 0.85);
-                color: white;
-                padding: 4px 12px;
-                border-radius: 4px;
-                font-size: 11px;
-                font-family: Arial, sans-serif;
-                white-space: nowrap;
-                pointer-events: none;
-                transition: all 0.25s ease;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-                border: 1px solid rgba(255,255,255,0.1);
-              }
-              .equipment-marker .tooltip-text::after {
-                content: '';
-                position: absolute;
-                top: 100%;
-                left: 50%;
-                transform: translateX(-50%);
-                border: 5px solid transparent;
-                border-top-color: rgba(0, 0, 0, 0.85);
-              }
-              .equipment-marker:hover .tooltip-text {
-                visibility: visible;
-                opacity: 1;
-              }
-              .equipment-marker.small { width: 20px; height: 20px; }
-              .equipment-marker.small .dot { width: 16px; height: 16px; font-size: 8px; }
-              .equipment-marker.normal { width: 28px; height: 28px; }
-              .equipment-marker.normal .dot { width: 24px; height: 24px; font-size: 11px; }
-              .equipment-marker.large { width: 36px; height: 36px; }
-              .equipment-marker.large .dot { width: 32px; height: 32px; font-size: 14px; }
-              .equipment-marker.marker-extra {
-                  border: 2px dashed rgba(255, 255, 255, 0.5);
-                  opacity: 0.85;
-              }
-              .equipment-marker.marker-extra .dot {
-                  border: 2px dashed rgba(255, 255, 255, 0.8);
-              }
-              .equipment-marker:hover {
-                  transform: translate(-50%, -50%) scale(1.2);
-              }
-              .edit-mode #container { cursor: crosshair; }
-            </style>
-          </head>
-          <body>
-            <div id="container">
-              <div id="image-wrapper">
-                <div id="image">$svgContent</div>
-                <div id="equipment-container"></div>
-              </div>
-            </div>
-          </body>
-        </html>
-    """.trimIndent()
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          * { 
+              margin: 0; 
+              padding: 0; 
+              user-select: none;
+              -webkit-user-select: none;
+              -moz-user-select: none;
+              -ms-user-select: none;
+          }
+          html, body { 
+              width: 100%; 
+              height: 100%; 
+              overflow: hidden;
+              background: white;
+          }
+          #container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            cursor: grab;
+            position: relative;
+          }
+          #container.dragging { cursor: grabbing; }
+          #image-wrapper {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+            max-height: 100%;
+            transform-origin: center center;
+            width: 100%;
+            height: 100%;
+          }
+          #image svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            transform-origin: center center;
+            will-change: transform;
+          }
+          .equipment-marker {
+            position: absolute;
+            cursor: grab;
+            z-index: 10;
+            pointer-events: auto;
+            transform: translate(-50%, -50%);
+            width: 28px;
+            height: 28px;
+            transition: all 0.2s ease;
+          }
+          .equipment-marker:active { cursor: grabbing; }
+          .equipment-marker.hidden .dot {
+              opacity: 0 !important;
+              pointer-events: none;
+          }
+          .equipment-marker.hidden .tooltip-text {
+              opacity: 0 !important;
+              visibility: hidden !important;
+          }
+          .equipment-marker.hidden:hover .tooltip-text {
+              opacity: 1 !important;
+              visibility: visible !important;
+          }
+          .equipment-marker .dot {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            font-size: 11px;
+            font-family: Arial, sans-serif;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(2px);
+            transition: all 0.2s ease;
+          }
+          .equipment-marker:hover .dot {
+            background: rgba(0, 0, 0, 0.8);
+            border-color: white;
+          }
+          .equipment-marker.breaker .dot { background: #ff4444; }
+          .equipment-marker.disconnector .dot { background: #ff8800; }
+          .equipment-marker.transformer .dot { background: #44bb44; }
+          .equipment-marker.lightning .dot { background: #ffcc00; color: #333; }
+          .equipment-marker.other .dot { background: #8888ff; }
+          .equipment-marker .tooltip-text {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            bottom: calc(100% + 10px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: Arial, sans-serif;
+            white-space: nowrap;
+            pointer-events: none;
+            transition: all 0.25s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+          }
+          .equipment-marker .tooltip-text::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 5px solid transparent;
+            border-top-color: rgba(0, 0, 0, 0.85);
+          }
+          .equipment-marker:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+          }
+          .equipment-marker.small { width: 20px; height: 20px; }
+          .equipment-marker.small .dot { width: 16px; height: 16px; font-size: 8px; }
+          .equipment-marker.normal { width: 28px; height: 28px; }
+          .equipment-marker.normal .dot { width: 24px; height: 24px; font-size: 11px; }
+          .equipment-marker.large { width: 36px; height: 36px; }
+          .equipment-marker.large .dot { width: 32px; height: 32px; font-size: 14px; }
+          .equipment-marker.marker-extra {
+              border: 2px dashed rgba(255, 255, 255, 0.5);
+              opacity: 0.85;
+          }
+          .equipment-marker.marker-extra .dot {
+              border: 2px dashed rgba(255, 255, 255, 0.8);
+          }
+          .equipment-marker:hover {
+              transform: translate(-50%, -50%) scale(1.2);
+          }
+          .edit-mode #container { cursor: crosshair; }
+        </style>
+      </head>
+      <body>
+        <div id="container">
+          <div id="image-wrapper">
+            <div id="image">$svgContent</div>
+            <div id="equipment-container"></div>
+          </div>
+        </div>
+      </body>
+    </html>
+""".trimIndent()
     }
 
     private fun loadAndRefresh() {
@@ -1458,8 +1470,8 @@ class DefectMapController {
             }
         }
 
-        // ===== ДОБАВЛЯЕМ ПОДСВЕТКУ ПРИ НАВЕДЕНИИ =====
-        setupMarkerHighlight()
+        // ===== ПОДСВЕТКА УПРАВЛЯЕТСЯ ЧЕРЕЗ МЕНЮ =====
+// setupMarkerHighlight() - убрано, управляется через toggleHighlightMode()
     }
 
 // ======================== ПОИСК БЛИЖАЙШЕГО МАРКЕРА ========================
@@ -3092,6 +3104,238 @@ class DefectMapController {
             }
         }
     }
+
+    // ======================== УПРАВЛЕНИЕ ТИПАМИ ========================
+
+    private fun showManageTypesDialog() {
+        val dialog = Stage()
+        dialog.title = "📋 Управление типами оборудования"
+        dialog.initModality(javafx.stage.Modality.WINDOW_MODAL)
+        dialog.initOwner(webView.scene.window)
+        dialog.minWidth = 680.0
+        dialog.minHeight = 480.0
+
+        val root = VBox(10.0)
+        root.style = "-fx-background-color: white; -fx-padding: 20px;"
+
+        val headerLabel = Label("📋 Типы оборудования (${EquipmentTypes.ALL_TYPES.size})")
+        headerLabel.style = "-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #333;"
+
+        val tableView = TableView<EquipmentTypeData>()
+        tableView.style = "-fx-font-size: 13px;"
+
+        val colKey = TableColumn<EquipmentTypeData, String>("Ключ")
+        colKey.cellValueFactory = PropertyValueFactory("key")
+        colKey.prefWidth = 120.0
+
+        val colDisplay = TableColumn<EquipmentTypeData, String>("Название")
+        colDisplay.cellValueFactory = PropertyValueFactory("displayName")
+        colDisplay.prefWidth = 220.0
+
+        val colLetter = TableColumn<EquipmentTypeData, String>("Буква")
+        colLetter.cellValueFactory = PropertyValueFactory("letter")
+        colLetter.prefWidth = 100.0
+        colLetter.style = "-fx-alignment: CENTER;"
+
+        tableView.columns.addAll(colKey, colDisplay, colLetter)
+
+        val allTypes = database.loadAllTypes()
+        val typesList = allTypes.toMutableList()
+
+        if (typesList.isEmpty()) {
+            database.restoreDefaultTypes()
+            typesList.addAll(database.loadAllTypes())
+            EquipmentTypes.reloadDefaults()
+        }
+
+        val observableTypes = FXCollections.observableArrayList<EquipmentTypeData>(typesList)
+        tableView.items = observableTypes
+
+        val buttonPanel = HBox(10.0)
+        buttonPanel.alignment = Pos.CENTER_RIGHT
+
+        val addBtn = Button("➕ Добавить")
+        addBtn.style = "-fx-background-color: #28a745; -fx-text-fill: white; -fx-padding: 6px 16px; -fx-background-radius: 4px;"
+        addBtn.setOnAction {
+            showAddTypeDialog { newType ->
+                database.saveType(newType)
+                EquipmentTypes.addType(newType.key, newType.displayName, newType.letter)
+                observableTypes.add(newType)
+                headerLabel.text = "📋 Типы оборудования (${EquipmentTypes.ALL_TYPES.size})"
+                showToast("✅ Тип добавлен: ${newType.displayName}")
+            }
+        }
+
+        val editBtn = Button("✏️ Редактировать")
+        editBtn.style = "-fx-background-color: #007bff; -fx-text-fill: white; -fx-padding: 6px 16px; -fx-background-radius: 4px;"
+        editBtn.setOnAction {
+            val selected = tableView.selectionModel.selectedItem
+            if (selected != null) {
+                showEditTypeDialog(selected) { updatedType ->
+                    database.saveType(updatedType)
+                    EquipmentTypes.updateType(updatedType.key, updatedType.displayName, updatedType.letter)
+                    val index = observableTypes.indexOfFirst { it.key == updatedType.key }
+                    if (index >= 0) {
+                        observableTypes[index] = updatedType
+                    }
+                    showToast("✅ Тип обновлён: ${updatedType.displayName}")
+                }
+            } else {
+                showInfo("⚠️ Выберите тип для редактирования")
+            }
+        }
+
+        val deleteBtn = Button("🗑️ Удалить")
+        deleteBtn.style = "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-padding: 6px 16px; -fx-background-radius: 4px;"
+        deleteBtn.setOnAction {
+            val selected = tableView.selectionModel.selectedItem
+            if (selected != null) {
+                val confirm = Alert(AlertType.CONFIRMATION)
+                confirm.title = "Удаление типа"
+                confirm.headerText = "Удалить тип '${selected.displayName}'?"
+                confirm.contentText = "Оборудование с этим типом не удалится, но будет показываться как 'Другое'."
+                val result = confirm.showAndWait()
+                if (result.isPresent && result.get() == ButtonType.OK) {
+                    database.deleteType(selected.key)
+                    EquipmentTypes.removeType(selected.key)
+                    observableTypes.remove(selected)
+                    headerLabel.text = "📋 Типы оборудования (${EquipmentTypes.ALL_TYPES.size})"
+                    showToast("🗑️ Тип удалён: ${selected.displayName}")
+                }
+            } else {
+                showInfo("⚠️ Выберите тип для удаления")
+            }
+        }
+
+        val restoreBtn = Button("🔄 Восстановить дефолтные")
+        restoreBtn.style = "-fx-background-color: #ffc107; -fx-text-fill: #333; -fx-padding: 6px 16px; -fx-background-radius: 4px;"
+        restoreBtn.setOnAction {
+            val confirm = Alert(AlertType.CONFIRMATION)
+            confirm.title = "Восстановление типов"
+            confirm.headerText = "Восстановить дефолтные типы?"
+            confirm.contentText = "Все пользовательские типы будут удалены. Продолжить?"
+            val result = confirm.showAndWait()
+            if (result.isPresent && result.get() == ButtonType.OK) {
+                database.restoreDefaultTypes()
+                EquipmentTypes.reloadDefaults()
+                observableTypes.clear()
+                observableTypes.addAll(database.loadAllTypes())
+                headerLabel.text = "📋 Типы оборудования (${EquipmentTypes.ALL_TYPES.size})"
+                showToast("✅ Дефолтные типы восстановлены")
+            }
+        }
+
+        val closeBtn = Button("✕ Закрыть")
+        closeBtn.style = "-fx-background-color: #6c757d; -fx-text-fill: white; -fx-padding: 6px 20px; -fx-background-radius: 4px;"
+        closeBtn.setOnAction { dialog.close() }
+
+        buttonPanel.children.addAll(addBtn, editBtn, deleteBtn, restoreBtn, closeBtn)
+
+        val infoLabel = Label("💡 Типы загружаются из БД. При добавлении нового типа он сразу становится доступен в списке оборудования.")
+        infoLabel.style = "-fx-text-fill: #6c757d; -fx-font-size: 12px; -fx-wrap-text: true;"
+
+        root.children.addAll(headerLabel, tableView, buttonPanel, infoLabel)
+
+        val scene = Scene(root, 680.0, 480.0)
+        dialog.scene = scene
+        dialog.showAndWait()
+    }
+
+    private fun showAddTypeDialog(onSave: (EquipmentTypeData) -> Unit) {
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "Добавление типа"
+        dialog.headerText = "Введите данные нового типа"
+
+        val content = VBox(10.0)
+        content.style = "-fx-padding: 20px; -fx-pref-width: 380px;"
+
+        val keyField = TextField()
+        keyField.promptText = "Ключ (например: v_110)"
+        keyField.style = "-fx-padding: 8px;"
+
+        val nameField = TextField()
+        nameField.promptText = "Отображаемое имя (например: В-110)"
+        nameField.style = "-fx-padding: 8px;"
+
+        val letterField = TextField()
+        letterField.promptText = "Буква на маркере (например: В-110)"
+        letterField.style = "-fx-padding: 8px;"
+
+        content.children.addAll(
+            Label("Ключ (уникальный идентификатор):"), keyField,
+            Label("Название:"), nameField,
+            Label("Буква на маркере:"), letterField
+        )
+
+        dialog.dialogPane.content = content
+        dialog.dialogPane.buttonTypes.addAll(ButtonType.OK, ButtonType.CANCEL)
+
+        dialog.showAndWait().ifPresent { result ->
+            if (result == ButtonType.OK) {
+                val key = keyField.text.trim().lowercase().replace(" ", "_")
+                val displayName = nameField.text.trim()
+                val letter = letterField.text.trim().ifEmpty { displayName.take(1) }
+
+                if (key.isEmpty() || displayName.isEmpty()) {
+                    showError("Заполните все поля")
+                    return@ifPresent
+                }
+
+                val types = database.loadAllTypes()
+                if (types.any { it.key == key }) {
+                    showError("Тип с ключом '$key' уже существует")
+                    return@ifPresent
+                }
+
+                onSave(EquipmentTypeData(key, displayName, letter, types.size))
+            }
+        }
+    }
+
+    private fun showEditTypeDialog(type: EquipmentTypeData, onSave: (EquipmentTypeData) -> Unit) {
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "Редактирование типа"
+        dialog.headerText = "Измените данные типа"
+
+        val content = VBox(10.0)
+        content.style = "-fx-padding: 20px; -fx-pref-width: 380px;"
+
+        val nameField = TextField(type.displayName)
+        nameField.style = "-fx-padding: 8px;"
+
+        val letterField = TextField(type.letter)
+        letterField.style = "-fx-padding: 8px;"
+
+        val keyLabel = Label(type.key)
+        keyLabel.style = "-fx-font-weight: bold; -fx-text-fill: #333;"
+
+        content.children.addAll(
+            Label("Ключ (нельзя изменить):"),
+            keyLabel,
+            Label("Название:"),
+            nameField,
+            Label("Буква на маркере:"),
+            letterField
+        )
+
+        dialog.dialogPane.content = content
+        dialog.dialogPane.buttonTypes.addAll(ButtonType.OK, ButtonType.CANCEL)
+
+        dialog.showAndWait().ifPresent { result ->
+            if (result == ButtonType.OK) {
+                val displayName = nameField.text.trim()
+                val letter = letterField.text.trim().ifEmpty { displayName.take(1) }
+
+                if (displayName.isEmpty()) {
+                    showError("Введите название")
+                    return@ifPresent
+                }
+
+                onSave(type.copy(displayName = displayName, letter = letter))
+            }
+        }
+    }
+
 }
 
 data class DefectViewItem(

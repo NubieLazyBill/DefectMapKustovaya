@@ -1,107 +1,148 @@
 package org.example.defectmap
 
 object EquipmentTypes {
-    // Единый список типов оборудования - ТОЛЬКО КЛЮЧИ!
-    val ALL_TYPES = listOf(
+    // ===== ДИНАМИЧЕСКИЙ СПИСОК =====
+    private var _allTypes: MutableList<Pair<String, String>> = mutableListOf()
+    private var _typeToLetter: MutableMap<String, String> = mutableMapOf()
+
+    // ===== ПУБЛИЧНЫЙ ДОСТУП =====
+    val ALL_TYPES: List<Pair<String, String>>
+        get() = _allTypes.toList()
+
+    val TYPE_TO_LETTER: Map<String, String>
+        get() = _typeToLetter.toMap()
+
+    val TYPE_FILTER_MAP: Map<String, String>
+        get() = _allTypes.associate { it.second to it.first }
+
+    // ===== МЕТОДЫ =====
+    fun getLetter(type: String): String = _typeToLetter[type] ?: "О"
+
+    fun getTypeName(type: String): String = _allTypes.toMap()[type] ?: type
+
+    // ===== ЗАГРУЗКА ИЗ БД =====
+    fun loadFromDatabase(database: Database) {
+        val types = database.loadAllTypes()
+        if (types.isNotEmpty()) {
+            _allTypes.clear()
+            _typeToLetter.clear()
+            types.forEach { typeData ->
+                _allTypes.add(typeData.key to typeData.displayName)
+                _typeToLetter[typeData.key] = typeData.letter
+            }
+            println("✅ Загружено ${_allTypes.size} типов из БД")
+        } else {
+            println("ℹ️ Таблица types пуста, загружаем дефолтные значения")
+            loadDefaults()
+        }
+    }
+
+    // ===== ЗАГРУЗКА ДЕФОЛТНЫХ ЗНАЧЕНИЙ =====
+    fun loadDefaults() {
+        _allTypes.clear()
+        _typeToLetter.clear()
+        defaultTypes.forEach { (key, displayName, letter) ->
+            _allTypes.add(key to displayName)
+            _typeToLetter[key] = letter
+        }
+        println("✅ Загружено ${_allTypes.size} дефолтных типов")
+    }
+
+    fun reloadDefaults() = loadDefaults()
+
+    fun getDefaultTypes(): List<Triple<String, String, String>> = defaultTypes.toList()
+
+    // ===== ДИНАМИЧЕСКОЕ УПРАВЛЕНИЕ =====
+    fun addType(key: String, displayName: String, letter: String) {
+        _allTypes.add(key to displayName)
+        _typeToLetter[key] = letter
+        println("➕ Добавлен тип: $key → $displayName ($letter)")
+    }
+
+    fun updateType(key: String, displayName: String, letter: String) {
+        val index = _allTypes.indexOfFirst { it.first == key }
+        if (index >= 0) {
+            _allTypes[index] = key to displayName
+            _typeToLetter[key] = letter
+            println("✏️ Обновлён тип: $key → $displayName ($letter)")
+        }
+    }
+
+    fun removeType(key: String) {
+        _allTypes.removeAll { it.first == key }
+        _typeToLetter.remove(key)
+        println("🗑️ Удалён тип: $key")
+    }
+
+    fun getAllKeys(): List<String> = _allTypes.map { it.first }
+
+    fun getAllDisplayNames(): List<String> = _allTypes.map { it.second }
+
+    // ===== ДЕФОЛТНЫЕ ЗНАЧЕНИЯ (СОХРАНЯЕМ ВСЕ ВАШИ ТИПЫ) =====
+    private val defaultTypes = listOf(
         // --- 500 кВ ---
-        "v_500" to "В-500",
-        "v_500_ABB" to "В-500 элегаз",
-        "r_500" to "Разъединитель 500 кВ",
-        "autotransformer" to "АТГ",
-        "tn_500" to "ТН-500",
-        "tt_500" to "ТТ-500",
-        "ks_500" to "КС-500",
-        "opn_500" to "ОПН-500",
-        "reactor_500" to "Р-500",
-        "fpz_500" to "ФПЗ-500",
-        "s" to "С",
-        "ls" to "ЛС",
+        Triple("v_500", "В-500", "В"),
+        Triple("v_500_ABB", "В-500 элегаз", "В"),
+        Triple("r_500", "Разъединитель 500 кВ", "Р"),
+        Triple("autotransformer", "АТГ", "АТ"),
+        Triple("tn_500", "ТН-500", "ТН"),
+        Triple("tt_500", "ТТ-500", "ТТ"),
+        Triple("ks_500", "КС-500", "КС"),
+        Triple("opn_500", "ОПН-500", "ОПН"),
+        Triple("reactor_500", "Р-500", "Р"),
+        Triple("fpz_500", "ФПЗ-500", "ФПЗ"),
+        Triple("s", "С", "С"),
+        Triple("ls", "ЛС", "ЛС"),
+
         // --- 220 кВ ---
-        "v_220" to "В-220",
-        "r_220" to "Разъединитель 220 кВ",
-        "opn_220" to "ОПН 220 кВ",
-        "tn_220" to "ТН 220 кВ",
-        "tt_220" to "ТТ 220 кВ",
-        "ks_220" to "КС 220 кВ",
-        "line_220" to "ВЛ 220 кВ",
-        "fp_220" to "ФП-220",
-        "zn_KC_220" to "ЗН КС-220",
+        Triple("v_220", "В-220", "В"),
+        Triple("r_220", "Разъединитель 220 кВ", "Р"),
+        Triple("opn_220", "ОПН 220 кВ", "ОПН"),
+        Triple("tn_220", "ТН 220 кВ", "ТН"),
+        Triple("tt_220", "ТТ 220 кВ", "ТТ"),
+        Triple("ks_220", "КС 220 кВ", "КС"),
+        Triple("line_220", "ВЛ 220 кВ", "Л"),
+        Triple("fp_220", "ФП-220", "ФП"),
+        Triple("zn_KC_220", "ЗН КС-220", "ЗН"),
+
         // --- 35 кВ ---
-        "v_35" to "В-35",
-        "r_35" to "Разъединитель 35 кВ (Р-35)",
-        "tn_35" to "ТН-35 кВ",
-        "tt_35" to "ТТ-35 кВ",
-        "tsn" to "ТСН",
-        "opn_35" to "ОПН-35",
+        Triple("v_35", "В-35", "В"),
+        Triple("r_35", "Разъединитель 35 кВ (Р-35)", "Р"),
+        Triple("tn_35", "ТН-35 кВ", "ТН"),
+        Triple("tt_35", "ТТ-35 кВ", "ТТ"),
+        Triple("tsn", "ТСН", "ТСН"),
+        Triple("opn_35", "ОПН-35", "ОПН"),
 
         // --- Здания ---
-        "Buildings" to "Здания",
+        Triple("Buildings", "Здания", "*"),
 
-        "lightning" to "Молниеотвод (М)",
+        // --- Молниеотводы ---
+        Triple("lightning", "Молниеотвод (М)", "М"),
+
         // --- Другое оборудование ---
-        "MO" to "Мачта освещения",
-        "capacitor" to "Конденсатор (К)",
-        "arrester" to "Разрядник (РВ)",
-        "line_trap" to "Заградитель (З)",
-        "coupling_capacitor" to "Конденсатор связи (КС)",
-        "earthing_switch" to "Заземляющий нож (ЗН)",
-        "load_switch" to "Нагрузочный выключатель (ВН)",
-        "fuse" to "Предохранитель (Пр)",
-        "sf6_breaker" to "Элегазовый выключатель (ВЭ)",
-        "vacuum_breaker" to "Вакуумный выключатель (ВВ)",
-        "compressor" to "Компрессорная (К)",
-        "pump" to "Насос (Н)",
-        "generator" to "Генератор (Г)",
-        "motor" to "Электродвигатель (М)",
-        "other" to "Другое (О)"
+        Triple("MO", "Мачта освещения", "MO"),
+        Triple("capacitor", "Конденсатор (К)", "К"),
+        Triple("arrester", "Разрядник (РВ)", "РВ"),
+        Triple("line_trap", "Заградитель (З)", "З"),
+        Triple("coupling_capacitor", "Конденсатор связи (КС)", "КС"),
+        Triple("earthing_switch", "Заземляющий нож (ЗН)", "ЗН"),
+        Triple("load_switch", "Нагрузочный выключатель (ВН)", "ВН"),
+        Triple("fuse", "Предохранитель (Пр)", "Пр"),
+        Triple("sf6_breaker", "Элегазовый выключатель (ВЭ)", "ВЭ"),
+        Triple("vacuum_breaker", "Вакуумный выключатель (ВВ)", "ВВ"),
+        Triple("compressor", "Компрессорная (К)", "К"),
+        Triple("pump", "Насос (Н)", "Н"),
+        Triple("generator", "Генератор (Г)", "Г"),
+        Triple("motor", "Электродвигатель (М)", "М"),
+        Triple("other", "Другое (О)", "О"),
+
+        // ===== 110 кВ (ДОБАВЛЯЕМ НОВЫЕ) =====
+        Triple("v_110", "В-110", "В-110"),
+        Triple("r_110", "Разъединитель 110 кВ", "Р-110"),
+        Triple("opn_110", "ОПН 110 кВ", "ОПН"),
+        Triple("tn_110", "ТН 110 кВ", "ТН"),
+        Triple("tt_110", "ТТ 110 кВ", "ТТ"),
+        Triple("ks_110", "КС 110 кВ", "КС"),
+        Triple("line_110", "ВЛ 110 кВ", "Л-110")
     )
-
-    val TYPE_TO_LETTER = mapOf(
-        "v_500" to "В",
-        "r_500" to "Р",
-        "autotransformer" to "АТ",
-        "tn_500" to "ТН",
-        "tt_500" to "ТТ",
-        "ks_500" to "КС",
-        "opn_500" to "ОПН",
-        "reactor_500" to "Р",
-        "v_220" to "В",
-        "r_220" to "Р",
-        "opn_220" to "ОПН",
-        "tn_220" to "ТН",
-        "tt_220" to "ТТ",
-        "ks_220" to "КС",
-        "line_220" to "Л",
-        "v_35" to "В",
-        "r_35" to "Р",
-        "tn_35" to "ТН",
-        "tt_35" to "ТТ",
-        "tsn" to "ТСН",
-        "opn_35" to "ОПН",
-        "Buildings" to "*",
-        "s" to "С",
-        "ls" to "ЛС",
-        "lightning" to "М",
-        "MO" to "MO",
-        "capacitor" to "К",
-        "arrester" to "РВ",
-        "line_trap" to "З",
-        "coupling_capacitor" to "КС",
-        "earthing_switch" to "ЗН",
-        "load_switch" to "ВН",
-        "fuse" to "Пр",
-        "sf6_breaker" to "ВЭ",
-        "vacuum_breaker" to "ВВ",
-        "compressor" to "К",
-        "pump" to "Н",
-        "generator" to "Г",
-        "motor" to "М",
-        "other" to "О"
-    )
-
-    // Для фильтрации - название -> ключ
-    val TYPE_FILTER_MAP = ALL_TYPES.associate { it.second to it.first }
-
-    fun getLetter(type: String): String = TYPE_TO_LETTER[type] ?: "О"
-    fun getTypeName(type: String): String = ALL_TYPES.toMap()[type] ?: type
 }
