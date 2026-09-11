@@ -159,8 +159,8 @@ class DefectMapController {
         val reportStage = Stage()
         reportStage.title = "📊 Создание отчёта"
         reportStage.isResizable = true
-        reportStage.minWidth = 650.0
-        reportStage.minHeight = 580.0
+        reportStage.minWidth = 750.0
+        reportStage.minHeight = 620.0
 
         val ownerStage = webView.scene.window as Stage
         reportStage.initOwner(ownerStage)
@@ -192,9 +192,28 @@ class DefectMapController {
 
         val cellLabel = Label("Ячейка:")
         cellLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
-        val cellField = TextField()
-        cellField.promptText = "Введите номер ячейки..."
-        cellField.style = "-fx-pref-width: 180px;"
+        val cellCombo = ComboBox<String>()
+
+// Загружаем уникальные ячейки из БД
+        val allCells = loadEquipment()
+            .mapNotNull { it.cell.takeIf { cell -> cell.isNotEmpty() } }
+            .distinct()
+            .sorted()
+
+        cellCombo.items.add("Все ячейки")
+        cellCombo.items.addAll(allCells)
+        cellCombo.value = "Все ячейки"
+        cellCombo.style = "-fx-pref-width: 150px;"
+
+// ===== ДОБАВИТЬ ЭТОТ БЛОК =====
+        val defectTypeLabel = Label("Вид дефекта:")
+        defectTypeLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
+        val defectTypeCombo = ComboBox<String>()
+        val defectTypesList = listOf("Все") + DefectTypes.ALL_TYPES
+        defectTypeCombo.items.addAll(defectTypesList)
+        defectTypeCombo.value = "Все"
+        defectTypeCombo.style = "-fx-pref-width: 200px;"
+// ===== КОНЕЦ НОВОГО БЛОКА =====
 
         val dateLabel = Label("Период создания:")
         dateLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
@@ -222,7 +241,8 @@ class DefectMapController {
                 reportData,
                 statusCombo.value,
                 typeCombo.value,
-                cellField.text,
+                cellCombo.value,
+                defectTypeCombo.value,
                 dateFrom.value,
                 dateTo.value
             )
@@ -246,7 +266,7 @@ class DefectMapController {
 
         statusCombo.valueProperty().addListener { _, _, _ -> updatePreview() }
         typeCombo.valueProperty().addListener { _, _, _ -> updatePreview() }
-        cellField.textProperty().addListener { _, _, _ -> updatePreview() }
+        cellCombo.valueProperty().addListener { _, _, _ -> updatePreview() }
         dateFrom.valueProperty().addListener { _, _, _ -> updatePreview() }
         dateTo.valueProperty().addListener { _, _, _ -> updatePreview() }
 
@@ -259,11 +279,12 @@ class DefectMapController {
         createBtn.setOnAction {
             val status = statusCombo.value
             val typeName = typeCombo.value
-            val cell = cellField.text.trim()
+            val cell = cellCombo.value ?: "Все ячейки"
+            val defectType = defectTypeCombo.value
             val from = dateFrom.value
             val to = dateTo.value
 
-            val filtered = filterReportData(reportData, status, typeName, cell, from, to)
+            val filtered = filterReportData(reportData, status, typeName, cell, defectType,from, to)
             if (filtered.isEmpty()) {
                 showInfo("⚠️ Нет дефектов по выбранным фильтрам")
                 return@setOnAction
@@ -281,7 +302,8 @@ class DefectMapController {
         filtersBox.children.addAll(
             statusLabel, statusCombo,
             typeLabel, typeCombo,
-            cellLabel, cellField,
+            cellLabel, cellCombo,
+            defectTypeLabel, defectTypeCombo,
             dateLabel, dateBox
         )
 
@@ -293,7 +315,7 @@ class DefectMapController {
             buttonBox
         )
 
-        val scene = Scene(root, 650.0, 580.0)
+        val scene = Scene(root, 780.0, 650.0)
         reportStage.scene = scene
 
         reportStage.setOnShown {
@@ -308,13 +330,16 @@ class DefectMapController {
         reportStage.setOnHidden {
             println("📊 Окно отчёта закрыто")
         }
+
+        defectTypeCombo.valueProperty().addListener { _, _, _ -> updatePreview() }  // ← ДОБАВИТЬ
     }
 
     private fun filterReportData(
         data: List<ReportItem>,
         status: String?,
         typeName: String?,
-        cell: String,
+        cell: String?,
+        defectType: String?,
         dateFrom: LocalDate?,
         dateTo: LocalDate?
     ): List<ReportItem> {
@@ -325,7 +350,12 @@ class DefectMapController {
 
             val typeMatch = typeName == null || typeName == "Все" || item.equipmentType == typeName
 
-            val cellMatch = cell.isEmpty() || item.equipmentCell.contains(cell, ignoreCase = true)
+            // ===== ЯЧЕЙКА: если "Все ячейки" или пусто — не фильтруем =====
+            val cellMatch = cell == null || cell == "Все ячейки" || cell.isEmpty() ||
+                    item.equipmentCell.contains(cell, ignoreCase = true)
+
+            val defectTypeMatch = defectType == null || defectType == "Все" ||
+                    item.defectName.equals(defectType, ignoreCase = true)
 
             val dateMatch = if (dateFrom != null || dateTo != null) {
                 val detectionDate = item.detectionDate?.let {
@@ -336,7 +366,7 @@ class DefectMapController {
                 fromMatch && toMatch
             } else true
 
-            statusMatch && typeMatch && cellMatch && dateMatch
+            statusMatch && typeMatch && cellMatch && defectTypeMatch && dateMatch
         }
     }
 
@@ -387,8 +417,8 @@ class DefectMapController {
             }
 
             val headers = arrayOf(
-                "№", "Оборудование", "Тип", "Ячейка",
-                "Дефект", "Описание", "Статус", "Дата создания", "X%", "Y%"
+                "№", "Оборудование", "Тип оборудования", "Ячейка",
+                "Вид дефекта", "Описание", "Статус", "Дата создания", "X%", "Y%"
             )
 
             val headerRow = sheet.createRow(0)
@@ -549,6 +579,7 @@ class DefectMapController {
 
         // ===== ЗАГРУЖАЕМ ТИПЫ ИЗ БД =====
         EquipmentTypes.loadFromDatabase(database)
+        DefectTypes.loadFromDatabase(database)
 
         loadSvgIntoWebView()
 
@@ -1089,23 +1120,24 @@ class DefectMapController {
 
         val tableView = TableView<DefectViewItem>()
         tableView.style = "-fx-font-size: 13px; -fx-border-color: #dee2e6;"
+        tableView.prefHeight = 600.0  // ← ВЫСОТА ТАБЛИЦЫ
 
         val colEquipment = TableColumn<DefectViewItem, String>("Оборудование")
         colEquipment.cellValueFactory = PropertyValueFactory("equipmentName")
-        colEquipment.prefWidth = 200.0
+        colEquipment.prefWidth = 250.0
 
         val colCell = TableColumn<DefectViewItem, String>("Ячейка")
         colCell.cellValueFactory = PropertyValueFactory("cell")
-        colCell.prefWidth = 80.0
+        colCell.prefWidth = 100.0
         colCell.style = "-fx-alignment: CENTER;"
 
-        val colDefect = TableColumn<DefectViewItem, String>("Дефект")
+        val colDefect = TableColumn<DefectViewItem, String>("Вид дефекта")
         colDefect.cellValueFactory = PropertyValueFactory("defectName")
-        colDefect.prefWidth = 200.0
+        colDefect.prefWidth = 220.0
 
         val colDescription = TableColumn<DefectViewItem, String>("Описание")
         colDescription.cellValueFactory = PropertyValueFactory("description")
-        colDescription.prefWidth = 200.0
+        colDescription.prefWidth = 350.0  // ← ШИРЕ
 
         val colStatus = TableColumn<DefectViewItem, String>("Статус")
         colStatus.cellValueFactory = PropertyValueFactory("status")
@@ -1188,15 +1220,24 @@ class DefectMapController {
             onCreateReport()
         }
 
-        val bottomPanel = HBox(20.0, reportBtn, closeBtn)
+        // ===== НОВАЯ КНОПКА "УПРАВЛЕНИЕ ВИДАМИ ДЕФЕКТОВ" =====
+        val manageTypesBtn = Button("🔧 Виды дефектов")
+        manageTypesBtn.style = "-fx-background-color: #6f42c1; -fx-text-fill: white; -fx-padding: 8px 20px; -fx-background-radius: 6px; -fx-font-weight: bold;"
+        manageTypesBtn.setOnAction {
+            showManageDefectTypesDialog()
+        }
+
+        val bottomPanel = HBox(20.0, manageTypesBtn, reportBtn, closeBtn)
         bottomPanel.alignment = Pos.CENTER_RIGHT
 
         mainLayout.children.addAll(headerLabel, filterPanel, tableView, bottomPanel)
 
         val popupStage = Stage()
         popupStage.title = "📊 Список дефектов"
-        popupStage.scene = Scene(mainLayout, 920.0, 650.0)
+        popupStage.scene = Scene(mainLayout, 1100.0, 800.0)  // ← ШИРЕ И ВЫШЕ
         popupStage.isResizable = true
+        popupStage.minWidth = 900.0
+        popupStage.minHeight = 600.0
 
         defectsListStage = popupStage
         popupStage.setOnHidden {
@@ -2592,8 +2633,8 @@ class DefectMapController {
 
                 val mainLayout = VBox(15.0)
                 mainLayout.style = "-fx-background-color: white; -fx-padding: 20px;"
-                mainLayout.prefWidth = 850.0
-                mainLayout.prefHeight = 650.0
+                mainLayout.prefWidth = 1080.0   // ← ШИРЕ
+                mainLayout.prefHeight = 780.0
 
                 val headerLabel = Label("📋 СПИСОК ОБОРУДОВАНИЯ")
                 headerLabel.style = "-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #333;"
@@ -3332,6 +3373,232 @@ class DefectMapController {
                 }
 
                 onSave(type.copy(displayName = displayName, letter = letter))
+            }
+        }
+    }
+
+    // ======================== УПРАВЛЕНИЕ ВИДАМИ ДЕФЕКТОВ ========================
+
+    private fun showManageDefectTypesDialog() {
+        val dialog = Stage()
+        dialog.title = "🔧 Управление видами дефектов"
+        dialog.initModality(javafx.stage.Modality.WINDOW_MODAL)
+        dialog.initOwner(webView.scene.window)
+        dialog.minWidth = 600.0
+        dialog.minHeight = 500.0
+
+        val root = VBox(10.0)
+        root.style = "-fx-background-color: white; -fx-padding: 20px;"
+
+        val headerLabel = Label("🔧 Виды дефектов (${DefectTypes.ALL_TYPES.size})")
+        headerLabel.style = "-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #333;"
+
+        // ===== ПОИСК =====
+        val searchField = TextField()
+        searchField.promptText = "🔍 Поиск по названию..."
+        searchField.style = "-fx-padding: 8px; -fx-font-size: 13px;"
+
+        // ===== ТАБЛИЦА =====
+        // ===== ТАБЛИЦА =====
+        val tableView = TableView<String>()
+        tableView.style = "-fx-font-size: 13px;"
+
+        val colName = TableColumn<String, String>("Вид дефекта")
+        colName.setCellValueFactory { data ->
+            javafx.beans.property.SimpleStringProperty(data.value)
+        }
+        colName.prefWidth = 400.0
+
+        tableView.columns.add(colName)
+
+        val allTypes = database.loadAllDefectTypes().toMutableList()
+        if (allTypes.isEmpty()) {
+            database.restoreDefaultDefectTypes()
+            allTypes.addAll(database.loadAllDefectTypes())
+            DefectTypes.reloadDefaults()
+        }
+        val observableTypes = FXCollections.observableArrayList(allTypes)
+        tableView.items = observableTypes
+
+        // ===== ФИЛЬТРАЦИЯ =====
+        searchField.textProperty().addListener { _, _, newValue ->
+            val search = newValue.lowercase()
+            val filtered = allTypes.filter { it.lowercase().contains(search) }
+            tableView.items = FXCollections.observableArrayList(filtered)
+        }
+
+        // ===== КНОПКИ =====
+        val buttonPanel = HBox(10.0)
+        buttonPanel.alignment = Pos.CENTER_RIGHT
+
+        val addBtn = Button("➕ Добавить")
+        addBtn.style = "-fx-background-color: #28a745; -fx-text-fill: white; -fx-padding: 6px 16px; -fx-background-radius: 4px;"
+        addBtn.setOnAction {
+            showAddDefectTypeDialog { newName ->
+                database.saveDefectType(newName, allTypes.size)
+                DefectTypes.addType(newName)
+                allTypes.add(newName)
+                observableTypes.add(newName)
+                headerLabel.text = "🔧 Виды дефектов (${DefectTypes.ALL_TYPES.size})"
+                showToast("✅ Вид дефекта добавлен: $newName")
+            }
+        }
+
+        val editBtn = Button("✏️ Редактировать")
+        editBtn.style = "-fx-background-color: #007bff; -fx-text-fill: white; -fx-padding: 6px 16px; -fx-background-radius: 4px;"
+        editBtn.setOnAction {
+            val selected = tableView.selectionModel.selectedItem
+            if (selected != null) {
+                showEditDefectTypeDialog(selected) { oldName, newName ->
+                    database.deleteDefectType(oldName)
+                    database.saveDefectType(newName, allTypes.indexOf(oldName))
+                    DefectTypes.removeType(oldName)
+                    DefectTypes.addType(newName)
+
+                    val index = allTypes.indexOf(oldName)
+                    if (index >= 0) {
+                        allTypes[index] = newName
+                        observableTypes[index] = newName
+                    }
+                    showToast("✅ Вид дефекта обновлён: $newName")
+                }
+            } else {
+                showInfo("⚠️ Выберите вид дефекта для редактирования")
+            }
+        }
+
+        val deleteBtn = Button("🗑️ Удалить")
+        deleteBtn.style = "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-padding: 6px 16px; -fx-background-radius: 4px;"
+        deleteBtn.setOnAction {
+            val selected = tableView.selectionModel.selectedItem
+            if (selected != null) {
+                val confirm = Alert(AlertType.CONFIRMATION)
+                confirm.title = "Удаление вида дефекта"
+                confirm.headerText = "Удалить '$selected'?"
+                confirm.contentText = "Существующие дефекты с этим видом не удалятся, но в списке его больше не будет."
+                val result = confirm.showAndWait()
+                if (result.isPresent && result.get() == ButtonType.OK) {
+                    database.deleteDefectType(selected)
+                    DefectTypes.removeType(selected)
+                    allTypes.remove(selected)
+                    observableTypes.remove(selected)
+                    headerLabel.text = "🔧 Виды дефектов (${DefectTypes.ALL_TYPES.size})"
+                    showToast("🗑️ Вид дефекта удалён: $selected")
+                }
+            } else {
+                showInfo("⚠️ Выберите вид дефекта для удаления")
+            }
+        }
+
+        val restoreBtn = Button("🔄 Восстановить дефолтные")
+        restoreBtn.style = "-fx-background-color: #ffc107; -fx-text-fill: #333; -fx-padding: 6px 16px; -fx-background-radius: 4px;"
+        restoreBtn.setOnAction {
+            val confirm = Alert(AlertType.CONFIRMATION)
+            confirm.title = "Восстановление видов дефектов"
+            confirm.headerText = "Восстановить дефолтные виды?"
+            confirm.contentText = "Все пользовательские виды дефектов будут удалены. Продолжить?"
+            val result = confirm.showAndWait()
+            if (result.isPresent && result.get() == ButtonType.OK) {
+                database.restoreDefaultDefectTypes()
+                DefectTypes.reloadDefaults()
+                allTypes.clear()
+                allTypes.addAll(DefectTypes.ALL_TYPES)
+                observableTypes.clear()
+                observableTypes.addAll(allTypes)
+                headerLabel.text = "🔧 Виды дефектов (${DefectTypes.ALL_TYPES.size})"
+                showToast("✅ Дефолтные виды восстановлены")
+            }
+        }
+
+        val closeBtn = Button("✕ Закрыть")
+        closeBtn.style = "-fx-background-color: #6c757d; -fx-text-fill: white; -fx-padding: 6px 20px; -fx-background-radius: 4px;"
+        closeBtn.setOnAction { dialog.close() }
+
+        buttonPanel.children.addAll(addBtn, editBtn, deleteBtn, restoreBtn, closeBtn)
+
+        val infoLabel = Label("💡 Виды дефектов используются при добавлении/редактировании дефектов.")
+        infoLabel.style = "-fx-text-fill: #6c757d; -fx-font-size: 12px; -fx-wrap-text: true;"
+
+        root.children.addAll(headerLabel, searchField, tableView, buttonPanel, infoLabel)
+
+        val scene = Scene(root, 650.0, 520.0)
+        dialog.scene = scene
+        dialog.showAndWait()
+    }
+
+// ===== ДОБАВЛЕНИЕ ВИДА ДЕФЕКТА =====
+
+    private fun showAddDefectTypeDialog(onSave: (String) -> Unit) {
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "Добавление вида дефекта"
+        dialog.headerText = "Введите название нового вида дефекта"
+
+        val content = VBox(10.0)
+        content.style = "-fx-padding: 20px; -fx-pref-width: 400px;"
+
+        val nameField = TextField()
+        nameField.promptText = "Например: Скол изолятора"
+        nameField.style = "-fx-padding: 8px; -fx-font-size: 14px;"
+
+        content.children.addAll(
+            Label("Название вида дефекта:"), nameField
+        )
+
+        dialog.dialogPane.content = content
+        dialog.dialogPane.buttonTypes.addAll(ButtonType.OK, ButtonType.CANCEL)
+
+        dialog.showAndWait().ifPresent { result ->
+            if (result == ButtonType.OK) {
+                val name = nameField.text.trim()
+                if (name.isEmpty()) {
+                    showError("Введите название")
+                    return@ifPresent
+                }
+
+                if (DefectTypes.ALL_TYPES.contains(name)) {
+                    showError("Такой вид дефекта уже существует")
+                    return@ifPresent
+                }
+
+                onSave(name)
+            }
+        }
+    }
+
+// ===== РЕДАКТИРОВАНИЕ ВИДА ДЕФЕКТА =====
+
+    private fun showEditDefectTypeDialog(currentName: String, onSave: (String, String) -> Unit) {
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "Редактирование вида дефекта"
+        dialog.headerText = "Измените название вида дефекта"
+
+        val content = VBox(10.0)
+        content.style = "-fx-padding: 20px; -fx-pref-width: 400px;"
+
+        val nameField = TextField(currentName)
+        nameField.style = "-fx-padding: 8px; -fx-font-size: 14px;"
+
+        content.children.addAll(
+            Label("Название вида дефекта:"), nameField
+        )
+
+        dialog.dialogPane.content = content
+        dialog.dialogPane.buttonTypes.addAll(ButtonType.OK, ButtonType.CANCEL)
+
+        dialog.showAndWait().ifPresent { result ->
+            if (result == ButtonType.OK) {
+                val newName = nameField.text.trim()
+                if (newName.isEmpty()) {
+                    showError("Введите название")
+                    return@ifPresent
+                }
+
+                if (newName != currentName && DefectTypes.ALL_TYPES.contains(newName)) {
+                    showError("Такой вид дефекта уже существует")
+                    return@ifPresent
+                }
+
+                onSave(currentName, newName)
             }
         }
     }

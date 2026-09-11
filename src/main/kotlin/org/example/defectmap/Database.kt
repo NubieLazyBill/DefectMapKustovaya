@@ -31,6 +31,7 @@ class Database {
         addSizeColumnIfNotExists()
         addMarkersColumnIfNotExists()
         migrateMarkerIds()
+        createDefectTypesTable()
     }
 
     // ======================== ОПРЕДЕЛЕНИЕ ПАПКИ ПРИЛОЖЕНИЯ ========================
@@ -609,6 +610,65 @@ class Database {
             )
         }
         println("✅ Дефолтные типы восстановлены (${EquipmentTypes.ALL_TYPES.size} шт.)")
+    }
+
+    // ======================== ВИДЫ ДЕФЕКТОВ (ДИНАМИЧЕСКИЕ) ========================
+
+    private fun createDefectTypesTable() {
+        val sql = """
+        CREATE TABLE IF NOT EXISTS defect_types (
+            name TEXT PRIMARY KEY,
+            sort_order INTEGER DEFAULT 0,
+            created_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+    """.trimIndent()
+        executeUpdate(sql)
+        println("✅ Таблица defect_types создана")
+    }
+
+    fun loadAllDefectTypes(): List<String> {
+        val result = mutableListOf<String>()
+        val sql = "SELECT name FROM defect_types ORDER BY sort_order, name"
+
+        connection?.prepareStatement(sql)?.use { stmt ->
+            val rs = stmt.executeQuery()
+            while (rs.next()) {
+                result.add(rs.getString("name"))
+            }
+        }
+        return result
+    }
+
+    fun saveDefectType(name: String, sortOrder: Int = 0) {
+        val sql = """
+        INSERT OR REPLACE INTO defect_types (name, sort_order)
+        VALUES (?, ?)
+    """.trimIndent()
+        connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.setString(1, name)
+            stmt.setInt(2, sortOrder)
+            stmt.executeUpdate()
+        }
+        println("💾 Вид дефекта сохранён: $name")
+    }
+
+    fun deleteDefectType(name: String) {
+        val sql = "DELETE FROM defect_types WHERE name = ?"
+        connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.setString(1, name)
+            stmt.executeUpdate()
+        }
+        println("🗑️ Вид дефекта удалён: $name")
+    }
+
+    fun restoreDefaultDefectTypes() {
+        executeUpdate("DELETE FROM defect_types")
+
+        val defaultTypes = DefectTypes.getDefaultTypes()
+        defaultTypes.forEachIndexed { index, name ->
+            saveDefectType(name, index)
+        }
+        println("✅ Дефолтные виды дефектов восстановлены (${defaultTypes.size} шт.)")
     }
 
 }

@@ -601,33 +601,44 @@ class EquipmentCardController(
         dialog.headerText = "📝 Введите данные дефекта"
 
         val content = VBox(15.0)
-        content.style = "-fx-padding: 20px; -fx-pref-width: 450px;"
+        content.style = "-fx-padding: 20px; -fx-pref-width: 500px;"
 
-        val nameLabel = Label("Название дефекта:")
-        nameLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
-        val nameField = TextField()
-        nameField.promptText = "Введите название дефекта..."
-        nameField.style = "-fx-padding: 8px 12px; -fx-font-size: 14px;"
+        // ===== ВИД ДЕФЕКТА (выбор из списка + возможность ввести своё) =====
+        val typeLabel = Label("Вид дефекта:")
+        typeLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
 
+        val typeCombo = ComboBox<String>()
+        typeCombo.isEditable = true  // ← Разрешаем вводить своё
+        typeCombo.items.addAll(DefectTypes.ALL_TYPES)
+        typeCombo.value = DefectTypes.ALL_TYPES.firstOrNull() ?: "Прочее"
+        typeCombo.style = "-fx-pref-width: 350px; -fx-font-size: 14px;"
+        typeCombo.promptText = "Выберите или введите свой вид дефекта"
+
+        // Подсказка
+        val typeHint = Label("💡 Можно выбрать из списка или ввести свой вариант")
+        typeHint.style = "-fx-font-size: 11px; -fx-text-fill: #6c757d;"
+
+        // ===== ОПИСАНИЕ =====
         val descLabel = Label("Описание:")
         descLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val descField = TextArea()
-        descField.promptText = "Введите описание дефекта..."
-        descField.prefHeight = 100.0
+        descField.promptText = "Введите подробное описание дефекта..."
+        descField.prefHeight = 120.0
         descField.style = "-fx-padding: 8px 12px; -fx-font-size: 14px; -fx-border-color: #ced4da; -fx-border-radius: 4px;"
 
+        // ===== СТАТУС =====
         val statusLabel = Label("Статус:")
         statusLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val statusCombo = ComboBox<String>()
         statusCombo.items.addAll("обнаружен", "устранён")
         statusCombo.value = "обнаружен"
-        statusCombo.style = "-fx-pref-width: 120px; -fx-padding: 6px; -fx-font-size: 14px;"
+        statusCombo.style = "-fx-pref-width: 150px; -fx-padding: 6px; -fx-font-size: 14px;"
 
         val statusBox = HBox(10.0, statusLabel, statusCombo)
         statusBox.alignment = Pos.CENTER_LEFT
 
         content.children.addAll(
-            nameLabel, nameField,
+            typeLabel, typeCombo, typeHint,
             descLabel, descField,
             statusBox
         )
@@ -637,25 +648,27 @@ class EquipmentCardController(
 
         val result = dialog.showAndWait()
         if (result.isPresent && result.get() == ButtonType.OK) {
-            val name = nameField.text.trim()
-            if (name.isNotEmpty()) {
-                val newDefect = DefectData(
-                    id = "defect-${System.currentTimeMillis()}",
-                    equipmentId = equipment.id,
-                    name = name,
-                    description = descField.text.trim(),
-                    severity = "medium",
-                    status = if (statusCombo.value == "устранён") "fixed" else "open"
-                )
-                database.saveDefect(newDefect)
-                defects.add(newDefect)
-                defectsListView.items.add(newDefect)
-                updateDefectsCount()
-                showToast("✅ Дефект '$name' добавлен")
-                onDefectChanged?.invoke()
-            } else {
-                showError("Введите название дефекта")
+            val defectType = typeCombo.value?.trim() ?: ""
+
+            if (defectType.isEmpty()) {
+                showError("Выберите или введите вид дефекта")
+                return
             }
+
+            val newDefect = DefectData(
+                id = "defect-${System.currentTimeMillis()}",
+                equipmentId = equipment.id,
+                name = defectType,  // ← Используем вид дефекта как имя
+                description = descField.text.trim(),
+                severity = "medium",
+                status = if (statusCombo.value == "устранён") "fixed" else "open"
+            )
+            database.saveDefect(newDefect)
+            defects.add(newDefect)
+            defectsListView.items.add(newDefect)
+            updateDefectsCount()
+            showToast("✅ Дефект '$defectType' добавлен")
+            onDefectChanged?.invoke()
         }
     }
 
@@ -667,28 +680,38 @@ class EquipmentCardController(
         dialog.headerText = "Измените данные дефекта"
 
         val content = VBox(10.0)
-        content.style = "-fx-padding: 20px; -fx-pref-width: 450px;"
+        content.style = "-fx-padding: 20px; -fx-pref-width: 500px;"
 
-        val nameField = TextField(defect.name)
-        nameField.promptText = "Название"
-        nameField.style = "-fx-padding: 8px 12px; -fx-font-size: 14px;"
+        // ===== ВИД ДЕФЕКТА =====
+        val typeLabel = Label("Вид дефекта:")
+        typeLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
 
+        val typeCombo = ComboBox<String>()
+        typeCombo.isEditable = true
+        typeCombo.items.addAll(DefectTypes.ALL_TYPES)
+        typeCombo.value = defect.name
+        typeCombo.style = "-fx-pref-width: 350px; -fx-font-size: 14px;"
+
+        // ===== ОПИСАНИЕ =====
+        val descLabel = Label("Описание:")
+        descLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val descField = TextArea(defect.description)
         descField.promptText = "Описание"
-        descField.prefHeight = 80.0
+        descField.prefHeight = 100.0
         descField.style = "-fx-padding: 8px 12px; -fx-font-size: 14px; -fx-border-color: #ced4da; -fx-border-radius: 4px;"
 
+        // ===== СТАТУС =====
         val statusLabel = Label("Статус:")
         statusLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val statusCombo = ComboBox<String>()
         statusCombo.items.addAll("обнаружен", "устранён")
         statusCombo.value = if (defect.status == "fixed") "устранён" else "обнаружен"
-        statusCombo.style = "-fx-pref-width: 120px; -fx-padding: 6px; -fx-font-size: 14px;"
+        statusCombo.style = "-fx-pref-width: 150px; -fx-padding: 6px; -fx-font-size: 14px;"
 
         content.children.addAll(
-            Label("Название:"), nameField,
-            Label("Описание:"), descField,
-            Label("Статус:"), statusCombo
+            typeLabel, typeCombo,
+            descLabel, descField,
+            statusLabel, statusCombo
         )
 
         dialog.dialogPane.content = content
@@ -696,8 +719,15 @@ class EquipmentCardController(
 
         val result = dialog.showAndWait()
         if (result.isPresent && result.get() == ButtonType.OK) {
+            val defectType = typeCombo.value?.trim() ?: ""
+
+            if (defectType.isEmpty()) {
+                showError("Выберите или введите вид дефекта")
+                return
+            }
+
             val updatedDefect = defect.copy(
-                name = nameField.text.trim().ifEmpty { defect.name },
+                name = defectType,
                 description = descField.text.trim(),
                 status = if (statusCombo.value == "устранён") "fixed" else "open"
             )
