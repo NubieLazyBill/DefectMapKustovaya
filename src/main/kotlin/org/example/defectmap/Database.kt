@@ -8,18 +8,20 @@ import java.sql.ResultSet
 import java.io.File
 import kotlin.io.use
 
-class Database {
+class Database(private val substationKey: String = "kustovaya") {
     private var connection: Connection? = null
 
     // ===== ПОРТАТИВНЫЙ ПУТЬ: БД В ПАПКЕ С JAR =====
     private val APP_DIR: String by lazy { getAppDirectory() }
 
+    // Путь к БД зависит от подстанции
     private val DB_PATH: String by lazy {
-        File(APP_DIR, "equipment.db").absolutePath
+        File(APP_DIR, "equipment_$substationKey.db").absolutePath
     }
 
+    // Папка бэкапов тоже раздельная по подстанциям
     private val BACKUP_DIR: File by lazy {
-        File(APP_DIR, "backups").also { it.mkdirs() }
+        File(APP_DIR, "backups/$substationKey").also { it.mkdirs() }
     }
 
     init {

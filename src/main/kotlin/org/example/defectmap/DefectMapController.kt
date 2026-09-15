@@ -98,7 +98,8 @@ class DefectMapController {
     private var equipmentListStage: Stage? = null
     private var defectsListStage: Stage? = null
 
-    private val database: Database by lazy { Database() }
+    private var currentSubstation: Substation = Substations.DEFAULT
+    private var database: Database = Database(currentSubstation.key)
 
     private val gson: Gson by lazy {
         GsonBuilder().setPrettyPrinting().create()
@@ -581,7 +582,8 @@ class DefectMapController {
         EquipmentTypes.loadFromDatabase(database)
         DefectTypes.loadFromDatabase(database)
 
-        loadSvgIntoWebView()
+        loadSvgIntoWebViewForSubstation(currentSubstation.key)
+        updateWindowTitle()
 
         toggleMarkersMenuItem.text = if (markersVisible) "👁️ Скрыть маркеры" else "👁️ Показать маркеры"
 
@@ -621,6 +623,11 @@ class DefectMapController {
                 println("✅ Завершено")
             }
         }
+
+        // Пункт меню "Сменить подстанцию"
+        val switchSubstationItem = MenuItem("🔌 Сменить подстанцию")
+        switchSubstationItem.setOnAction { showSwitchSubstationDialog() }
+        devMenuBtn.items.add(switchSubstationItem)
     }
 
     // ======================== РЕЖИМ РЕДАКТИРОВАНИЯ ========================
@@ -654,39 +661,166 @@ class DefectMapController {
 
     // ======================== ЗАГРУЗКА SVG ========================
 
-    private fun loadSvgIntoWebView() {
+    private fun loadSvgIntoWebViewForSubstation(substationKey: String) {
         try {
-            val svgResource = javaClass.getResource("/org/example/defectmap/schema.svg")
+            val fileName = "schema_$substationKey.svg"
+
+            // 1. Ресурсы JAR
+            val svgResource = javaClass.getResource("/org/example/defectmap/$fileName")
             if (svgResource != null) {
                 val svgContent = svgResource.readText()
-                val html = buildSvgHtml(svgContent)
-                webView.engine.loadContent(html)
-                println("✅ SVG загружен из ресурсов")
+                webView.engine.loadContent(buildSvgHtml(svgContent))
+                println("✅ SVG загружен из ресурсов: $fileName")
                 return
             }
 
-            val svgFile = File("src/main/resources/org/example/defectmap/schema.svg")
+            // 2. Файловая система
+            val svgFile = File("src/main/resources/org/example/defectmap/$fileName")
             if (svgFile.exists()) {
                 val svgContent = svgFile.readText()
-                val html = buildSvgHtml(svgContent)
-                webView.engine.loadContent(html)
-                println("✅ SVG загружен из файловой системы: ${svgFile.absolutePath}")
+                webView.engine.loadContent(buildSvgHtml(svgContent))
+                println("✅ SVG загружен из ФС: ${svgFile.absolutePath}")
                 return
             }
 
-            val jarSvgFile = File("schema.svg")
+            // 3. Рядом с JAR
+            val jarSvgFile = File(fileName)
             if (jarSvgFile.exists()) {
                 val svgContent = jarSvgFile.readText()
-                val html = buildSvgHtml(svgContent)
-                webView.engine.loadContent(html)
-                println("✅ SVG загружен из папки с JAR: ${jarSvgFile.absolutePath}")
+                webView.engine.loadContent(buildSvgHtml(svgContent))
+                println("✅ SVG загружен рядом с JAR: ${jarSvgFile.absolutePath}")
                 return
             }
 
-            println("❌ schema.svg не найден ни в ресурсах, ни в файловой системе")
+            // 4. Fallback
+            println("⚠️ Не найдена схема '$fileName', пробую fallback schema.svg")
+            val fallback = javaClass.getResource("/org/example/defectmap/schema.svg")
+            if (fallback != null) {
+                val svgContent = fallback.readText()
+                webView.engine.loadContent(buildSvgHtml(svgContent))
+                println("✅ SVG загружен из fallback: schema.svg")
+                return
+            }
+
+            println("❌ Не найдена ни одна схема для ПС '$substationKey'")
         } catch (e: Exception) {
             println("❌ Ошибка загрузки SVG: ${e.message}")
             e.printStackTrace()
+        }
+
+        // 5. Совсем ничего не нашли — грузим пустую HTML, чтобы WebView перезагрузился
+        println("❌ Не найдена ни одна схема для ПС '$substationKey' — гружу пустую схему")
+        val emptyHtml = """
+    <!DOCTYPE html>
+    <html>
+      <head><style>body { font-family: sans-serif; padding: 40px; color: #999; }</style></head>
+      <body>
+        <h2>⚠️ Схема для ПС '$substationKey' не найдена</h2>
+        <p>Положите файл <code>schema_${substationKey}.svg</code> в resources.</p>
+      </body>
+    </html>
+""".trimIndent()
+        webView.engine.loadContent(emptyHtml)
+    }
+
+    private fun showSwitchSubstationDialog() {
+        val choices = Substations.ALL.map { it.displayName }
+        val currentName = currentSubstation.displayName
+
+        val dialog = ChoiceDialog(currentName, choices)
+        dialog.title = "Смена подстанции"
+        dialog.headerText = "Выберите подстанцию"
+        dialog.contentText = "Подстанция:"
+
+        val result = dialog.showAndWait()
+        if (result.isEmpty) return
+
+        val selectedName = result.get()
+        val newSub = Substations.ALL.find { it.displayName == selectedName } ?: return
+
+        if (newSub.key == currentSubstation.key) {
+            showToast("ℹ️ Уже открыта ПС ${newSub.displayName}")
+            return
+        }
+
+        switchSubstation(newSub)
+    }
+
+    private fun switchSubstation(newSub: Substation) {
+        println("🔌 Смена подстанции: ${currentSubstation.displayName} → ${newSub.displayName}")
+
+        // 1. Сохранить текущее состояние в СТАРУЮ БД (пока она открыта)
+        if (isInitialized) {
+            try { saveEquipment() } catch (e: Exception) {
+                println("⚠️ Не удалось сохранить перед сменой ПС: ${e.message}")
+            }
+        }
+
+        // 2. Очистить состояние в WebView ДО смены БД
+        //    Иначе при закрытии приложения старые данные сохранятся в новую БД
+        clearWebViewEquipment()
+
+        // 3. Закрыть старую БД
+        try { database.close() } catch (e: Exception) {
+            println("⚠️ Ошибка закрытия БД: ${e.message}")
+        }
+
+        // 4. Сменить ПС и открыть новую БД
+        currentSubstation = newSub
+        database = Database(newSub.key)
+        database.autoBackup()
+
+        // 5. Перезагрузить типы из новой БД
+        EquipmentTypes.loadFromDatabase(database)
+        DefectTypes.loadFromDatabase(database)
+
+        // 6. Сбросить хэш и состояние
+        lastSavedHash = 0
+        isEditMode = false
+        currentEditingEquipmentId = null
+
+        // 7. Загрузить SVG. Загрузка асинхронная.
+        //    Подписываемся на SUCCEEDED ОДИН РАЗ для этой конкретной загрузки
+        val listener = object : javafx.beans.value.ChangeListener<Worker.State> {
+            override fun changed(
+                observable: javafx.beans.value.ObservableValue<out Worker.State>,
+                oldValue: Worker.State,
+                newValue: Worker.State
+            ) {
+                if (newValue == Worker.State.SUCCEEDED) {
+                    webView.engine.loadWorker.stateProperty().removeListener(this)
+                    Platform.runLater {
+                        setupZoom()
+                        setupClickHandler()
+                        initEquipment()
+                        loadAndRefresh()
+                        isInitialized = true
+                        updateWindowTitle()
+                        showToast("✅ Открыта ПС: ${newSub.displayName}")
+                    }
+                }
+            }
+        }
+        webView.engine.loadWorker.stateProperty().addListener(listener)
+
+        loadSvgIntoWebViewForSubstation(newSub.key)
+    }
+
+    private fun clearWebViewEquipment() {
+        webView.engine.executeScript("""
+        (function() {
+            var container = document.getElementById('equipment-container');
+            if (container) container.innerHTML = '';
+            window.equipment = [];
+            console.log('🧹 Маркеры и window.equipment очищены');
+        })();
+    """.trimIndent())
+    }
+
+    private fun updateWindowTitle() {
+        Platform.runLater {
+            val stage = webView.scene?.window as? Stage
+            stage?.title = "DefectMap — ${currentSubstation.displayName}"
         }
     }
 
