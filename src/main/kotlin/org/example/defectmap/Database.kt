@@ -32,6 +32,16 @@ class Database {
         addMarkersColumnIfNotExists()
         migrateMarkerIds()
         createDefectTypesTable()
+        addParentIdColumnIfNotExists()
+    }
+
+    private fun addParentIdColumnIfNotExists() {
+        try {
+            executeUpdate("ALTER TABLE equipment ADD COLUMN parent_id TEXT DEFAULT NULL")
+            println("✅ Колонка parent_id добавлена")
+        } catch (e: Exception) {
+            println("ℹ️ Колонка parent_id уже существует")
+        }
     }
 
     // ======================== ОПРЕДЕЛЕНИЕ ПАПКИ ПРИЛОЖЕНИЯ ========================
@@ -159,10 +169,10 @@ class Database {
 
         val gson = GsonBuilder().create()
         val sql = """
-            INSERT OR REPLACE INTO equipment 
-            (id, type, name, letter, cell, size, markers, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
-        """.trimIndent()
+        INSERT OR REPLACE INTO equipment 
+        (id, type, name, letter, cell, size, markers, parent_id, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+    """.trimIndent()
 
         connection?.prepareStatement(sql)?.use { stmt ->
             equipment.forEach { item ->
@@ -180,6 +190,7 @@ class Database {
                 stmt.setString(5, item.cell)
                 stmt.setString(6, item.size)
                 stmt.setString(7, markersJson)
+                stmt.setString(8, item.parentId)  // ← может быть null
                 stmt.addBatch()
             }
             stmt.executeBatch()
@@ -257,14 +268,15 @@ class Database {
 
         return EquipmentData(
             id = rs.getString("id"),
-            left = markers.firstOrNull()?.left ?: rs.getDouble("left"),
-            top = markers.firstOrNull()?.top ?: rs.getDouble("top"),
+            left = markers.firstOrNull()?.left ?: 0.0,
+            top = markers.firstOrNull()?.top ?: 0.0,
             type = rs.getString("type"),
             name = rs.getString("name"),
             letter = rs.getString("letter"),
             cell = rs.getString("cell") ?: "",
             size = rs.getString("size") ?: "normal",
-            markers = markers
+            markers = markers,
+            parentId = rs.getString("parent_id")  // ← ДОБАВЛЕНО
         )
     }
 
@@ -684,7 +696,8 @@ data class EquipmentData(
     val letter: String,
     val cell: String = "",
     val size: String = "normal",
-    val markers: List<MarkerPosition> = listOf()
+    val markers: List<MarkerPosition> = listOf(),
+    val parentId: String? = null,
 )
 
 data class MarkerPosition(

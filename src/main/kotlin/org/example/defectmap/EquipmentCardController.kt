@@ -22,7 +22,8 @@ import java.io.File
 class EquipmentCardController(
     private val equipment: EquipmentData,
     private val database: Database,
-    private val onDefectChanged: (() -> Unit)? = null
+    private val onDefectChanged: (() -> Unit)? = null,
+    private val parentEquipment: EquipmentData? = null,
 ) {
 
     private val defects: MutableList<DefectData> = mutableListOf()
@@ -40,9 +41,21 @@ class EquipmentCardController(
     private var offsetY = 0.0
     private var canvas: Canvas? = null
 
+    private var isChildMarkerMode = false
+    private var childMarkers: MutableList<ChildMarker> = mutableListOf()
+    private var currentParentId: String? = null  // ID родителя (если мы открыты как дочерний)
+    private var breadcrumbs: MutableList<EquipmentData> = mutableListOf()  // ← для навигации
+
+    private var currentEditingChildId: String? = null
+
     fun show() {
         defects.clear()
         defects.addAll(database.getDefectsByEquipment(equipment.id))
+
+        // ===== ЗАГРУЖАЕМ ДОЧЕРНИЕ ЭЛЕМЕНТЫ =====
+        val allEquipment = database.loadAllEquipment()
+        val children = allEquipment.filter { it.parentId == equipment.id }
+        println("📂 Дочерних элементов: ${children.size}")
 
         val mainLayout = VBox(15.0)
         mainLayout.style = "-fx-background-color: white; -fx-padding: 25px;"
@@ -69,6 +82,32 @@ class EquipmentCardController(
         popupStage.minWidth = 900.0
         popupStage.minHeight = 600.0
         popupStage.showAndWait()
+
+        // ===== ХЛЕБНЫЕ КРОШКИ =====
+        val breadcrumbsBox = HBox(8.0)
+        breadcrumbsBox.alignment = Pos.CENTER_LEFT
+        breadcrumbsBox.style = "-fx-padding: 5px 0;"
+
+        if (parentEquipment != null) {
+            val parentLink = Label("📌 ${parentEquipment.name}")
+            parentLink.style = "-fx-text-fill: #007bff; -fx-cursor: hand; -fx-underline: true;"
+            parentLink.setOnMouseClicked {
+                // Открываем родителя — ЗАКРЫВАЕМ текущее окно и открываем родителя
+                parentLink.scene.window.hide()
+                openParentCard(parentEquipment)
+            }
+
+            val separator = Label(" → ")
+            separator.style = "-fx-text-fill: #6c757d;"
+
+            breadcrumbsBox.children.addAll(parentLink, separator)
+        }
+
+        val currentLink = Label("📌 ${equipment.name}")
+        currentLink.style = "-fx-text-fill: #333; -fx-font-weight: bold;"
+        breadcrumbsBox.children.add(currentLink)
+
+        mainLayout.children.add(0, breadcrumbsBox)
     }
 
     // ======================== ПАНЕЛЬ С КАРТИНКОЙ ========================
@@ -76,9 +115,8 @@ class EquipmentCardController(
     private fun createImagePanel(): VBox {
         val image = createEquipmentImage()
 
-        // Проверка на случай, если image всё-таки null (на всякий пожарный)
         if (image == null) {
-            println("❌ Критическая ошибка: image = null, создаю панель с сообщением")
+            println("❌ Критическая ошибка: image = null")
             return VBox().apply {
                 children.add(Label("❌ Не удалось загрузить изображение"))
                 style = "-fx-padding: 20px; -fx-alignment: center;"
@@ -106,7 +144,42 @@ class EquipmentCardController(
         gc.drawImage(image, offsetX, offsetY, drawWidth, drawHeight)
         loadMarkersOnCanvas(gc)
 
-        // Обработчик клика по Canvas (добавление маркера)
+        // ===== ОБЪЯВЛЯЕМ imageContainer СРАЗУ =====
+        val imageWrapper = StackPane()
+        imageWrapper.children.add(canvas)
+        imageWrapper.style = "-fx-border-color: #dee2e6; -fx-border-radius: 8px; -fx-background-color: white;"
+
+        val imageContainer = VBox(10.0, imageWrapper)
+        imageContainer.alignment = Pos.TOP_CENTER
+        imageContainer.prefWidth = 500.0
+        imageContainer.style = "-fx-padding: 15px;"
+
+        // ===== КЛИК ПО МАРКЕРУ ДОЧЕРНЕГО ЭЛЕМЕНТА =====
+        canvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
+            if (!isMarkerMode && !isChildMarkerMode) {
+                val clickX = event.x
+                val clickY = event.y
+
+                val allEquipment = database.loadAllEquipment()
+                val children = allEquipment.filter { it.parentId == equipment.id }
+
+                for (child in children) {
+                    val mainMarker = child.markers.firstOrNull() ?: MarkerPosition(child.left, child.top, true)
+                    val markerX = (mainMarker.left / 100.0) * drawWidth + offsetX
+                    val markerY = (mainMarker.top / 100.0) * drawHeight + offsetY
+                    val radius = 12.0
+
+                    val dx = clickX - markerX
+                    val dy = clickY - markerY
+                    if (dx * dx + dy * dy <= radius * radius) {
+                        openChildCard(child)
+                        break
+                    }
+                }
+            }
+        }
+
+        // ===== КЛИК ДЛЯ ДОБАВЛЕНИЯ МАРКЕРА ДЕФЕКТА =====
         canvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
             if (isMarkerMode && selectedDefectId != null) {
                 val clickX = event.x
@@ -133,9 +206,34 @@ class EquipmentCardController(
             }
         }
 
-        // Обработчик клика по Canvas (клик по маркеру)
+        // ===== КЛИК ДЛЯ ДОБАВЛЕНИЯ МАРКЕРА ДОЧЕРНЕГО ЭЛЕМЕНТА =====
         canvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
-            if (!isMarkerMode) {
+            if (isChildMarkerMode && currentEditingChildId != null) {
+                val clickX = event.x
+                val clickY = event.y
+                val xInImage = clickX - offsetX
+                val yInImage = clickY - offsetY
+
+                if (xInImage >= 0 && xInImage <= drawWidth &&
+                    yInImage >= 0 && yInImage <= drawHeight) {
+
+                    val xPercent = (xInImage / drawWidth) * 100
+                    val yPercent = (yInImage / drawHeight) * 100
+
+                    updateChildMarkerPosition(
+                        currentEditingChildId!!,
+                        xPercent.coerceIn(0.0, 100.0),
+                        yPercent.coerceIn(0.0, 100.0)
+                    )
+                    isChildMarkerMode = false
+                    currentEditingChildId = null
+                }
+            }
+        }
+
+        // ===== КЛИК ПО МАРКЕРУ ДЕФЕКТА =====
+        canvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
+            if (!isMarkerMode && !isChildMarkerMode) {
                 val clickX = event.x
                 val clickY = event.y
 
@@ -149,12 +247,10 @@ class EquipmentCardController(
                         val dy = clickY - markerY
                         if (dx * dx + dy * dy <= radius * radius) {
                             if (event.clickCount == 1) {
-                                // Одиночный клик — выделяем в списке
                                 defectsListView.selectionModel.select(index)
                                 defectsListView.scrollTo(index)
                                 showToast("📍 ${defect.name}")
                             } else if (event.clickCount == 2) {
-                                // Двойной клик — открываем редактирование
                                 editDefectDialog(defect)
                             }
                             break
@@ -164,18 +260,32 @@ class EquipmentCardController(
             }
         }
 
-        val imageWrapper = StackPane()
-        imageWrapper.children.add(canvas)
-        imageWrapper.style = "-fx-border-color: #dee2e6; -fx-border-radius: 8px; -fx-background-color: white;"
-
-        val imageContainer = VBox(10.0, imageWrapper)
-        imageContainer.alignment = Pos.TOP_CENTER
-        imageContainer.prefWidth = 500.0
-        imageContainer.style = "-fx-padding: 15px;"
-
+        // ===== ИНФО-ЛЕЙБЛ =====
         val infoLabel = Label("${equipment.type} | ${equipment.size}")
         infoLabel.style = "-fx-font-size: 13px; -fx-text-fill: #6c757d;"
         imageContainer.children.add(infoLabel)
+
+        // ===== ПАНЕЛЬ КНОПОК ДЛЯ ДОЧЕРНИХ ЭЛЕМЕНТОВ =====
+        val childPanel = HBox(10.0)
+        childPanel.alignment = Pos.CENTER
+
+        val addChildBtn = Button("➕ Дочерний элемент")
+        addChildBtn.style = "-fx-background-color: #17a2b8; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 4px; -fx-font-size: 13px;"
+        addChildBtn.setOnAction {
+            addChildElementDialog()
+        }
+
+        val allEquipment = database.loadAllEquipment()
+        val children = allEquipment.filter { it.parentId == equipment.id }
+
+        val listChildrenBtn = Button("📋 Дочерние (${children.size})")
+        listChildrenBtn.style = "-fx-background-color: #6c757d; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 4px; -fx-font-size: 13px;"
+        listChildrenBtn.setOnAction {
+            showChildrenList()
+        }
+
+        childPanel.children.addAll(addChildBtn, listChildrenBtn)
+        imageContainer.children.add(childPanel)
 
         return imageContainer
     }
@@ -293,6 +403,7 @@ class EquipmentCardController(
     }
 
     private fun loadMarkersOnCanvas(gc: javafx.scene.canvas.GraphicsContext) {
+        // ===== Маркеры дефектов =====
         val defects = database.getDefectsByEquipment(equipment.id)
         defects.forEach { defect ->
             if (defect.markerLeft != null && defect.markerTop != null) {
@@ -305,6 +416,29 @@ class EquipmentCardController(
                 gc.fillOval(x - 8, y - 8, 16.0, 16.0)
                 gc.strokeOval(x - 8, y - 8, 16.0, 16.0)
             }
+        }
+
+        // ===== Маркеры дочерних элементов =====
+        val allEquipment = database.loadAllEquipment()
+        val children = allEquipment.filter { it.parentId == equipment.id }
+
+        children.forEach { child ->
+            val mainMarker = child.markers.firstOrNull() ?: MarkerPosition(child.left, child.top, true)
+            val x = (mainMarker.left / 100.0) * drawWidth + offsetX
+            val y = (mainMarker.top / 100.0) * drawHeight + offsetY
+
+            // Синий маркер для дочерних элементов
+            gc.fill = Color.web("#17a2b8")
+            gc.stroke = Color.WHITE
+            gc.lineWidth = 2.0
+            gc.fillOval(x - 10, y - 10, 20.0, 20.0)
+            gc.strokeOval(x - 10, y - 10, 20.0, 20.0)
+
+            // Буква внутри
+            gc.fill = Color.WHITE
+            gc.font = javafx.scene.text.Font.font("Arial", javafx.scene.text.FontWeight.BOLD, 11.0)
+            gc.textAlign = javafx.scene.text.TextAlignment.CENTER
+            gc.fillText(child.letter, x, y + 4)
         }
     }
 
@@ -797,4 +931,202 @@ class EquipmentCardController(
             }
         }
     }
+
+    private fun addChildElementDialog() {
+        // 1. Диалог для названия
+        val nameDialog = TextInputDialog()
+        nameDialog.title = "Новый дочерний элемент"
+        nameDialog.headerText = "Введите название дочернего элемента"
+        nameDialog.contentText = "Название:"
+        nameDialog.editor?.text = ""
+
+        val nameResult = nameDialog.showAndWait()
+        if (nameResult.isEmpty || nameResult.get().trim().isEmpty()) return
+
+        val childName = nameResult.get().trim()
+
+        // 2. Диалог выбора типа
+        val typeDialog = ChoiceDialog(
+            EquipmentTypes.ALL_TYPES.firstOrNull()?.second ?: "Другое",
+            EquipmentTypes.ALL_TYPES.map { it.second }
+        )
+        typeDialog.title = "Тип дочернего элемента"
+        typeDialog.headerText = "Выберите тип"
+
+        val typeResult = typeDialog.showAndWait()
+        if (typeResult.isEmpty) return
+
+        val typeName = typeResult.get()
+        val childType = EquipmentTypes.ALL_TYPES.find { it.second == typeName }?.first ?: "other"
+        val childLetter = EquipmentTypes.getLetter(childType)
+
+        // 3. Создаём дочерний элемент в БД
+        val childId = "equipment-${System.currentTimeMillis()}"
+        val child = EquipmentData(
+            id = childId,
+            left = 50.0,
+            top = 50.0,
+            type = childType,
+            name = childName,
+            letter = childLetter,
+            cell = equipment.cell,
+            size = "normal",
+            markers = listOf(MarkerPosition(50.0, 50.0, true)),
+            parentId = equipment.id  // ← ПРИВЯЗКА К РОДИТЕЛЮ
+        )
+
+        // Сохраняем в БД
+        val allEquipment = database.loadAllEquipment()
+        database.saveEquipment(allEquipment + child)
+
+        showToast("✅ Дочерний элемент добавлен: $childName")
+
+        // Включаем режим установки маркера для дочернего элемента
+        isChildMarkerMode = true
+        currentEditingChildId = childId
+        showToast("📌 Кликните на картинке, чтобы отметить '$childName'")
+    }
+
+    private fun updateChildMarkerPosition(childId: String, xPercent: Double, yPercent: Double) {
+        val allEquipment = database.loadAllEquipment()
+        val updatedList = allEquipment.map { eq ->
+            if (eq.id == childId) {
+                eq.copy(
+                    left = xPercent,
+                    top = yPercent,
+                    markers = listOf(MarkerPosition(xPercent, yPercent, true))
+                )
+            } else eq
+        }
+        database.saveEquipment(updatedList)
+
+        // Перерисовываем
+        refreshImagePanel()
+        showToast("✅ Маркер дочернего элемента установлен")
+    }
+
+    private fun openChildCard(child: EquipmentData) {
+        println("📂 Открытие дочерней карточки: ${child.name}")
+        val cardController = EquipmentCardController(
+            equipment = child,
+            database = database,
+            onDefectChanged = {
+                // Обновляем текущую карточку
+            },
+            parentEquipment = equipment  // ← передаём родителя для breadcrumbs
+        )
+        cardController.show()
+    }
+
+    private fun openParentCard(parent: EquipmentData) {
+        val grandParent = parent.parentId?.let { pid ->
+            database.loadAllEquipment().find { it.id == pid }
+        }
+
+        val cardController = EquipmentCardController(
+            equipment = parent,
+            database = database,
+            onDefectChanged = { },
+            parentEquipment = grandParent
+        )
+        cardController.show()
+    }
+
+    private fun showChildrenList() {
+        val allEquipment = database.loadAllEquipment()
+        val children = allEquipment.filter { it.parentId == equipment.id }
+
+        if (children.isEmpty()) {
+            showToast("📋 Нет дочерних элементов")
+            return
+        }
+
+        val dialog = Stage()
+        dialog.title = "📋 Дочерние элементы: ${equipment.name}"
+        dialog.initModality(javafx.stage.Modality.WINDOW_MODAL)
+        dialog.initOwner(defectsListView.scene.window)
+        dialog.minWidth = 600.0
+        dialog.minHeight = 400.0
+
+        val root = VBox(10.0)
+        root.style = "-fx-background-color: white; -fx-padding: 20px;"
+
+        val headerLabel = Label("📋 Дочерние элементы (${children.size})")
+        headerLabel.style = "-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #333;"
+
+        val listView = ListView<EquipmentData>()
+        listView.items = javafx.collections.FXCollections.observableArrayList(children)
+        listView.style = "-fx-font-size: 13px;"
+
+        listView.setCellFactory {
+            object : javafx.scene.control.ListCell<EquipmentData>() {
+                override fun updateItem(child: EquipmentData?, empty: Boolean) {
+                    super.updateItem(child, empty)
+                    if (empty || child == null) {
+                        text = null
+                    } else {
+                        val typeName = EquipmentTypes.getTypeName(child.type)
+                        text = "📌 ${child.name} — $typeName"
+                    }
+                }
+            }
+        }
+
+        listView.setOnMouseClicked { event ->
+            if (event.clickCount == 2) {
+                val selected = listView.selectionModel.selectedItem
+                if (selected != null) {
+                    dialog.close()
+                    openChildCard(selected)
+                }
+            }
+        }
+
+        val buttonPanel = HBox(10.0)
+        buttonPanel.alignment = Pos.CENTER_RIGHT
+
+        val openBtn = Button("📂 Открыть")
+        openBtn.style = "-fx-background-color: #007bff; -fx-text-fill: white; -fx-padding: 6px 16px; -fx-background-radius: 4px;"
+        openBtn.setOnAction {
+            val selected = listView.selectionModel.selectedItem
+            if (selected != null) {
+                dialog.close()
+                openChildCard(selected)
+            }
+        }
+
+        val deleteBtn = Button("🗑️ Удалить")
+        deleteBtn.style = "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-padding: 6px 16px; -fx-background-radius: 4px;"
+        deleteBtn.setOnAction {
+            val selected = listView.selectionModel.selectedItem
+            if (selected != null) {
+                val confirm = Alert(AlertType.CONFIRMATION)
+                confirm.title = "Удаление"
+                confirm.headerText = "Удалить '${selected.name}'?"
+                confirm.contentText = "Дочерний элемент будет удалён. Продолжить?"
+                val result = confirm.showAndWait()
+                if (result.isPresent && result.get() == ButtonType.OK) {
+                    database.deleteById(selected.id)
+                    listView.items.remove(selected)
+                    showToast("🗑️ Удалено: ${selected.name}")
+                }
+            }
+        }
+
+        val closeBtn = Button("✕ Закрыть")
+        closeBtn.style = "-fx-background-color: #6c757d; -fx-text-fill: white; -fx-padding: 6px 20px; -fx-background-radius: 4px;"
+        closeBtn.setOnAction { dialog.close() }
+
+        buttonPanel.children.addAll(openBtn, deleteBtn, closeBtn)
+        root.children.addAll(headerLabel, listView, buttonPanel)
+
+        dialog.scene = Scene(root, 600.0, 400.0)
+        dialog.showAndWait()
+    }
 }
+
+data class ChildMarker(
+    val childId: String,
+    val left: Double,
+    val top: Double
+)

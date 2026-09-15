@@ -1198,9 +1198,11 @@ class DefectMapController {
                 if (selected != null) {
                     val equipment = loadEquipment().find { it.id == selected.equipmentId }
                     if (equipment != null) {
-                        val cardController = EquipmentCardController(equipment, database) {
-                            showDefectsList()
-                        }
+                        val cardController = EquipmentCardController(
+                            equipment = equipment,
+                            database = database,
+                            onDefectChanged = { }
+                        )
                         cardController.show()
                         (tableView.scene.window as Stage).close()
                     }
@@ -1712,19 +1714,21 @@ class DefectMapController {
 
         if (markerId != null) {
             val equipmentId = webView.engine.executeScript("""
-            (function() {
-                var marker = document.getElementById('$markerId');
-                if (!marker) return null;
-                return marker.dataset.equipmentId || marker.id;
-            })();
-        """.trimIndent()) as? String
+        (function() {
+            var marker = document.getElementById('$markerId');
+            if (!marker) return null;
+            return marker.dataset.equipmentId || marker.id;
+        })();
+    """.trimIndent()) as? String
 
             if (equipmentId != null) {
                 val equipment = loadEquipment().find { it.id == equipmentId }
                 if (equipment != null) {
-                    val cardController = EquipmentCardController(equipment, database) {
-                        // Callback после изменения дефектов
-                    }
+                    val cardController = EquipmentCardController(
+                        equipment = equipment,
+                        database = database,
+                        onDefectChanged = { }
+                    )
                     cardController.show()
                 } else {
                     showError("Оборудование не найдено")
