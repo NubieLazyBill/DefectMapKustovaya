@@ -208,7 +208,6 @@ class Database {
                 result.add(mapRowToEquipment(rs))
             }
         }
-        println("📂 Загружено ${result.size} записей из БД")
         return result
     }
 

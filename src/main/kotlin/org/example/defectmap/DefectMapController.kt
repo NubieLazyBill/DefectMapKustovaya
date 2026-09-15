@@ -738,6 +738,34 @@ class DefectMapController {
             transform-origin: center center;
             will-change: transform;
           }
+          /* Превью оборудования при наведении */
+          .marker-preview {
+              position: fixed;
+              z-index: 1000;
+              pointer-events: none;
+              background: white;
+              border: 2px solid #333;
+              border-radius: 8px;
+              box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+              padding: 5px;
+              display: none;
+              max-width: 200px;
+              max-height: 200px;
+          }
+          .marker-preview img {
+              display: block;
+              max-width: 190px;
+              max-height: 190px;
+              border-radius: 4px;
+          }
+          .marker-preview .preview-label {
+              text-align: center;
+              font-size: 11px;
+              font-family: Arial, sans-serif;
+              color: #333;
+              margin-top: 4px;
+              font-weight: bold;
+          }
           .equipment-marker {
             position: absolute;
             cursor: grab;
@@ -860,6 +888,13 @@ class DefectMapController {
             return
         }
 
+        val imageMap = buildImageMap()
+        val imageMapJson = gson.toJson(imageMap)
+
+        webView.engine.executeScript("""
+    window.imageMap = $imageMapJson;
+""".trimIndent())
+
         val savedEquipment = database.loadAllEquipment()
         println("📂 Перезагружено из БД: ${savedEquipment.size} шт.")
 
@@ -937,6 +972,13 @@ class DefectMapController {
     private fun initEquipment() {
         val savedEquipment = database.loadAllEquipment()
         println("📂 Загружено из БД: ${savedEquipment.size} шт.")
+
+        val imageMap = buildImageMap()
+        val imageMapJson = gson.toJson(imageMap)
+
+        webView.engine.executeScript("""
+    window.imageMap = $imageMapJson;
+""".trimIndent())
 
         lastSavedHash = savedEquipment.hashCode()
 
@@ -3605,6 +3647,66 @@ class DefectMapController {
                 onSave(currentName, newName)
             }
         }
+    }
+
+    private fun buildImageMap(): Map<String, String> {
+        val result = mutableMapOf<String, String>()
+        val typeToFile = mapOf(
+            "v_500" to "ВВБК-500.jfif",
+            "v_220" to "ВВБК-220(3 фазы).jpg",
+            "v_35" to "ВВБК-500.jfif",
+            "v_10" to "ВВБК-500.jfif",
+            "r_500" to "РНДЗ-220,500.jpg",
+            "r_220" to "РНДЗ-220,500.jpg",
+            "r_35" to "РНДЗ-220,500.jpg",
+            "r_10" to "РНДЗ-220,500.jpg",
+            "autotransformer" to "АОДЦТН-167000-500-220.jpg",
+            "transformer" to "ТМ-35.jpg",
+            "tsn" to "ТМ-35.jpg",
+            "lightning" to "lightning_rod.jpg",
+            "lightning_rod" to "lightning_rod.jpg",
+            "opn_500" to "opn-500.jpg",
+            "opn_220" to "ОПН-220.jpg",
+            "opn_35" to "opn-35.jpg",
+            "opn_10" to "opn-10.jpg",
+            "tn_500" to "tn.jpg",
+            "tn_220" to "tn.jpg",
+            "tn_35" to "tn.jpg",
+            "tn_10" to "tn.jpg",
+            "tt_500" to "ТФЗМ-500.jpg",
+            "tt_220" to "ТФЗМ-500.jpg",
+            "tt_35" to "ТФЗМ-500.jpg",
+            "tt_10" to "ТФЗМ-500.jpg",
+            "ks_500" to "capacitor.jpg",
+            "ks_220" to "capacitor.jpg",
+            "coupling_capacitor" to "capacitor.jpg",
+            "reactor_500" to "reactor.jpg",
+            "reactor_220" to "reactor.jpg",
+            "capacitor" to "capacitor.jpg",
+            "compressor" to "compressor.jpg"
+        )
+
+        // Пробуем ресурсы
+        typeToFile.forEach { (type, fileName) ->
+            val url = javaClass.getResource("/org/example/defectmap/$fileName")
+            if (url != null) {
+                result[type] = url.toExternalForm()
+            } else {
+                // Пробуем файловую систему
+                val file = File("images/$fileName")
+                if (file.exists()) {
+                    result[type] = file.toURI().toURL().toExternalForm()
+                }
+            }
+        }
+
+        // Fallback
+        val fallbackUrl = javaClass.getResource("/org/example/defectmap/equipment.jpg")
+        if (fallbackUrl != null) {
+            result["_fallback"] = fallbackUrl.toExternalForm()
+        }
+
+        return result
     }
 
 }

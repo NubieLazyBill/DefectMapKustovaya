@@ -16,6 +16,7 @@ import javafx.scene.control.Alert.AlertType
 import javafx.scene.input.MouseEvent
 import javafx.scene.paint.Color
 import javafx.animation.PauseTransition
+import javafx.collections.FXCollections
 import javafx.util.Duration
 import java.io.File
 
@@ -41,6 +42,10 @@ class EquipmentCardController(
     private var offsetY = 0.0
     private var canvas: Canvas? = null
 
+    private var previewBox: VBox? = null          // ← превью-контейнер
+    private var previewImageView: ImageView? = null
+    private var previewLabel: Label? = null
+
     private var isChildMarkerMode = false
     private var childMarkers: MutableList<ChildMarker> = mutableListOf()
     private var currentParentId: String? = null  // ID родителя (если мы открыты как дочерний)
@@ -52,10 +57,10 @@ class EquipmentCardController(
         defects.clear()
         defects.addAll(database.getDefectsByEquipment(equipment.id))
 
-        // ===== ЗАГРУЖАЕМ ДОЧЕРНИЕ ЭЛЕМЕНТЫ =====
+        // ===== ЗАГРУЖАЕМ ДОЧЕРНИЕ ЭЛЕМЕНТЫ (один раз, кэшируем) =====
         val allEquipment = database.loadAllEquipment()
-        val children = allEquipment.filter { it.parentId == equipment.id }
-        println("📂 Дочерних элементов: ${children.size}")
+        cachedChildren = allEquipment.filter { it.parentId == equipment.id }
+        println("📂 Дочерних элементов: ${cachedChildren.size}")
 
         val mainLayout = VBox(15.0)
         mainLayout.style = "-fx-background-color: white; -fx-padding: 25px;"
@@ -92,7 +97,6 @@ class EquipmentCardController(
             val parentLink = Label("📌 ${parentEquipment.name}")
             parentLink.style = "-fx-text-fill: #007bff; -fx-cursor: hand; -fx-underline: true;"
             parentLink.setOnMouseClicked {
-                // Открываем родителя — ЗАКРЫВАЕМ текущее окно и открываем родителя
                 parentLink.scene.window.hide()
                 openParentCard(parentEquipment)
             }
@@ -148,11 +152,45 @@ class EquipmentCardController(
         val imageWrapper = StackPane()
         imageWrapper.children.add(canvas)
         imageWrapper.style = "-fx-border-color: #dee2e6; -fx-border-radius: 8px; -fx-background-color: white;"
+        this.imageWrapperRef = imageWrapper
 
         val imageContainer = VBox(10.0, imageWrapper)
         imageContainer.alignment = Pos.TOP_CENTER
         imageContainer.prefWidth = 500.0
         imageContainer.style = "-fx-padding: 15px;"
+
+        // ===== ПРЕВЬЮ ПРИ НАВЕДЕНИИ НА МАРКЕР =====
+        val previewImg = ImageView()
+        previewImg.fitWidth = 160.0
+        previewImg.fitHeight = 160.0
+        previewImg.isPreserveRatio = true
+        previewImg.isSmooth = true
+
+        val previewLbl = Label()
+        previewLbl.style = "-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #333; -fx-wrap-text: true; -fx-max-width: 160px;"
+        previewLbl.isWrapText = true
+
+        val preview = VBox(4.0, previewImg, previewLbl)
+        preview.alignment = Pos.CENTER
+        preview.style = """
+    -fx-background-color: white;
+    -fx-border-color: #333;
+    -fx-border-width: 2px;
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
+    -fx-padding: 6px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.35), 12, 0, 0, 3);
+""".trimIndent()
+        preview.isMouseTransparent = true
+        preview.isVisible = false
+
+        this.previewBox = preview
+        this.previewImageView = previewImg
+        this.previewLabel = previewLbl
+
+        // добавляем ПОВЕРХ canvas в тот же StackPane
+        imageWrapper.children.add(preview)
+        StackPane.setAlignment(preview, Pos.TOP_LEFT)
 
         // ===== КЛИК ПО МАРКЕРУ ДОЧЕРНЕГО ЭЛЕМЕНТА =====
         canvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
@@ -160,10 +198,7 @@ class EquipmentCardController(
                 val clickX = event.x
                 val clickY = event.y
 
-                val allEquipment = database.loadAllEquipment()
-                val children = allEquipment.filter { it.parentId == equipment.id }
-
-                for (child in children) {
+                for (child in cachedChildren) {
                     val mainMarker = child.markers.firstOrNull() ?: MarkerPosition(child.left, child.top, true)
                     val markerX = (mainMarker.left / 100.0) * drawWidth + offsetX
                     val markerY = (mainMarker.top / 100.0) * drawHeight + offsetY
@@ -260,6 +295,19 @@ class EquipmentCardController(
             }
         }
 
+        // ===== ПРЕВЬЮ ПРИ НАВЕДЕНИИ =====
+        canvas.addEventHandler(MouseEvent.MOUSE_MOVED) { event ->
+            if (isMarkerMode || isChildMarkerMode) {
+                previewBox?.isVisible = false
+                return@addEventHandler
+            }
+            handleMarkerHover(event.x, event.y)
+        }
+
+        canvas.addEventHandler(MouseEvent.MOUSE_EXITED) {
+            previewBox?.isVisible = false
+        }
+
         // ===== ИНФО-ЛЕЙБЛ =====
         val infoLabel = Label("${equipment.type} | ${equipment.size}")
         infoLabel.style = "-fx-font-size: 13px; -fx-text-fill: #6c757d;"
@@ -269,16 +317,13 @@ class EquipmentCardController(
         val childPanel = HBox(10.0)
         childPanel.alignment = Pos.CENTER
 
-        val addChildBtn = Button("➕ Дочерний элемент")
+        val addChildBtn = Button("➕ Добавить оборудование")
         addChildBtn.style = "-fx-background-color: #17a2b8; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 4px; -fx-font-size: 13px;"
         addChildBtn.setOnAction {
             addChildElementDialog()
         }
 
-        val allEquipment = database.loadAllEquipment()
-        val children = allEquipment.filter { it.parentId == equipment.id }
-
-        val listChildrenBtn = Button("📋 Дочерние (${children.size})")
+        val listChildrenBtn = Button("📋 Оборудование (${cachedChildren.size})")
         listChildrenBtn.style = "-fx-background-color: #6c757d; -fx-text-fill: white; -fx-padding: 8px 16px; -fx-background-radius: 4px; -fx-font-size: 13px;"
         listChildrenBtn.setOnAction {
             showChildrenList()
@@ -289,6 +334,8 @@ class EquipmentCardController(
 
         return imageContainer
     }
+
+    private var cachedChildren: List<EquipmentData> = emptyList()
 
     /**
      * Загружает изображение для оборудования.
@@ -372,6 +419,52 @@ class EquipmentCardController(
     }
 
     /**
+     * Загружает картинку по типу оборудования.
+     * Логика та же, что в createEquipmentImage(), но тип передаётся параметром.
+     */
+    private fun createImageForType(type: String): Image {
+        val imagePath = when (type) {
+            "v_500" -> "ВВБК-500.jfif"
+            "v_500_ABB" -> "В-500 элегаз"
+            "v_220" -> "ВВБК-220(3 фазы).jpg"
+            "v_35" -> "ВВБК-500.jfif"
+            "v_10" -> "ВВБК-500.jfif"
+            "r_500", "r_220", "r_35", "r_10" -> "РНДЗ-220,500.jpg"
+            "autotransformer" -> "АОДЦТН-167000-500-220.jpg"
+            "transformer" -> "ТМ-35.jpg"
+            "tsn" -> "ТМ-35.jpg"
+            "lightning", "lightning_rod" -> "lightning_rod.jpg"
+            "opn_500" -> "opn-500.jpg"
+            "opn_220" -> "ОПН-220.jpg"
+            "opn_35" -> "opn-35.jpg"
+            "opn_10" -> "opn-10.jpg"
+            "tn_500", "tn_220", "tn_35", "tn_10" -> "tn.jpg"
+            "tt_500", "tt_220", "tt_35", "tt_10" -> "ТФЗМ-500.jpg"
+            "ks_500", "ks_220", "coupling_capacitor" -> "capacitor.jpg"
+            "reactor_500", "reactor_220" -> "reactor.jpg"
+            "capacitor" -> "capacitor.jpg"
+            "compressor" -> "compressor.jpg"
+            else -> null
+        }
+
+        imagePath?.let {
+            val url = javaClass.getResource("/org/example/defectmap/$it")
+            if (url != null) return Image(url.toExternalForm())
+            val file = File("images/$it")
+            if (file.exists()) return Image(file.toURI().toURL().toExternalForm())
+        }
+
+        // Fallback
+        val fallbackUrl = javaClass.getResource("/org/example/defectmap/equipment.jpg")
+        if (fallbackUrl != null) return Image(fallbackUrl.toExternalForm())
+
+        val fallbackFile = File("images/equipment.jpg")
+        if (fallbackFile.exists()) return Image(fallbackFile.toURI().toURL().toExternalForm())
+
+        return createPlaceholderImage()
+    }
+
+    /**
      * Создаёт изображение-заглушку (серый квадрат с текстом "Нет изображения")
      */
     private fun createPlaceholderImage(): Image {
@@ -418,11 +511,8 @@ class EquipmentCardController(
             }
         }
 
-        // ===== Маркеры дочерних элементов =====
-        val allEquipment = database.loadAllEquipment()
-        val children = allEquipment.filter { it.parentId == equipment.id }
-
-        children.forEach { child ->
+        // ===== Маркеры дочерних элементов (из кэша) =====
+        cachedChildren.forEach { child ->
             val mainMarker = child.markers.firstOrNull() ?: MarkerPosition(child.left, child.top, true)
             val x = (mainMarker.left / 100.0) * drawWidth + offsetX
             val y = (mainMarker.top / 100.0) * drawHeight + offsetY
@@ -474,11 +564,11 @@ class EquipmentCardController(
         }
     }
 
-    private fun refreshImagePanel() {
-        val root = defectsListView.scene?.root as? javafx.scene.layout.Pane ?: return
-        val imageWrapper = findImageWrapper(root) ?: return
+    private var imageWrapperRef: StackPane? = null
 
-        imageWrapper.children.clear()
+    private fun refreshImagePanel() {
+        val wrapper = imageWrapperRef ?: return
+        wrapper.children.clear()
 
         val image = createEquipmentImage()
         val canvasWidth = 450.0
@@ -495,15 +585,15 @@ class EquipmentCardController(
         this.offsetX = offsetX
         this.offsetY = offsetY
 
-        val canvas = Canvas(canvasWidth, canvasHeight)
-        this.canvas = canvas
-        val gc = canvas.graphicsContext2D
+        val newCanvas = Canvas(canvasWidth, canvasHeight)
+        this.canvas = newCanvas
+        val gc = newCanvas.graphicsContext2D
 
         gc.drawImage(image, offsetX, offsetY, drawWidth, drawHeight)
         loadMarkersOnCanvas(gc)
 
-        // Обработчик клика по Canvas (добавление маркера)
-        canvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
+        // ===== ОБРАБОТЧИКИ =====
+        newCanvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
             if (isMarkerMode && selectedDefectId != null) {
                 val clickX = event.x
                 val clickY = event.y
@@ -512,10 +602,8 @@ class EquipmentCardController(
 
                 if (xInImage >= 0 && xInImage <= drawWidth &&
                     yInImage >= 0 && yInImage <= drawHeight) {
-
                     val xPercent = (xInImage / drawWidth) * 100
                     val yPercent = (yInImage / drawHeight) * 100
-
                     addMarkerToDefect(
                         selectedDefectId!!,
                         xPercent.coerceIn(0.0, 100.0),
@@ -529,11 +617,49 @@ class EquipmentCardController(
             }
         }
 
-        // Обработчик клика по Canvas (клик по маркеру)
-        canvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
-            if (!isMarkerMode) {
+        newCanvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
+            if (isChildMarkerMode && currentEditingChildId != null) {
                 val clickX = event.x
                 val clickY = event.y
+                val xInImage = clickX - offsetX
+                val yInImage = clickY - offsetY
+
+                if (xInImage >= 0 && xInImage <= drawWidth &&
+                    yInImage >= 0 && yInImage <= drawHeight) {
+                    val xPercent = (xInImage / drawWidth) * 100
+                    val yPercent = (yInImage / drawHeight) * 100
+                    updateChildMarkerPosition(
+                        currentEditingChildId!!,
+                        xPercent.coerceIn(0.0, 100.0),
+                        yPercent.coerceIn(0.0, 100.0)
+                    )
+                    isChildMarkerMode = false
+                    currentEditingChildId = null
+                }
+            }
+        }
+
+        newCanvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
+            if (!isMarkerMode && !isChildMarkerMode) {
+                val clickX = event.x
+                val clickY = event.y
+
+                val allEquipment = database.loadAllEquipment()
+                val children = allEquipment.filter { it.parentId == equipment.id }
+
+                for (child in children) {
+                    val mainMarker = child.markers.firstOrNull() ?: MarkerPosition(child.left, child.top, true)
+                    val markerX = (mainMarker.left / 100.0) * drawWidth + offsetX
+                    val markerY = (mainMarker.top / 100.0) * drawHeight + offsetY
+                    val radius = 12.0
+
+                    val dx = clickX - markerX
+                    val dy = clickY - markerY
+                    if (dx * dx + dy * dy <= radius * radius) {
+                        openChildCard(child)
+                        return@addEventHandler
+                    }
+                }
 
                 for ((index, defect) in defects.withIndex()) {
                     if (defect.markerLeft != null && defect.markerTop != null) {
@@ -558,7 +684,20 @@ class EquipmentCardController(
             }
         }
 
-        imageWrapper.children.add(canvas)
+        // ===== ПРЕВЬЮ ПРИ НАВЕДЕНИИ =====
+        newCanvas.addEventHandler(MouseEvent.MOUSE_MOVED) { event ->
+            if (isMarkerMode || isChildMarkerMode) {
+                previewBox?.isVisible = false
+                return@addEventHandler
+            }
+            handleMarkerHover(event.x, event.y)
+        }
+
+        newCanvas.addEventHandler(MouseEvent.MOUSE_EXITED) {
+            previewBox?.isVisible = false
+        }
+
+        wrapper.children.add(newCanvas)
     }
 
     private fun findImageWrapper(node: javafx.scene.Node): StackPane? {
@@ -576,18 +715,24 @@ class EquipmentCardController(
 
     // ======================== ПАНЕЛЬ С ДЕФЕКТАМИ ========================
 
-    private fun createRightPanel(): VBox {
-        val rightPanel = VBox(10.0)
-        rightPanel.prefWidth = 500.0
+    private fun collectAllDefectsRecursive(equipmentId: String, visited: MutableSet<String> = mutableSetOf()): List<Pair<EquipmentData, DefectData>> {
+        if (!visited.add(equipmentId)) return emptyList()
 
-        val defectsLabel = Label("📋 Дефекты (${defects.size})")
-        defectsLabel.style = "-fx-font-size: 17px; -fx-font-weight: bold; -fx-text-fill: #333;"
+        val result = mutableListOf<Pair<EquipmentData, DefectData>>()
+        val allEquipment = database.loadAllEquipment()
+        val currentEquipment = allEquipment.find { it.id == equipmentId } ?: return emptyList()
 
-        setupDefectsListView()
-        val addDefectPanel = createAddDefectPanel()
+        // Свои дефекты
+        database.getDefectsByEquipment(equipmentId).forEach { defect ->
+            result.add(currentEquipment to defect)
+        }
 
-        rightPanel.children.addAll(defectsLabel, defectsListView, addDefectPanel)
-        return rightPanel
+        // Дефекты дочерних
+        allEquipment.filter { it.parentId == equipmentId }.forEach { child ->
+            result.addAll(collectAllDefectsRecursive(child.id, visited))
+        }
+
+        return result
     }
 
     private fun setupDefectsListView() {
@@ -883,7 +1028,8 @@ class EquipmentCardController(
         val parent = defectsListView.parent
         if (parent is VBox && parent.children.isNotEmpty()) {
             val label = parent.children[0] as? Label
-            label?.text = "📋 Дефекты (${defects.size})"
+            val all = collectAllDefectsRecursive(equipment.id)
+            label?.text = "📋 Дефекты (${all.size})"
         }
     }
 
@@ -975,9 +1121,11 @@ class EquipmentCardController(
             parentId = equipment.id  // ← ПРИВЯЗКА К РОДИТЕЛЮ
         )
 
-        // Сохраняем в БД
         val allEquipment = database.loadAllEquipment()
         database.saveEquipment(allEquipment + child)
+
+// обновляем кэш
+        cachedChildren = database.loadAllEquipment().filter { it.parentId == equipment.id }
 
         showToast("✅ Дочерний элемент добавлен: $childName")
 
@@ -999,6 +1147,7 @@ class EquipmentCardController(
             } else eq
         }
         database.saveEquipment(updatedList)
+        cachedChildren = database.loadAllEquipment().filter { it.parentId == equipment.id }
 
         // Перерисовываем
         refreshImagePanel()
@@ -1107,6 +1256,7 @@ class EquipmentCardController(
                 val result = confirm.showAndWait()
                 if (result.isPresent && result.get() == ButtonType.OK) {
                     database.deleteById(selected.id)
+                    cachedChildren = database.loadAllEquipment().filter { it.parentId == equipment.id }
                     listView.items.remove(selected)
                     showToast("🗑️ Удалено: ${selected.name}")
                 }
@@ -1123,6 +1273,261 @@ class EquipmentCardController(
         dialog.scene = Scene(root, 600.0, 400.0)
         dialog.showAndWait()
     }
+
+    private fun setupDefectsListViewWithChildren(allDefectsWithEquipment: List<Pair<EquipmentData, DefectData>>) {
+        defectsListView.prefHeight = 350.0
+        defectsListView.style = "-fx-font-size: 14px; -fx-border-color: #dee2e6; -fx-border-radius: 4px;"
+
+        defectsListView.items = javafx.collections.FXCollections.observableArrayList(
+            allDefectsWithEquipment.map { it.second }
+        )
+
+        defectsListView.setCellFactory {
+            object : javafx.scene.control.ListCell<DefectData>() {
+                override fun updateItem(defect: DefectData?, empty: Boolean) {
+                    super.updateItem(defect, empty)
+
+                    if (empty || defect == null) {
+                        text = null
+                        graphic = null
+                        tooltip = null
+                        return
+                    }
+
+                    val pair = allDefectsWithEquipment.find { it.second.id == defect.id }
+                    val eqName = pair?.first?.name ?: ""
+                    val isChild = pair?.first?.id != equipment.id
+
+                    val statusText = when (defect.status) {
+                        "open" -> "🟡 Обнаружен"
+                        "fixed" -> "✅ Устранён"
+                        else -> defect.status
+                    }
+                    val markerIcon = if (defect.markerLeft != null && defect.markerTop != null) " 📍" else ""
+                    val prefix = if (isChild) "└─ " else ""
+
+                    // ===== ЗАГОЛОВОК =====
+                    val titleLbl = Label("$prefix${defect.name} [$statusText]$markerIcon")
+                    titleLbl.style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #333;"
+                    titleLbl.isWrapText = true
+                    titleLbl.maxWidth = 420.0
+
+                    // ===== ПОДЗАГОЛОВОК (оборудование + описание) =====
+                    val subtitleText = buildString {
+                        if (isChild) append("Оборудование: $eqName")
+                        if (defect.description.isNotEmpty()) {
+                            if (isNotEmpty()) append(" • ")
+                            append(defect.description)
+                        }
+                    }
+
+                    val subtitleLbl = Label(subtitleText.ifEmpty { "—" })
+                    subtitleLbl.style = "-fx-font-size: 11px; -fx-text-fill: #6c757d;"
+                    subtitleLbl.isWrapText = true
+                    subtitleLbl.maxWidth = 420.0
+
+                    val box = VBox(2.0, titleLbl, subtitleLbl)
+                    box.style = "-fx-padding: 4px 0;"
+
+                    graphic = box
+                    text = null
+                    tooltip = null
+                }
+            }
+        }
+
+        // ===== ДВОЙНОЙ КЛИК ПО ДЕФЕКТУ =====
+        defectsListView.setOnMouseClicked { event ->
+            if (event.clickCount == 2) {
+                val selected = defectsListView.selectionModel.selectedItem
+                if (selected != null) {
+                    editDefectDialog(selected)
+                }
+            }
+        }
+
+        // ===== КОНТЕКСТНОЕ МЕНЮ =====
+        val contextMenu = ContextMenu()
+        val editItem = MenuItem("✏️ Редактировать")
+        val deleteItem = MenuItem("🗑️ Удалить дефект")
+        val addMarkerItem = MenuItem("📌 Отметить на оборудовании")
+        val removeMarkerItem = MenuItem("🗑️ Удалить маркер")
+
+        editItem.setOnAction {
+            val selected = defectsListView.selectionModel.selectedItem
+            if (selected != null) editDefectDialog(selected)
+        }
+
+        deleteItem.setOnAction {
+            val selected = defectsListView.selectionModel.selectedItem
+            if (selected != null) {
+                val confirm = Alert(AlertType.CONFIRMATION)
+                confirm.title = "Удаление дефекта"
+                confirm.headerText = "Удалить дефект?"
+                confirm.contentText = "Вы уверены, что хотите удалить '${selected.name}'?"
+                val result = confirm.showAndWait()
+                if (result.isPresent && result.get() == ButtonType.OK) {
+                    database.deleteDefect(selected.id)
+
+                    // Перестраиваем список целиком
+                    val fresh = collectAllDefectsRecursive(equipment.id)
+                    defectsListView.items = FXCollections.observableArrayList(fresh.map { it.second })
+
+                    // Обновляем заголовок
+                    val parent = defectsListView.parent
+                    if (parent is VBox && parent.children.isNotEmpty()) {
+                        (parent.children[0] as? Label)?.text = "📋 Дефекты (${fresh.size})"
+                    }
+
+                    refreshImagePanel()
+                    showToast("🗑️ Дефект удалён")
+                    onDefectChanged?.invoke()
+                }
+            }
+        }
+
+        addMarkerItem.setOnAction {
+            val selected = defectsListView.selectionModel.selectedItem
+            if (selected != null) {
+                isMarkerMode = true
+                selectedDefectId = selected.id
+                showToast("📌 Кликните на картинке, чтобы отметить '${selected.name}'")
+            }
+        }
+
+        removeMarkerItem.setOnAction {
+            val selected = defectsListView.selectionModel.selectedItem
+            if (selected != null) {
+                if (selected.markerLeft != null && selected.markerTop != null) {
+                    val confirm = Alert(AlertType.CONFIRMATION)
+                    confirm.title = "Удаление маркера"
+                    confirm.headerText = "Удалить маркер?"
+                    confirm.contentText = "Вы уверены, что хотите удалить маркер для '${selected.name}'?"
+                    val result = confirm.showAndWait()
+                    if (result.isPresent && result.get() == ButtonType.OK) {
+                        val updatedDefect = selected.copy(markerLeft = null, markerTop = null)
+                        database.updateDefect(updatedDefect)
+
+                        val index = defects.indexOfFirst { it.id == selected.id }
+                        if (index >= 0) {
+                            defects[index] = updatedDefect
+                            defectsListView.items[index] = updatedDefect
+                        }
+
+                        refreshImagePanel()
+                        showToast("🗑️ Маркер удалён")
+                        onDefectChanged?.invoke()
+                    }
+                } else {
+                    showToast("⚠️ У этого дефекта нет маркера")
+                }
+            }
+        }
+
+        contextMenu.items.addAll(editItem, deleteItem, addMarkerItem, removeMarkerItem)
+        defectsListView.contextMenu = contextMenu
+    }
+
+    private fun createRightPanel(): VBox {
+        val rightPanel = VBox(10.0)
+        rightPanel.prefWidth = 500.0
+
+        // ===== СОБИРАЕМ ВСЕ ДЕФЕКТЫ (включая дочерние) =====
+        val allDefectsWithEquipment = collectAllDefectsRecursive(equipment.id)
+        println("📋 Всего дефектов (включая дочерние): ${allDefectsWithEquipment.size}")
+
+        val defectsLabel = Label("📋 Дефекты (${allDefectsWithEquipment.size})")
+        defectsLabel.style = "-fx-font-size: 17px; -fx-font-weight: bold; -fx-text-fill: #333;"
+
+        setupDefectsListViewWithChildren(allDefectsWithEquipment)
+        val addDefectPanel = createAddDefectPanel()
+
+        rightPanel.children.addAll(defectsLabel, defectsListView, addDefectPanel)
+        return rightPanel
+    }
+
+
+    /**
+     * Проверяет, находится ли курсор над маркером (дефекта или дочернего элемента).
+     * Если да — показывает превью с картинкой и названием.
+     * Использует cachedChildren, чтобы не читать БД на каждое движение мыши.
+     */
+    private fun handleMarkerHover(mouseX: Double, mouseY: Double) {
+        val preview = previewBox ?: return
+        val imgView = previewImageView ?: return
+        val lbl = previewLabel ?: return
+
+        // ===== 1. Проверяем маркеры дочерних элементов (из кэша) =====
+        var hoveredChild: EquipmentData? = null
+        for (child in cachedChildren) {
+            val mainMarker = child.markers.firstOrNull()
+                ?: MarkerPosition(child.left, child.top, true)
+            val mx = (mainMarker.left / 100.0) * drawWidth + offsetX
+            val my = (mainMarker.top / 100.0) * drawHeight + offsetY
+            val dx = mouseX - mx
+            val dy = mouseY - my
+            if (dx * dx + dy * dy <= 12.0 * 12.0) {
+                hoveredChild = child
+                break
+            }
+        }
+
+        // ===== 2. Проверяем маркеры дефектов =====
+        var hoveredDefect: DefectData? = null
+        if (hoveredChild == null) {
+            for (defect in defects) {
+                if (defect.markerLeft == null || defect.markerTop == null) continue
+                val mx = (defect.markerLeft / 100.0) * drawWidth + offsetX
+                val my = (defect.markerTop / 100.0) * drawHeight + offsetY
+                val dx = mouseX - mx
+                val dy = mouseY - my
+                if (dx * dx + dy * dy <= 10.0 * 10.0) {
+                    hoveredDefect = defect
+                    break
+                }
+            }
+        }
+
+        // ===== 3. Показываем/прячем превью =====
+        when {
+            hoveredChild != null -> {
+                imgView.image = createImageForType(hoveredChild.type)
+                lbl.text = hoveredChild.name
+                showPreviewAt(mouseX, mouseY)
+            }
+            hoveredDefect != null -> {
+                imgView.image = createEquipmentImage()
+                lbl.text = "🔴 ${hoveredDefect.name}"
+                showPreviewAt(mouseX, mouseY)
+            }
+            else -> {
+                preview.isVisible = false
+            }
+        }
+    }
+
+    private fun showPreviewAt(x: Double, y: Double) {
+        val preview = previewBox ?: return
+        preview.isVisible = true
+
+        // Смещаем превью рядом с курсором, чтобы не перекрывать маркер
+        val wrapper = imageWrapperRef ?: return
+        val previewWidth = 180.0
+        val previewHeight = 200.0
+
+        var px = x + 15
+        var py = y + 15
+
+        // Не вылезаем за правый/нижний край
+        if (px + previewWidth > wrapper.width) px = x - previewWidth - 15
+        if (py + previewHeight > wrapper.height) py = y - previewHeight - 15
+        if (px < 0) px = 5.0
+        if (py < 0) py = 5.0
+
+        preview.relocate(px, py)
+    }
+
+
 }
 
 data class ChildMarker(
