@@ -42,7 +42,7 @@ class EquipmentCardController(
     private var offsetY = 0.0
     private var canvas: Canvas? = null
 
-    private var previewBox: VBox? = null          // ← превью-контейнер
+    private var previewPopup: javafx.stage.Popup? = null
     private var previewImageView: ImageView? = null
     private var previewLabel: Label? = null
 
@@ -54,6 +54,8 @@ class EquipmentCardController(
     private var currentEditingChildId: String? = null
 
     fun show() {
+        initPreviewPopup()
+
         defects.clear()
         defects.addAll(database.getDefectsByEquipment(equipment.id))
 
@@ -86,6 +88,11 @@ class EquipmentCardController(
         popupStage.isResizable = true
         popupStage.minWidth = 900.0
         popupStage.minHeight = 600.0
+
+        popupStage.setOnHidden {
+            previewPopup?.hide()
+        }
+
         popupStage.showAndWait()
 
         // ===== ХЛЕБНЫЕ КРОШКИ =====
@@ -114,17 +121,47 @@ class EquipmentCardController(
         mainLayout.children.add(0, breadcrumbsBox)
     }
 
+    private fun initPreviewPopup() {
+        val img = ImageView()
+        img.fitWidth = 160.0
+        img.fitHeight = 160.0
+        img.isPreserveRatio = true
+        img.isSmooth = true
+
+        val lbl = Label()
+        lbl.style = "-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #333; -fx-wrap-text: true; -fx-max-width: 160px;"
+        lbl.isWrapText = true
+
+        val box = VBox(4.0, img, lbl)
+        box.alignment = Pos.CENTER
+        box.style = """
+        -fx-background-color: white;
+        -fx-border-color: #333;
+        -fx-border-width: 2px;
+        -fx-border-radius: 8px;
+        -fx-background-radius: 8px;
+        -fx-padding: 6px;
+        -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.35), 12, 0, 0, 3);
+    """.trimIndent()
+
+        val popup = javafx.stage.Popup()
+        popup.isAutoHide = false
+        popup.isHideOnEscape = false
+        popup.content.add(box)
+
+        this.previewPopup = popup
+        this.previewImageView = img
+        this.previewLabel = lbl
+    }
+
     // ======================== ПАНЕЛЬ С КАРТИНКОЙ ========================
 
-    private fun createImagePanel(): VBox {
+    private fun createImagePanel(): javafx.scene.layout.Region {
         val image = createEquipmentImage()
-
         if (image == null) {
-            println("❌ Критическая ошибка: image = null")
-            return VBox().apply {
-                children.add(Label("❌ Не удалось загрузить изображение"))
-                style = "-fx-padding: 20px; -fx-alignment: center;"
-            }
+            val err = StackPane(Label("❌ Не удалось загрузить изображение"))
+            err.style = "-fx-padding: 20px;"
+            return err
         }
 
         val canvasWidth = 450.0
@@ -148,7 +185,6 @@ class EquipmentCardController(
         gc.drawImage(image, offsetX, offsetY, drawWidth, drawHeight)
         loadMarkersOnCanvas(gc)
 
-        // ===== ОБЪЯВЛЯЕМ imageContainer СРАЗУ =====
         val imageWrapper = StackPane()
         imageWrapper.children.add(canvas)
         imageWrapper.style = "-fx-border-color: #dee2e6; -fx-border-radius: 8px; -fx-background-color: white;"
@@ -159,51 +195,16 @@ class EquipmentCardController(
         imageContainer.prefWidth = 500.0
         imageContainer.style = "-fx-padding: 15px;"
 
-        // ===== ПРЕВЬЮ ПРИ НАВЕДЕНИИ НА МАРКЕР =====
-        val previewImg = ImageView()
-        previewImg.fitWidth = 160.0
-        previewImg.fitHeight = 160.0
-        previewImg.isPreserveRatio = true
-        previewImg.isSmooth = true
-
-        val previewLbl = Label()
-        previewLbl.style = "-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #333; -fx-wrap-text: true; -fx-max-width: 160px;"
-        previewLbl.isWrapText = true
-
-        val preview = VBox(4.0, previewImg, previewLbl)
-        preview.alignment = Pos.CENTER
-        preview.style = """
-    -fx-background-color: white;
-    -fx-border-color: #333;
-    -fx-border-width: 2px;
-    -fx-border-radius: 8px;
-    -fx-background-radius: 8px;
-    -fx-padding: 6px;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.35), 12, 0, 0, 3);
-""".trimIndent()
-        preview.isMouseTransparent = true
-        preview.isVisible = false
-
-        this.previewBox = preview
-        this.previewImageView = previewImg
-        this.previewLabel = previewLbl
-
-        // добавляем ПОВЕРХ canvas в тот же StackPane
-        imageWrapper.children.add(preview)
-        StackPane.setAlignment(preview, Pos.TOP_LEFT)
-
         // ===== КЛИК ПО МАРКЕРУ ДОЧЕРНЕГО ЭЛЕМЕНТА =====
         canvas.addEventHandler(MouseEvent.MOUSE_CLICKED) { event ->
             if (!isMarkerMode && !isChildMarkerMode) {
                 val clickX = event.x
                 val clickY = event.y
-
                 for (child in cachedChildren) {
                     val mainMarker = child.markers.firstOrNull() ?: MarkerPosition(child.left, child.top, true)
                     val markerX = (mainMarker.left / 100.0) * drawWidth + offsetX
                     val markerY = (mainMarker.top / 100.0) * drawHeight + offsetY
                     val radius = 12.0
-
                     val dx = clickX - markerX
                     val dy = clickY - markerY
                     if (dx * dx + dy * dy <= radius * radius) {
@@ -221,13 +222,9 @@ class EquipmentCardController(
                 val clickY = event.y
                 val xInImage = clickX - offsetX
                 val yInImage = clickY - offsetY
-
-                if (xInImage >= 0 && xInImage <= drawWidth &&
-                    yInImage >= 0 && yInImage <= drawHeight) {
-
+                if (xInImage >= 0 && xInImage <= drawWidth && yInImage >= 0 && yInImage <= drawHeight) {
                     val xPercent = (xInImage / drawWidth) * 100
                     val yPercent = (yInImage / drawHeight) * 100
-
                     addMarkerToDefect(
                         selectedDefectId!!,
                         xPercent.coerceIn(0.0, 100.0),
@@ -248,13 +245,9 @@ class EquipmentCardController(
                 val clickY = event.y
                 val xInImage = clickX - offsetX
                 val yInImage = clickY - offsetY
-
-                if (xInImage >= 0 && xInImage <= drawWidth &&
-                    yInImage >= 0 && yInImage <= drawHeight) {
-
+                if (xInImage >= 0 && xInImage <= drawWidth && yInImage >= 0 && yInImage <= drawHeight) {
                     val xPercent = (xInImage / drawWidth) * 100
                     val yPercent = (yInImage / drawHeight) * 100
-
                     updateChildMarkerPosition(
                         currentEditingChildId!!,
                         xPercent.coerceIn(0.0, 100.0),
@@ -271,13 +264,11 @@ class EquipmentCardController(
             if (!isMarkerMode && !isChildMarkerMode) {
                 val clickX = event.x
                 val clickY = event.y
-
                 for ((index, defect) in defects.withIndex()) {
                     if (defect.markerLeft != null && defect.markerTop != null) {
                         val markerX = (defect.markerLeft!! / 100.0) * drawWidth + offsetX
                         val markerY = (defect.markerTop!! / 100.0) * drawHeight + offsetY
                         val radius = 10.0
-
                         val dx = clickX - markerX
                         val dy = clickY - markerY
                         if (dx * dx + dy * dy <= radius * radius) {
@@ -295,17 +286,17 @@ class EquipmentCardController(
             }
         }
 
-        // ===== ПРЕВЬЮ ПРИ НАВЕДЕНИИ =====
+        // ===== ПРЕВЬЮ ПРИ НАВЕДЕНИИ (Popup) =====
         canvas.addEventHandler(MouseEvent.MOUSE_MOVED) { event ->
             if (isMarkerMode || isChildMarkerMode) {
-                previewBox?.isVisible = false
+                previewPopup?.hide()
                 return@addEventHandler
             }
             handleMarkerHover(event.x, event.y)
         }
 
         canvas.addEventHandler(MouseEvent.MOUSE_EXITED) {
-            previewBox?.isVisible = false
+            previewPopup?.hide()
         }
 
         // ===== ИНФО-ЛЕЙБЛ =====
@@ -599,9 +590,7 @@ class EquipmentCardController(
                 val clickY = event.y
                 val xInImage = clickX - offsetX
                 val yInImage = clickY - offsetY
-
-                if (xInImage >= 0 && xInImage <= drawWidth &&
-                    yInImage >= 0 && yInImage <= drawHeight) {
+                if (xInImage >= 0 && xInImage <= drawWidth && yInImage >= 0 && yInImage <= drawHeight) {
                     val xPercent = (xInImage / drawWidth) * 100
                     val yPercent = (yInImage / drawHeight) * 100
                     addMarkerToDefect(
@@ -623,9 +612,7 @@ class EquipmentCardController(
                 val clickY = event.y
                 val xInImage = clickX - offsetX
                 val yInImage = clickY - offsetY
-
-                if (xInImage >= 0 && xInImage <= drawWidth &&
-                    yInImage >= 0 && yInImage <= drawHeight) {
+                if (xInImage >= 0 && xInImage <= drawWidth && yInImage >= 0 && yInImage <= drawHeight) {
                     val xPercent = (xInImage / drawWidth) * 100
                     val yPercent = (yInImage / drawHeight) * 100
                     updateChildMarkerPosition(
@@ -643,16 +630,13 @@ class EquipmentCardController(
             if (!isMarkerMode && !isChildMarkerMode) {
                 val clickX = event.x
                 val clickY = event.y
-
                 val allEquipment = database.loadAllEquipment()
                 val children = allEquipment.filter { it.parentId == equipment.id }
-
                 for (child in children) {
                     val mainMarker = child.markers.firstOrNull() ?: MarkerPosition(child.left, child.top, true)
                     val markerX = (mainMarker.left / 100.0) * drawWidth + offsetX
                     val markerY = (mainMarker.top / 100.0) * drawHeight + offsetY
                     val radius = 12.0
-
                     val dx = clickX - markerX
                     val dy = clickY - markerY
                     if (dx * dx + dy * dy <= radius * radius) {
@@ -660,13 +644,11 @@ class EquipmentCardController(
                         return@addEventHandler
                     }
                 }
-
                 for ((index, defect) in defects.withIndex()) {
                     if (defect.markerLeft != null && defect.markerTop != null) {
                         val markerX = (defect.markerLeft!! / 100.0) * drawWidth + offsetX
                         val markerY = (defect.markerTop!! / 100.0) * drawHeight + offsetY
                         val radius = 10.0
-
                         val dx = clickX - markerX
                         val dy = clickY - markerY
                         if (dx * dx + dy * dy <= radius * radius) {
@@ -684,17 +666,17 @@ class EquipmentCardController(
             }
         }
 
-        // ===== ПРЕВЬЮ ПРИ НАВЕДЕНИИ =====
+        // ===== ПРЕВЬЮ ПРИ НАВЕДЕНИИ (Popup) =====
         newCanvas.addEventHandler(MouseEvent.MOUSE_MOVED) { event ->
             if (isMarkerMode || isChildMarkerMode) {
-                previewBox?.isVisible = false
+                previewPopup?.hide()
                 return@addEventHandler
             }
             handleMarkerHover(event.x, event.y)
         }
 
         newCanvas.addEventHandler(MouseEvent.MOUSE_EXITED) {
-            previewBox?.isVisible = false
+            previewPopup?.hide()
         }
 
         wrapper.children.add(newCanvas)
@@ -1453,15 +1435,14 @@ class EquipmentCardController(
      * Использует cachedChildren, чтобы не читать БД на каждое движение мыши.
      */
     private fun handleMarkerHover(mouseX: Double, mouseY: Double) {
-        val preview = previewBox ?: return
+        val popup = previewPopup ?: return
         val imgView = previewImageView ?: return
         val lbl = previewLabel ?: return
 
-        // ===== 1. Проверяем маркеры дочерних элементов (из кэша) =====
+        // ===== 1. Маркеры дочерних =====
         var hoveredChild: EquipmentData? = null
         for (child in cachedChildren) {
-            val mainMarker = child.markers.firstOrNull()
-                ?: MarkerPosition(child.left, child.top, true)
+            val mainMarker = child.markers.firstOrNull() ?: MarkerPosition(child.left, child.top, true)
             val mx = (mainMarker.left / 100.0) * drawWidth + offsetX
             val my = (mainMarker.top / 100.0) * drawHeight + offsetY
             val dx = mouseX - mx
@@ -1472,7 +1453,7 @@ class EquipmentCardController(
             }
         }
 
-        // ===== 2. Проверяем маркеры дефектов =====
+        // ===== 2. Маркеры дефектов =====
         var hoveredDefect: DefectData? = null
         if (hoveredChild == null) {
             for (defect in defects) {
@@ -1488,43 +1469,49 @@ class EquipmentCardController(
             }
         }
 
-        // ===== 3. Показываем/прячем превью =====
         when {
             hoveredChild != null -> {
-                imgView.image = createImageForType(hoveredChild.type)
+                imgView.image = null
+                imgView.isVisible = false
+                imgView.isManaged = false
                 lbl.text = hoveredChild.name
-                showPreviewAt(mouseX, mouseY)
+                lbl.style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #17a2b8; -fx-wrap-text: true; -fx-max-width: 200px; -fx-padding: 6px 4px;"
+                showPreviewPopup(mouseX, mouseY)
             }
             hoveredDefect != null -> {
                 imgView.image = createEquipmentImage()
+                imgView.isVisible = true
+                imgView.isManaged = true
                 lbl.text = "🔴 ${hoveredDefect.name}"
-                showPreviewAt(mouseX, mouseY)
+                lbl.style = "-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #333; -fx-wrap-text: true; -fx-max-width: 160px;"
+                showPreviewPopup(mouseX, mouseY)
             }
             else -> {
-                preview.isVisible = false
+                popup.hide()
             }
         }
     }
 
-    private fun showPreviewAt(x: Double, y: Double) {
-        val preview = previewBox ?: return
-        preview.isVisible = true
-
-        // Смещаем превью рядом с курсором, чтобы не перекрывать маркер
+    private fun showPreviewPopup(mouseX: Double, mouseY: Double) {
+        val popup = previewPopup ?: return
         val wrapper = imageWrapperRef ?: return
-        val previewWidth = 180.0
-        val previewHeight = 200.0
+        val scene = wrapper.scene ?: return
 
-        var px = x + 15
-        var py = y + 15
+        // Точка в сцене
+        val scenePoint = wrapper.localToScene(mouseX, mouseY)
 
-        // Не вылезаем за правый/нижний край
-        if (px + previewWidth > wrapper.width) px = x - previewWidth - 15
-        if (py + previewHeight > wrapper.height) py = y - previewHeight - 15
-        if (px < 0) px = 5.0
-        if (py < 0) py = 5.0
+        // Координаты на экране
+        val window = scene.window ?: return
+        val screenX = window.x + scenePoint.x + 20
+        val screenY = window.y + scenePoint.y + 20
 
-        preview.relocate(px, py)
+        // Показываем popup (если ещё не показан)
+        if (!popup.isShowing) {
+            popup.show(window, screenX, screenY)
+        } else {
+            popup.x = screenX
+            popup.y = screenY
+        }
     }
 
 

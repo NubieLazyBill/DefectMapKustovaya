@@ -123,21 +123,36 @@ class DefectMapController {
                 return
             }
 
+            val equipmentById = allEquipment.associateBy { it.id }
+
             val reportData = mutableListOf<ReportItem>()
             allEquipment.forEach { eq ->
+                // ===== Прямой родитель (для отображения "В составе") =====
+                val parent = eq.parentId?.let { pid -> equipmentById[pid] }
+                val parentName = parent?.name
+
+                // ===== Корневой предок (для фильтра по типу) =====
+                val root = findRootEquipment(eq, equipmentById)
+                val rootTypeName = EquipmentTypes.getTypeName(root.type)
+
+                // ===== Ячейку берём у корня (там, где "сидит" вся сборка) =====
+                val effectiveCell = root.cell.ifEmpty { eq.cell }
+
                 val defects = database.getDefectsByEquipment(eq.id)
                 defects.forEach { defect ->
                     reportData.add(
                         ReportItem(
                             equipmentName = eq.name,
                             equipmentType = EquipmentTypes.getTypeName(eq.type),
-                            equipmentCell = eq.cell,
+                            equipmentCell = effectiveCell,
                             defectName = defect.name,
                             defectDescription = defect.description,
                             defectStatus = if (defect.status == "fixed") "Устранён" else "Обнаружен",
                             markerLeft = defect.markerLeft,
                             markerTop = defect.markerTop,
-                            detectionDate = defect.detectionDate
+                            detectionDate = defect.detectionDate,
+                            parentEquipmentName = parentName,
+                            rootEquipmentType = rootTypeName
                         )
                     )
                 }
@@ -349,7 +364,9 @@ class DefectMapController {
                     (status == "Обнаружен" && item.defectStatus == "Обнаружен") ||
                     (status == "Устранён" && item.defectStatus == "Устранён")
 
-            val typeMatch = typeName == null || typeName == "Все" || item.equipmentType == typeName
+            val typeMatch = typeName == null || typeName == "Все" ||
+                item.equipmentType == typeName ||
+                item.rootEquipmentType == typeName
 
             // ===== ЯЧЕЙКА: если "Все ячейки" или пусто — не фильтруем =====
             val cellMatch = cell == null || cell == "Все ячейки" || cell.isEmpty() ||
@@ -418,7 +435,7 @@ class DefectMapController {
             }
 
             val headers = arrayOf(
-                "№", "Оборудование", "Тип оборудования", "Ячейка",
+                "№", "Оборудование", "В составе", "Тип оборудования", "Ячейка",
                 "Вид дефекта", "Описание", "Статус", "Дата создания", "X%", "Y%"
             )
 
@@ -440,23 +457,39 @@ class DefectMapController {
                     setCellValue(item.equipmentName)
                     cellStyle = dataStyle
                 }
+                // ===== НОВАЯ КОЛОНКА: "В составе" =====
                 row.createCell(2).apply {
+                    setCellValue(item.parentEquipmentName ?: "—")
+                    val parentStyle = if (item.parentEquipmentName != null) {
+                        workbook.createCellStyle().apply {
+                            cloneStyleFrom(dataStyle)
+                            val font = workbook.createFont()
+                            font.italic = true
+                            font.color = org.apache.poi.ss.usermodel.IndexedColors.GREY_50_PERCENT.index
+                            setFont(font)
+                        }
+                    } else {
+                        dataStyle
+                    }
+                    cellStyle = parentStyle
+                }
+                row.createCell(3).apply {
                     setCellValue(item.equipmentType)
                     cellStyle = dataStyle
                 }
-                row.createCell(3).apply {
+                row.createCell(4).apply {
                     setCellValue(item.equipmentCell)
                     cellStyle = dataStyle
                 }
-                row.createCell(4).apply {
+                row.createCell(5).apply {
                     setCellValue(item.defectName)
                     cellStyle = dataStyle
                 }
-                row.createCell(5).apply {
+                row.createCell(6).apply {
                     setCellValue(item.defectDescription)
                     cellStyle = dataStyle
                 }
-                row.createCell(6).apply {
+                row.createCell(7).apply {
                     setCellValue(item.defectStatus)
                     val statusStyle = if (item.defectStatus == "Устранён") {
                         workbook.createCellStyle().apply {
@@ -477,7 +510,7 @@ class DefectMapController {
                     }
                     cellStyle = statusStyle
                 }
-                row.createCell(7).apply {
+                row.createCell(8).apply {
                     val dateStr = item.detectionDate?.let {
                         Instant.ofEpochMilli(it)
                             .atZone(ZoneId.systemDefault())
@@ -487,11 +520,11 @@ class DefectMapController {
                     setCellValue(dateStr)
                     cellStyle = dataStyle
                 }
-                row.createCell(8).apply {
+                row.createCell(9).apply {
                     setCellValue(item.markerLeft?.let { String.format("%.1f", it) } ?: "-")
                     cellStyle = dataStyle
                 }
-                row.createCell(9).apply {
+                row.createCell(10).apply {
                     setCellValue(item.markerTop?.let { String.format("%.1f", it) } ?: "-")
                     cellStyle = dataStyle
                 }
@@ -541,7 +574,7 @@ class DefectMapController {
                 cellStyle = style
             }
 
-            for (i in 0..9) {
+            for (i in 0..10) {
                 sheet.autoSizeColumn(i)
                 val width = sheet.getColumnWidth(i)
                 if (width > 8000) sheet.setColumnWidth(i, 8000)
@@ -570,6 +603,8 @@ class DefectMapController {
         val markerLeft: Double?,
         val markerTop: Double?,
         val detectionDate: Long?,
+        val parentEquipmentName: String? = null,
+        val rootEquipmentType: String? = null,
     )
 
     // ======================== ИНИЦИАЛИЗАЦИЯ ========================
@@ -2577,6 +2612,8 @@ class DefectMapController {
                         if (sizeResult.isPresent) {
                             val newSize = sizeResult.get()
 
+                            val cellChanged = newCell != currentCell
+
                             val updatedList = allEquipment.map { item ->
                                 if (item.id == equipmentId) {
                                     item.copy(
@@ -2586,6 +2623,9 @@ class DefectMapController {
                                         cell = newCell,
                                         size = newSize
                                     )
+                                } else if (cellChanged && item.parentId == equipmentId) {
+                                    // ===== Обновляем ячейку у всех прямых детей =====
+                                    item.copy(cell = newCell)
                                 } else {
                                     item
                                 }
@@ -3841,6 +3881,24 @@ class DefectMapController {
         }
 
         return result
+    }
+
+    /**
+     * Возвращает корневое оборудование (самого верхнего предка).
+     * Если parentId == null — возвращает само оборудование.
+     */
+    private fun findRootEquipment(
+        eq: EquipmentData,
+        allById: Map<String, EquipmentData>
+    ): EquipmentData {
+        var current = eq
+        var guard = 0
+        while (current.parentId != null && guard < 50) {
+            val parent = allById[current.parentId] ?: break
+            current = parent
+            guard++
+        }
+        return current
     }
 
 }
