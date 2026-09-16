@@ -98,8 +98,10 @@ class DefectMapController {
     private var equipmentListStage: Stage? = null
     private var defectsListStage: Stage? = null
 
-    private var currentSubstation: Substation = Substations.DEFAULT
+    private var currentSubstation: Substation = loadLastSubstation()
     private var database: Database = Database(currentSubstation.key)
+
+    private var markerScale: Double = 1.0
 
     private val gson: Gson by lazy {
         GsonBuilder().setPrettyPrinting().create()
@@ -633,6 +635,10 @@ class DefectMapController {
         EquipmentTypes.loadFromDatabase(database)
         DefectTypes.loadFromDatabase(database)
 
+        // ===== Загружаем масштаб маркеров для текущей ПС =====
+        markerScale = database.getMarkerScale()
+        println("🔍 Стартовый масштаб маркеров: $markerScale (ПС: ${currentSubstation.displayName})")
+
         loadSvgIntoWebViewForSubstation(currentSubstation.key)
         updateWindowTitle()
 
@@ -640,7 +646,6 @@ class DefectMapController {
 
         // ===== ОБРАБОТЧИК ДЛЯ УПРАВЛЕНИЯ ТИПАМИ =====
         manageTypesMenuItem.setOnAction { showManageTypesDialog() }
-
 
         webView.engine.getLoadWorker().stateProperty().addListener { _, _, newState ->
             if (newState == Worker.State.SUCCEEDED) {
@@ -670,6 +675,8 @@ class DefectMapController {
                 if (isInitialized) {
                     saveEquipment()
                 }
+                // ===== ЗАПОМИНАЕМ ПОСЛЕДНЮЮ ПС =====
+                AppSettings.setLastSubstationKey(currentSubstation.key)
                 database.close()
                 println("✅ Завершено")
             }
@@ -679,6 +686,21 @@ class DefectMapController {
         val switchSubstationItem = MenuItem("🔌 Сменить подстанцию")
         switchSubstationItem.setOnAction { showSwitchSubstationDialog() }
         devMenuBtn.items.add(switchSubstationItem)
+
+        // ===== Пункты меню для масштаба маркеров =====
+        devMenuBtn.items.add(javafx.scene.control.SeparatorMenuItem())
+
+        val increaseMarkersItem = MenuItem("🔍 Увеличить маркеры (+10%)")
+        increaseMarkersItem.setOnAction { applyMarkerScale(markerScale + 0.2) }
+        devMenuBtn.items.add(increaseMarkersItem)
+
+        val decreaseMarkersItem = MenuItem("🔍 Уменьшить маркеры (−10%)")
+        decreaseMarkersItem.setOnAction { applyMarkerScale(markerScale - 0.2) }
+        devMenuBtn.items.add(decreaseMarkersItem)
+
+        val resetMarkersItem = MenuItem("🔍 Сбросить масштаб (100%)")
+        resetMarkersItem.setOnAction { applyMarkerScale(1.0) }
+        devMenuBtn.items.add(resetMarkersItem)
     }
 
     // ======================== РЕЖИМ РЕДАКТИРОВАНИЯ ========================
@@ -800,38 +822,34 @@ class DefectMapController {
     private fun switchSubstation(newSub: Substation) {
         println("🔌 Смена подстанции: ${currentSubstation.displayName} → ${newSub.displayName}")
 
-        // 1. Сохранить текущее состояние в СТАРУЮ БД (пока она открыта)
         if (isInitialized) {
             try { saveEquipment() } catch (e: Exception) {
                 println("⚠️ Не удалось сохранить перед сменой ПС: ${e.message}")
             }
         }
 
-        // 2. Очистить состояние в WebView ДО смены БД
-        //    Иначе при закрытии приложения старые данные сохранятся в новую БД
         clearWebViewEquipment()
-
-        // 3. Закрыть старую БД
         try { database.close() } catch (e: Exception) {
             println("⚠️ Ошибка закрытия БД: ${e.message}")
         }
 
-        // 4. Сменить ПС и открыть новую БД
         currentSubstation = newSub
         database = Database(newSub.key)
         database.autoBackup()
 
-        // 5. Перезагрузить типы из новой БД
+        // ===== ЗАПОМИНАЕМ ВЫБОР =====
+        AppSettings.setLastSubstationKey(newSub.key)
+
         EquipmentTypes.loadFromDatabase(database)
         DefectTypes.loadFromDatabase(database)
 
-        // 6. Сбросить хэш и состояние
+        markerScale = database.getMarkerScale()
+        println("🔍 Масштаб маркеров для ${newSub.displayName}: $markerScale")
+
         lastSavedHash = 0
         isEditMode = false
         currentEditingEquipmentId = null
 
-        // 7. Загрузить SVG. Загрузка асинхронная.
-        //    Подписываемся на SUCCEEDED ОДИН РАЗ для этой конкретной загрузки
         val listener = object : javafx.beans.value.ChangeListener<Worker.State> {
             override fun changed(
                 observable: javafx.beans.value.ObservableValue<out Worker.State>,
@@ -881,6 +899,9 @@ class DefectMapController {
     <html>
       <head>
         <style>
+          :root {
+              --marker-scale: 1.0;
+          }
           * { 
               margin: 0; 
               padding: 0; 
@@ -1032,12 +1053,34 @@ class DefectMapController {
             visibility: visible;
             opacity: 1;
           }
-          .equipment-marker.small { width: 20px; height: 20px; }
-          .equipment-marker.small .dot { width: 16px; height: 16px; font-size: 8px; }
-          .equipment-marker.normal { width: 28px; height: 28px; }
-          .equipment-marker.normal .dot { width: 24px; height: 24px; font-size: 11px; }
-          .equipment-marker.large { width: 36px; height: 36px; }
-          .equipment-marker.large .dot { width: 32px; height: 32px; font-size: 14px; }
+          /* ===== РАЗМЕРЫ МАРКЕРОВ С УЧЁТОМ МАСШТАБА ПС ===== */
+          .equipment-marker.small {
+              width:  calc(20px * var(--marker-scale));
+              height: calc(20px * var(--marker-scale));
+          }
+          .equipment-marker.small .dot {
+              width:  calc(16px * var(--marker-scale));
+              height: calc(16px * var(--marker-scale));
+              font-size: calc(8px * var(--marker-scale));
+          }
+          .equipment-marker.normal {
+              width:  calc(28px * var(--marker-scale));
+              height: calc(28px * var(--marker-scale));
+          }
+          .equipment-marker.normal .dot {
+              width:  calc(24px * var(--marker-scale));
+              height: calc(24px * var(--marker-scale));
+              font-size: calc(11px * var(--marker-scale));
+          }
+          .equipment-marker.large {
+              width:  calc(36px * var(--marker-scale));
+              height: calc(36px * var(--marker-scale));
+          }
+          .equipment-marker.large .dot {
+              width:  calc(32px * var(--marker-scale));
+              height: calc(32px * var(--marker-scale));
+              font-size: calc(14px * var(--marker-scale));
+          }
           .equipment-marker.marker-extra {
               border: 2px dashed rgba(255, 255, 255, 0.5);
               opacity: 0.85;
@@ -1072,6 +1115,10 @@ class DefectMapController {
             }
             return
         }
+        // ===== Применяем масштаб маркеров =====
+        webView.engine.executeScript("""
+        document.documentElement.style.setProperty('--marker-scale', '${markerScale}');
+    """.trimIndent())
 
         val imageMap = buildImageMap()
         val imageMapJson = gson.toJson(imageMap)
@@ -1157,6 +1204,11 @@ class DefectMapController {
     private fun initEquipment() {
         val savedEquipment = database.loadAllEquipment()
         println("📂 Загружено из БД: ${savedEquipment.size} шт.")
+
+        // ===== Применяем масштаб =====
+        webView.engine.executeScript("""
+        document.documentElement.style.setProperty('--marker-scale', '${markerScale}');
+    """.trimIndent())
 
         val imageMap = buildImageMap()
         val imageMapJson = gson.toJson(imageMap)
@@ -3915,6 +3967,26 @@ class DefectMapController {
             guard++
         }
         return current
+    }
+
+    private fun applyMarkerScale(newScale: Double) {
+        val clamped = newScale.coerceIn(0.5, 4.0)
+        markerScale = clamped
+
+        webView.engine.executeScript("""
+        document.documentElement.style.setProperty('--marker-scale', '${clamped}');
+    """.trimIndent())
+
+        database.setMarkerScale(clamped)
+
+        val percent = (clamped * 100).toInt()
+        showToast("🔍 Масштаб маркеров: ${"%.1f".format(clamped)}x ($percent%)")
+        println("🔍 Масштаб маркеров: $clamped (ПС: ${currentSubstation.displayName})")
+    }
+
+    private fun loadLastSubstation(): Substation {
+        val savedKey = AppSettings.getLastSubstationKey()
+        return Substations.ALL.find { it.key == savedKey } ?: Substations.DEFAULT
     }
 
 }

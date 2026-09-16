@@ -35,6 +35,7 @@ class Database(private val substationKey: String = "kustovaya") {
         migrateMarkerIds()
         createDefectTypesTable()
         addParentIdColumnIfNotExists()
+        createSettingsTable()
     }
 
     private fun addParentIdColumnIfNotExists() {
@@ -682,6 +683,47 @@ class Database(private val substationKey: String = "kustovaya") {
             saveDefectType(name, index)
         }
         println("✅ Дефолтные виды дефектов восстановлены (${defaultTypes.size} шт.)")
+    }
+
+    // ======================== НАСТРОЙКИ (settings) ========================
+
+    private fun createSettingsTable() {
+        val sql = """
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """.trimIndent()
+        executeUpdate(sql)
+        println("✅ Таблица settings создана")
+    }
+
+    fun getSetting(key: String): String? {
+        val sql = "SELECT value FROM settings WHERE key = ?"
+        return connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.setString(1, key)
+            val rs = stmt.executeQuery()
+            if (rs.next()) rs.getString("value") else null
+        }
+    }
+
+    fun saveSetting(key: String, value: String) {
+        val sql = "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)"
+        connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.setString(1, key)
+            stmt.setString(2, value)
+            stmt.executeUpdate()
+        }
+        println("💾 Настройка сохранена: $key = $value")
+    }
+
+    fun getMarkerScale(): Double {
+        val value = getSetting("marker_scale")
+        return value?.toDoubleOrNull() ?: 1.0
+    }
+
+    fun setMarkerScale(scale: Double) {
+        saveSetting("marker_scale", scale.toString())
     }
 
 }
