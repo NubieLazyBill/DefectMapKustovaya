@@ -19,6 +19,9 @@ import javafx.animation.PauseTransition
 import javafx.collections.FXCollections
 import javafx.util.Duration
 import java.io.File
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 class EquipmentCardController(
     private val equipment: EquipmentData,
@@ -898,9 +901,20 @@ class EquipmentCardController(
         val statusBox = HBox(10.0, statusLabel, statusCombo)
         statusBox.alignment = Pos.CENTER_LEFT
 
+// ===== ДАТА ОБНАРУЖЕНИЯ =====
+        val dateLabel = Label("Дата обнаружения:")
+        dateLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
+        val datePicker = DatePicker()
+        datePicker.value = java.time.LocalDate.now()
+        datePicker.style = "-fx-pref-width: 180px; -fx-font-size: 14px;"
+
+        val dateBox = HBox(10.0, dateLabel, datePicker)
+        dateBox.alignment = Pos.CENTER_LEFT
+
         content.children.addAll(
             typeLabel, typeCombo, typeHint,
             descLabel, descField,
+            dateBox,
             statusBox
         )
 
@@ -916,13 +930,20 @@ class EquipmentCardController(
                 return
             }
 
+            val detectionMillis = datePicker.value
+                ?.atStartOfDay(ZoneId.systemDefault())
+                ?.toInstant()
+                ?.toEpochMilli()
+                ?: System.currentTimeMillis()
+
             val newDefect = DefectData(
                 id = "defect-${System.currentTimeMillis()}",
                 equipmentId = equipment.id,
-                name = defectType,  // ← Используем вид дефекта как имя
+                name = defectType,
                 description = descField.text.trim(),
                 severity = "medium",
-                status = if (statusCombo.value == "устранён") "fixed" else "open"
+                status = if (statusCombo.value == "устранён") "fixed" else "open",
+                detectionDate = detectionMillis
             )
             database.saveDefect(newDefect)
             defects.add(newDefect)
@@ -961,7 +982,18 @@ class EquipmentCardController(
         descField.prefHeight = 100.0
         descField.style = "-fx-padding: 8px 12px; -fx-font-size: 14px; -fx-border-color: #ced4da; -fx-border-radius: 4px;"
 
-        // ===== СТАТУС =====
+        // ===== ДАТА ОБНАРУЖЕНИЯ =====
+        val dateLabel = Label("Дата обнаружения:")
+        dateLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
+        val datePicker = DatePicker()
+        datePicker.value = defect.detectionDate?.let { millis ->
+            Instant.ofEpochMilli(millis)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+        } ?: java.time.LocalDate.now()
+        datePicker.style = "-fx-pref-width: 180px; -fx-font-size: 14px;"
+
+// ===== СТАТУС =====
         val statusLabel = Label("Статус:")
         statusLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val statusCombo = ComboBox<String>()
@@ -972,6 +1004,7 @@ class EquipmentCardController(
         content.children.addAll(
             typeLabel, typeCombo,
             descLabel, descField,
+            dateLabel, datePicker,
             statusLabel, statusCombo
         )
 
@@ -987,10 +1020,18 @@ class EquipmentCardController(
                 return
             }
 
+            val detectionMillis = datePicker.value
+                ?.atStartOfDay(ZoneId.systemDefault())
+                ?.toInstant()
+                ?.toEpochMilli()
+                ?: defect.detectionDate
+                ?: System.currentTimeMillis()
+
             val updatedDefect = defect.copy(
                 name = defectType,
                 description = descField.text.trim(),
-                status = if (statusCombo.value == "устранён") "fixed" else "open"
+                status = if (statusCombo.value == "устранён") "fixed" else "open",
+                detectionDate = detectionMillis
             )
             database.updateDefect(updatedDefect)
 
@@ -1295,8 +1336,19 @@ class EquipmentCardController(
                     titleLbl.maxWidth = 420.0
 
                     // ===== ПОДЗАГОЛОВОК (оборудование + описание) =====
+                    val dateStr = if (defect.detectionDate != null && defect.detectionDate > 0) {
+                        Instant.ofEpochMilli(defect.detectionDate!!)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                            .format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                    } else null
+
                     val subtitleText = buildString {
                         if (isChild) append("Оборудование: $eqName")
+                        if (dateStr != null) {
+                            if (isNotEmpty()) append(" • ")
+                            append("📅 $dateStr")
+                        }
                         if (defect.description.isNotEmpty()) {
                             if (isNotEmpty()) append(" • ")
                             append(defect.description)

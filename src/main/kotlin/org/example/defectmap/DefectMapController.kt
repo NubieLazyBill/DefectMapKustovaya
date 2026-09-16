@@ -175,28 +175,32 @@ class DefectMapController {
         val reportStage = Stage()
         reportStage.title = "📊 Создание отчёта"
         reportStage.isResizable = true
-        reportStage.minWidth = 750.0
-        reportStage.minHeight = 620.0
+        reportStage.minWidth = 900.0
+        reportStage.minHeight = 700.0
 
         val ownerStage = webView.scene.window as Stage
         reportStage.initOwner(ownerStage)
         reportStage.initModality(javafx.stage.Modality.NONE)
 
-        val root = VBox(15.0)
+        val root = VBox(12.0)
         root.style = "-fx-background-color: white; -fx-padding: 20px;"
 
         val headerLabel = Label("📊 Настройка отчёта")
         headerLabel.style = "-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #333;"
 
-        val filtersBox = VBox(10.0)
-        filtersBox.style = "-fx-padding: 10px 0;"
+        // ======================== ФИЛЬТРЫ (СЕТКА 2×N) ========================
+        val filtersGrid = javafx.scene.layout.GridPane()
+        filtersGrid.hgap = 20.0
+        filtersGrid.vgap = 10.0
+        filtersGrid.style = "-fx-padding: 10px 0;"
 
+        // ===== Строка 1: Статус | Тип оборудования =====
         val statusLabel = Label("Статус дефектов:")
         statusLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val statusCombo = ComboBox<String>()
         statusCombo.items.addAll("Все", "Обнаружен", "Устранён")
         statusCombo.value = "Все"
-        statusCombo.style = "-fx-pref-width: 150px;"
+        statusCombo.style = "-fx-pref-width: 220px;"
 
         val typeLabel = Label("Тип оборудования:")
         typeLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
@@ -204,13 +208,13 @@ class DefectMapController {
         val allTypes = listOf("Все") + EquipmentTypes.ALL_TYPES.map { it.second }
         typeCombo.items.addAll(allTypes)
         typeCombo.value = "Все"
-        typeCombo.style = "-fx-pref-width: 180px;"
+        typeCombo.style = "-fx-pref-width: 220px;"
 
+        // ===== Строка 2: Ячейка | Вид дефекта =====
         val cellLabel = Label("Ячейка:")
         cellLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val cellCombo = ComboBox<String>()
 
-// Загружаем уникальные ячейки из БД
         val allCells = loadEquipment()
             .mapNotNull { it.cell.takeIf { cell -> cell.isNotEmpty() } }
             .distinct()
@@ -219,38 +223,55 @@ class DefectMapController {
         cellCombo.items.add("Все ячейки")
         cellCombo.items.addAll(allCells)
         cellCombo.value = "Все ячейки"
-        cellCombo.style = "-fx-pref-width: 150px;"
+        cellCombo.style = "-fx-pref-width: 220px;"
 
-// ===== ДОБАВИТЬ ЭТОТ БЛОК =====
         val defectTypeLabel = Label("Вид дефекта:")
         defectTypeLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val defectTypeCombo = ComboBox<String>()
         val defectTypesList = listOf("Все") + DefectTypes.ALL_TYPES
         defectTypeCombo.items.addAll(defectTypesList)
         defectTypeCombo.value = "Все"
-        defectTypeCombo.style = "-fx-pref-width: 200px;"
-// ===== КОНЕЦ НОВОГО БЛОКА =====
+        defectTypeCombo.style = "-fx-pref-width: 220px;"
 
+        // ===== Строка 3: Период создания =====
         val dateLabel = Label("Период создания:")
         dateLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val dateFrom = DatePicker()
         dateFrom.promptText = "с"
-        dateFrom.style = "-fx-pref-width: 130px;"
+        dateFrom.style = "-fx-pref-width: 105px;"
         val dateTo = DatePicker()
         dateTo.promptText = "по"
-        dateTo.style = "-fx-pref-width: 130px;"
-        val dateBox = HBox(10.0, dateFrom, dateTo)
+        dateTo.style = "-fx-pref-width: 105px;"
+        val dateBox = HBox(8.0, dateFrom, dateTo)
         dateBox.alignment = Pos.CENTER_LEFT
 
-        val countLabel = Label("Найдено: ${reportData.size} дефектов")
-        countLabel.style = "-fx-font-size: 14px; -fx-text-fill: #28a745; -fx-font-weight: bold;"
+        filtersGrid.add(statusLabel, 0, 0)
+        filtersGrid.add(statusCombo, 0, 1)
+        filtersGrid.add(typeLabel, 1, 0)
+        filtersGrid.add(typeCombo, 1, 1)
 
-        val previewLabel = Label("Первые 5 записей:")
+        filtersGrid.add(cellLabel, 0, 2)
+        filtersGrid.add(cellCombo, 0, 3)
+        filtersGrid.add(defectTypeLabel, 1, 2)
+        filtersGrid.add(defectTypeCombo, 1, 3)
+
+        filtersGrid.add(dateLabel, 0, 4)
+        filtersGrid.add(dateBox, 0, 5)
+
+        // ======================== СЧЁТЧИК + ПРЕВЬЮ ========================
+        val countLabel = Label("Найдено: ${reportData.size} дефектов")
+        countLabel.style = "-fx-font-size: 15px; -fx-text-fill: #28a745; -fx-font-weight: bold; -fx-padding: 5px 0;"
+
+        val previewLabel = Label("Предпросмотр:")
         previewLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
+
         val previewText = TextArea()
         previewText.isEditable = false
-        previewText.prefHeight = 100.0
-        previewText.style = "-fx-font-size: 12px; -fx-font-family: monospace;"
+        previewText.isWrapText = false
+        previewText.style = "-fx-font-size: 12px; -fx-font-family: 'Consolas', 'Monospaced', monospace;"
+        // Растянем на всё доступное место
+        VBox.setVgrow(previewText, javafx.scene.layout.Priority.ALWAYS)
+        previewText.minHeight = 200.0    // ← минимальная высота
 
         fun updatePreview() {
             val filtered = filterReportData(
@@ -265,16 +286,17 @@ class DefectMapController {
             countLabel.text = "Найдено: ${filtered.size} дефектов"
 
             if (filtered.isNotEmpty()) {
-                val preview = filtered.take(5).joinToString("\n") { item ->
+                val preview = filtered.joinToString("\n") { item ->
                     val dateStr = item.detectionDate?.let {
                         Instant.ofEpochMilli(it)
                             .atZone(ZoneId.systemDefault())
                             .toLocalDate()
                             .format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
                     } ?: "—"
-                    "${item.equipmentName} | ${item.defectName} | ${item.defectStatus} | $dateStr"
+                    val parentStr = item.parentEquipmentName?.let { " (в составе: $it)" } ?: ""
+                    "${item.equipmentName}$parentStr | ${item.defectName} | ${item.defectStatus} | $dateStr"
                 }
-                previewText.text = preview + if (filtered.size > 5) "\n... и ещё ${filtered.size - 5}" else ""
+                previewText.text = preview
             } else {
                 previewText.text = "Нет дефектов по выбранным фильтрам"
             }
@@ -283,12 +305,14 @@ class DefectMapController {
         statusCombo.valueProperty().addListener { _, _, _ -> updatePreview() }
         typeCombo.valueProperty().addListener { _, _, _ -> updatePreview() }
         cellCombo.valueProperty().addListener { _, _, _ -> updatePreview() }
+        defectTypeCombo.valueProperty().addListener { _, _, _ -> updatePreview() }
         dateFrom.valueProperty().addListener { _, _, _ -> updatePreview() }
         dateTo.valueProperty().addListener { _, _, _ -> updatePreview() }
 
+        // ======================== КНОПКИ ========================
         val buttonBox = HBox(10.0)
         buttonBox.alignment = Pos.CENTER_RIGHT
-        buttonBox.style = "-fx-padding: 15px 0 0 0;"
+        buttonBox.style = "-fx-padding: 10px 0 0 0;"
 
         val createBtn = Button("📊 Создать отчёт")
         createBtn.style = "-fx-background-color: #28a745; -fx-text-fill: white; -fx-padding: 8px 20px; -fx-background-radius: 4px; -fx-font-weight: bold; -fx-font-size: 13px;"
@@ -300,7 +324,7 @@ class DefectMapController {
             val from = dateFrom.value
             val to = dateTo.value
 
-            val filtered = filterReportData(reportData, status, typeName, cell, defectType,from, to)
+            val filtered = filterReportData(reportData, status, typeName, cell, defectType, from, to)
             if (filtered.isEmpty()) {
                 showInfo("⚠️ Нет дефектов по выбранным фильтрам")
                 return@setOnAction
@@ -315,23 +339,17 @@ class DefectMapController {
 
         buttonBox.children.addAll(createBtn, cancelBtn)
 
-        filtersBox.children.addAll(
-            statusLabel, statusCombo,
-            typeLabel, typeCombo,
-            cellLabel, cellCombo,
-            defectTypeLabel, defectTypeCombo,
-            dateLabel, dateBox
-        )
-
+        // ======================== СБОРКА ========================
         root.children.addAll(
             headerLabel,
-            filtersBox,
+            filtersGrid,
             countLabel,
-            previewLabel, previewText,
+            previewLabel,
+            previewText,
             buttonBox
         )
 
-        val scene = Scene(root, 780.0, 650.0)
+        val scene = Scene(root, 900.0, 750.0)
         reportStage.scene = scene
 
         reportStage.setOnShown {
@@ -346,8 +364,6 @@ class DefectMapController {
         reportStage.setOnHidden {
             println("📊 Окно отчёта закрыто")
         }
-
-        defectTypeCombo.valueProperty().addListener { _, _, _ -> updatePreview() }  // ← ДОБАВИТЬ
     }
 
     private fun filterReportData(
