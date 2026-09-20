@@ -1092,6 +1092,53 @@ class DefectMapController {
               transform: translate(-50%, -50%) scale(1.2);
           }
           .edit-mode #container { cursor: crosshair; }
+
+          /* ===== ПУЛЬСАЦИЯ И ПОДСВЕТКА МАРКЕРА ===== */
+          @keyframes defectmap-pulse {
+              0% {
+                  box-shadow:
+                      0 0 0 4px rgba(255, 235, 59, 0.45),
+                      0 0 20px 8px rgba(255, 235, 59, 0.85),
+                      0 0 40px 14px rgba(255, 200, 0, 0.45);
+              }
+              50% {
+                  box-shadow:
+                      0 0 0 8px rgba(255, 235, 59, 0.55),
+                      0 0 30px 14px rgba(255, 235, 59, 0.95),
+                      0 0 60px 22px rgba(255, 200, 0, 0.60);
+              }
+              100% {
+                  box-shadow:
+                      0 0 0 4px rgba(255, 235, 59, 0.45),
+                      0 0 20px 8px rgba(255, 235, 59, 0.85),
+                      0 0 40px 14px rgba(255, 200, 0, 0.45);
+              }
+          }
+
+          /* Подсветка контейнера: только масштаб и z-index */
+          .equipment-marker.highlighted {
+              transform: translate(-50%, -50%) scale(1.6) !important;
+              z-index: 9999 !important;
+              pointer-events: none;
+          }
+
+          /* Подсветка самого кружка .dot: рамка + пульсация */
+          .equipment-marker.highlighted .dot {
+              border: 3px solid #ffeb3b !important;
+              border-radius: 50%;
+              animation: defectmap-pulse 1.2s ease-in-out infinite;
+              transition: all 0.25s ease;
+          }
+
+          /* Если маркер скрыт, но его подсвечивают — показываем */
+          .equipment-marker.hidden.highlighted .dot {
+              opacity: 1 !important;
+              pointer-events: none;
+          }
+          .equipment-marker.hidden.highlighted .tooltip-text {
+              opacity: 1 !important;
+              visibility: visible !important;
+          }
         </style>
       </head>
       <body>
@@ -2921,7 +2968,7 @@ class DefectMapController {
 
                 val mainLayout = VBox(15.0)
                 mainLayout.style = "-fx-background-color: white; -fx-padding: 20px;"
-                mainLayout.prefWidth = 1080.0   // ← ШИРЕ
+                mainLayout.prefWidth = 1080.0
                 mainLayout.prefHeight = 780.0
 
                 val headerLabel = Label("📋 СПИСОК ОБОРУДОВАНИЯ")
@@ -2944,46 +2991,40 @@ class DefectMapController {
                 countLabel.style = "-fx-text-fill: #6c757d; -fx-font-size: 13px; -fx-padding: 0 10px;"
 
                 val searchField = TextField()
-                searchField.promptText = "🔍 Поиск по названию или ID..."
+                searchField.promptText = "🔍 Поиск по названию..."
                 searchField.style = "-fx-pref-width: 250px; -fx-font-size: 13px; -fx-padding: 6px 10px; -fx-background-radius: 4px; -fx-border-color: #ced4da; -fx-border-radius: 4px;"
 
                 val tableView = TableView<EquipmentTableItem>()
                 tableView.style = "-fx-font-size: 13px; -fx-border-color: #dee2e6;"
 
+                // ===== КОЛОНКИ =====
                 val colNumber = TableColumn<EquipmentTableItem, Int>("№")
                 colNumber.cellValueFactory = PropertyValueFactory("number")
-                colNumber.prefWidth = 45.0
+                colNumber.prefWidth = 50.0
+                colNumber.minWidth = 50.0
+                colNumber.maxWidth = 50.0
                 colNumber.style = "-fx-alignment: CENTER;"
 
                 val colName = TableColumn<EquipmentTableItem, String>("Наименование")
                 colName.cellValueFactory = PropertyValueFactory("name")
-                colName.prefWidth = 200.0
+                colName.prefWidth = 420.0
+                colName.minWidth = 200.0
 
                 val colType = TableColumn<EquipmentTableItem, String>("Тип")
                 colType.cellValueFactory = PropertyValueFactory("type")
-                colType.prefWidth = 180.0
+                colType.prefWidth = 300.0
+                colType.minWidth = 150.0
 
                 val colCell = TableColumn<EquipmentTableItem, String>("Ячейка")
                 colCell.cellValueFactory = PropertyValueFactory("cell")
-                colCell.prefWidth = 70.0
+                colCell.prefWidth = 120.0
+                colCell.minWidth = 80.0
                 colCell.style = "-fx-alignment: CENTER;"
 
-                val colX = TableColumn<EquipmentTableItem, Double>("X%")
-                colX.cellValueFactory = PropertyValueFactory("left")
-                colX.prefWidth = 60.0
-                colX.style = "-fx-alignment: CENTER;"
-
-                val colY = TableColumn<EquipmentTableItem, Double>("Y%")
-                colY.cellValueFactory = PropertyValueFactory("top")
-                colY.prefWidth = 60.0
-                colY.style = "-fx-alignment: CENTER;"
-
-                val colId = TableColumn<EquipmentTableItem, String>("ID")
-                colId.cellValueFactory = PropertyValueFactory("id")
-                colId.prefWidth = 120.0
-
                 val colActions = TableColumn<EquipmentTableItem, Void>("Действие")
-                colActions.prefWidth = 80.0
+                colActions.prefWidth = 90.0
+                colActions.minWidth = 90.0
+                colActions.maxWidth = 90.0
                 colActions.style = "-fx-alignment: CENTER;"
 
                 colActions.setCellFactory {
@@ -3067,8 +3108,12 @@ class DefectMapController {
                 }
 
                 tableView.columns.addAll(
-                    colNumber, colName, colType, colCell, colX, colY, colId, colActions
+                    colNumber, colName, colType, colCell, colActions
                 )
+
+                // ===== РАСТЯГИВАЕМ ТАБЛИЦУ ПО ШИРИНЕ =====
+                tableView.columnResizePolicy =
+                    javafx.scene.control.TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN
 
                 fun toTableItems(data: List<EquipmentData>): List<EquipmentTableItem> {
                     return data.mapIndexed { index, item ->
@@ -3138,15 +3183,6 @@ class DefectMapController {
                     applyFilter()
                 }
 
-                tableView.setOnMouseClicked { event ->
-                    if (event.clickCount == 2) {
-                        val selected = tableView.selectionModel.selectedItem
-                        if (selected != null) {
-                            showEquipmentOnMap(selected.id)
-                            (tableView.scene.window as Stage).close()
-                        }
-                    }
-                }
 
                 tableView.style = """
                 -fx-font-size: 13px;
@@ -3199,6 +3235,42 @@ class DefectMapController {
                 contextMenu.items.addAll(editMenuItem, showMenuItem)
 
                 tableView.setOnMouseClicked { event ->
+                    // ===== Двойной клик — открыть карточку =====
+                    if (event.clickCount == 2 && event.button == javafx.scene.input.MouseButton.PRIMARY) {
+                        val selected = tableView.selectionModel.selectedItem
+                        if (selected != null) {
+                            val equipment = loadEquipment().find { it.id == selected.id }
+                            if (equipment != null) {
+                                val cardController = EquipmentCardController(
+                                    equipment = equipment,
+                                    database = database,
+                                    onDefectChanged = {
+                                        val updatedData = loadEquipment()
+                                        val updatedItems = updatedData.mapIndexed { index, eq ->
+                                            val typeDisplayName = EquipmentTypes.ALL_TYPES.toMap()[eq.type] ?: eq.type
+                                            EquipmentTableItem(
+                                                number = index + 1,
+                                                id = eq.id,
+                                                name = eq.name,
+                                                type = typeDisplayName,
+                                                cell = eq.cell,
+                                                left = eq.left,
+                                                top = eq.top
+                                            )
+                                        }
+                                        tableView.items = FXCollections.observableArrayList(updatedItems)
+                                        countLabel.text = "Показано: ${updatedData.size} из ${allEquipment.size}"
+                                    }
+                                )
+                                cardController.show()
+                                // окно списка НЕ закрываем
+                            } else {
+                                showError("Оборудование не найдено")
+                            }
+                        }
+                    }
+
+                    // ===== ПКМ — выбрать строку под курсором (для контекстного меню) =====
                     if (event.isSecondaryButtonDown) {
                         val row = tableView.lookup(".table-row-cell") as? TableRow<*>?
                         if (row != null && row.item != null) {
@@ -3263,28 +3335,146 @@ class DefectMapController {
     }
 
     private fun showEquipmentOnMap(equipmentId: String) {
+        println("📍 Показать на карте: $equipmentId")
+
+        val escapedId = equipmentId.replace("'", "\\'")
+
+        // ===== Шаг 1. Сброс зума и панорамы + поиск маркера + расчёт сдвига для центрирования =====
+        val jsonResult = webView.engine.executeScript("""
+        (function() {
+            var id = '$escapedId';
+            var wrapper = document.getElementById('image-wrapper');
+            var container = document.getElementById('container');
+
+            if (!wrapper || !container) {
+                return JSON.stringify({ error: 'wrapper_or_container_not_found' });
+            }
+
+            // Сброс трансформа, чтобы замеры были честными
+            wrapper.style.transform = 'translate(0px, 0px) scale(1)';
+            wrapper.style.transformOrigin = 'center center';
+
+            // Ищем маркер по data-equipment-id
+            var marker = document.querySelector('[data-equipment-id="' + id + '"]');
+            if (!marker) {
+                return JSON.stringify({ error: 'marker_not_found', id: id });
+            }
+
+            // Замеряем положение
+            var containerRect = container.getBoundingClientRect();
+            var markerRect = marker.getBoundingClientRect();
+
+            var markerCenterX = markerRect.left + markerRect.width / 2;
+            var markerCenterY = markerRect.top + markerRect.height / 2;
+            var containerCenterX = containerRect.left + containerRect.width / 2;
+            var containerCenterY = containerRect.top + containerRect.height / 2;
+
+            var dx = containerCenterX - markerCenterX;
+            var dy = containerCenterY - markerCenterY;
+
+            // Запоминаем, был ли маркер скрыт
+            var wasHidden = marker.classList.contains('hidden');
+
+            return JSON.stringify({
+                dx: dx,
+                dy: dy,
+                wasHidden: wasHidden,
+                markerId: marker.id || null,
+                found: true
+            });
+        })();
+    """.trimIndent()) as? String
+
+        if (jsonResult == null || jsonResult.contains("\"error\"")) {
+            println("⚠️ Не удалось найти маркер: $jsonResult")
+            showToast("⚠️ Маркер не найден на схеме")
+            return
+        }
+
+        val mapType = object : TypeToken<Map<String, Any>>() {}.type
+        val data: Map<String, Any> = try {
+            gson.fromJson(jsonResult, mapType)
+        } catch (e: Exception) {
+            println("❌ Ошибка парсинга JSON центрирования: ${e.message}")
+            return
+        }
+
+        val dx = (data["dx"] as? Double) ?: 0.0
+        val dy = (data["dy"] as? Double) ?: 0.0
+        val wasHidden = (data["wasHidden"] as? Boolean) ?: false
+
+        // ===== Шаг 2. Применяем сдвиг в Kotlin-переменных и в DOM =====
+        currentTranslateX = dx
+        currentTranslateY = dy
+        zoomLevel = 1.0
+
         webView.engine.executeScript("""
-            (function() {
-                var id = '$equipmentId';
-                var marker = document.getElementById(id);
-                if (!marker) {
-                    var oldId = id.replace('equipment-', 'marker-');
-                    marker = document.getElementById(oldId);
-                }
-                if (marker) {
-                    var originalTransform = marker.style.transform;
-                    marker.style.transform = 'translate(-50%, -50%) scale(2)';
-                    marker.style.boxShadow = '0 0 30px rgba(255,255,0,0.8)';
-                    marker.style.border = '3px solid yellow';
-                    setTimeout(function() {
-                        marker.style.transform = originalTransform;
-                        marker.style.boxShadow = '';
-                        marker.style.border = '';
-                    }, 3000);
-                    marker.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            })();
-        """.trimIndent())
+        (function() {
+            var wrapper = document.getElementById('image-wrapper');
+            if (wrapper) {
+                wrapper.style.transform = 'translate(${dx}px, ${dy}px) scale(1)';
+                wrapper.style.transformOrigin = 'center center';
+            }
+        })();
+    """.trimIndent())
+
+        // ===== Шаг 3. Подсветка маркера =====
+        webView.engine.executeScript("""
+    (function() {
+        var id = '$escapedId';
+        var marker = document.querySelector('[data-equipment-id="' + id + '"]');
+        if (!marker) return;
+
+        var dot = marker.querySelector('.dot');
+        if (!dot) return;
+
+        var wasHidden = ${if (wasHidden) "true" else "false"};
+        if (wasHidden) {
+            marker.classList.remove('hidden');
+        }
+
+        // Сохраняем исходные стили
+        var origMarkerTransform = marker.style.transform;
+        var origMarkerZIndex = marker.style.zIndex;
+        var origDotBoxShadow = dot.style.boxShadow;
+        var origDotBorder = dot.style.border;
+        var origDotTransform = dot.style.transform;
+
+        // Подсветка: круглая, по контуру .dot
+        marker.style.zIndex = '9999';
+        marker.style.transform = 'translate(-50%, -50%) scale(1.6)';
+
+        dot.style.borderRadius = '50%';
+        dot.style.border = '3px solid #ffeb3b';
+        dot.style.boxShadow =
+            '0 0 0 6px rgba(255, 235, 59, 0.35), ' +
+            '0 0 24px 10px rgba(255, 235, 59, 0.85), ' +
+            '0 0 48px 18px rgba(255, 200, 0, 0.55)';
+        dot.style.transition = 'all 0.25s ease';
+
+        // Пульсация (по желанию)
+        dot.style.animation = 'defectmap-pulse 1.2s ease-in-out infinite';
+
+        // Через 3 секунды вернуть всё назад
+        setTimeout(function() {
+            marker.style.transform = origMarkerTransform;
+            marker.style.zIndex = origMarkerZIndex;
+
+            dot.style.boxShadow = origDotBoxShadow;
+            dot.style.border = origDotBorder;
+            dot.style.transform = origDotTransform;
+            dot.style.animation = '';
+
+            if (wasHidden) {
+                marker.classList.add('hidden');
+            }
+        }, 3000);
+
+        console.log('✅ Подсвечен маркер: ' + id);
+    })();
+""".trimIndent())
+
+        showToast("📍 ${equipmentId}")
     }
 
     private fun addMarkerToEquipment(equipmentId: String) {
