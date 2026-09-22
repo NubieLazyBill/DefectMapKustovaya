@@ -378,7 +378,7 @@ class EquipmentCardController(
         // 2. Пробуем загрузить из папки images рядом с JAR (для портативной версии)
         imagePath?.let {
             try {
-                val file = File("images/$it")
+                val file = File(AppPaths.imagesDir, it)
                 if (file.exists()) {
                     return Image(file.toURI().toURL().toExternalForm())
                 }
@@ -399,7 +399,7 @@ class EquipmentCardController(
 
         // 4. Fallback: equipment.jpg из папки images
         try {
-            val file = File("images/equipment.jpg")
+            val file = File(AppPaths.imagesDir, "equipment.jpg")
             if (file.exists()) {
                 return Image(file.toURI().toURL().toExternalForm())
             }
@@ -444,7 +444,7 @@ class EquipmentCardController(
         imagePath?.let {
             val url = javaClass.getResource("/org/example/defectmap/$it")
             if (url != null) return Image(url.toExternalForm())
-            val file = File("images/$it")
+            val file = File(AppPaths.imagesDir, it)
             if (file.exists()) return Image(file.toURI().toURL().toExternalForm())
         }
 

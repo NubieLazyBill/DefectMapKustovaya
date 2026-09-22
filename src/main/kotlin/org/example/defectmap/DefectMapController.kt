@@ -738,40 +738,48 @@ class DefectMapController {
         try {
             val fileName = "schema_$substationKey.svg"
 
-            // 1. Ресурсы JAR
+            // 1. schemas/ рядом с JAR — ПРИОРИТЕТ
+            val externalFile = AppPaths.schemaFile(substationKey)
+            if (externalFile.exists()) {
+                val svgContent = externalFile.readText()
+                webView.engine.loadContent(buildSvgHtml(svgContent))
+                println("✅ SVG загружен из schemas/: ${externalFile.absolutePath}")
+                return
+            }
+
+            // 2. Ресурсы JAR (зашито при сборке — для совместимости)
             val svgResource = javaClass.getResource("/org/example/defectmap/$fileName")
             if (svgResource != null) {
                 val svgContent = svgResource.readText()
                 webView.engine.loadContent(buildSvgHtml(svgContent))
-                println("✅ SVG загружен из ресурсов: $fileName")
+                println("✅ SVG загружен из ресурсов JAR: $fileName")
                 return
             }
 
-            // 2. Файловая система
-            val svgFile = File("src/main/resources/org/example/defectmap/$fileName")
-            if (svgFile.exists()) {
-                val svgContent = svgFile.readText()
+            // 3. Файловая система проекта (для отладки из IDE)
+            val projectFile = File("src/main/resources/org/example/defectmap/$fileName")
+            if (projectFile.exists()) {
+                val svgContent = projectFile.readText()
                 webView.engine.loadContent(buildSvgHtml(svgContent))
-                println("✅ SVG загружен из ФС: ${svgFile.absolutePath}")
+                println("✅ SVG загружен из проекта: ${projectFile.absolutePath}")
                 return
             }
 
-            // 3. Рядом с JAR
-            val jarSvgFile = File(fileName)
-            if (jarSvgFile.exists()) {
-                val svgContent = jarSvgFile.readText()
+            // 4. Fallback — schemas/schema.svg рядом с JAR
+            val fallbackApp = AppPaths.fallbackSchemaFile()
+            if (fallbackApp.exists()) {
+                val svgContent = fallbackApp.readText()
                 webView.engine.loadContent(buildSvgHtml(svgContent))
-                println("✅ SVG загружен рядом с JAR: ${jarSvgFile.absolutePath}")
+                println("✅ SVG загружен из schemas/schema.svg: ${fallbackApp.absolutePath}")
                 return
             }
 
-            // 4. Fallback
-            println("⚠️ Не найдена схема '$fileName', пробую fallback schema.svg")
-            val fallback = javaClass.getResource("/org/example/defectmap/schema.svg")
-            if (fallback != null) {
-                val svgContent = fallback.readText()
+            // 5. Fallback — schema.svg из ресурсов JAR
+            val fallbackResource = javaClass.getResource("/org/example/defectmap/schema.svg")
+            if (fallbackResource != null) {
+                val svgContent = fallbackResource.readText()
                 webView.engine.loadContent(buildSvgHtml(svgContent))
-                println("✅ SVG загружен из fallback: schema.svg")
+                println("✅ SVG загружен из fallback (ресурсы JAR): schema.svg")
                 return
             }
 
@@ -781,15 +789,14 @@ class DefectMapController {
             e.printStackTrace()
         }
 
-        // 5. Совсем ничего не нашли — грузим пустую HTML, чтобы WebView перезагрузился
-        println("❌ Не найдена ни одна схема для ПС '$substationKey' — гружу пустую схему")
+        // 6. Совсем ничего не нашли — заглушка
         val emptyHtml = """
     <!DOCTYPE html>
     <html>
       <head><style>body { font-family: sans-serif; padding: 40px; color: #999; }</style></head>
       <body>
         <h2>⚠️ Схема для ПС '$substationKey' не найдена</h2>
-        <p>Положите файл <code>schema_${substationKey}.svg</code> в resources.</p>
+        <p>Положите файл <code>schema_${substationKey}.svg</code> в папку <code>schemas/</code> рядом с приложением.</p>
       </body>
     </html>
 """.trimIndent()
@@ -4125,7 +4132,7 @@ class DefectMapController {
                 result[type] = url.toExternalForm()
             } else {
                 // Пробуем файловую систему
-                val file = File("images/$fileName")
+                val file = File(AppPaths.imagesDir, fileName)
                 if (file.exists()) {
                     result[type] = file.toURI().toURL().toExternalForm()
                 }
