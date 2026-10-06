@@ -644,6 +644,26 @@ class DefectMapController {
 
         toggleMarkersMenuItem.text = if (markersVisible) "👁️ Скрыть маркеры" else "👁️ Показать маркеры"
 
+        val openSchemasItem = MenuItem("📂 Открыть папку schemas")
+        openSchemasItem.setOnAction {
+            AppPaths.schemasDir.mkdirs()
+            val opened = AppPaths.openFolder(AppPaths.schemasDir)
+            if (!opened) {
+                showError("Не удалось открыть папку:\n${AppPaths.schemasDir.absolutePath}")
+            }
+        }
+        devMenuBtn.items.add(openSchemasItem)
+
+        val openImagesItem = MenuItem("📂 Открыть папку images")
+        openImagesItem.setOnAction {
+            AppPaths.imagesDir.mkdirs()
+            val opened = AppPaths.openFolder(AppPaths.imagesDir)
+            if (!opened) {
+                showError("Не удалось открыть папку:\n${AppPaths.imagesDir.absolutePath}")
+            }
+        }
+        devMenuBtn.items.add(openImagesItem)
+
         // ===== ОБРАБОТЧИК ДЛЯ УПРАВЛЕНИЯ ТИПАМИ =====
         manageTypesMenuItem.setOnAction { showManageTypesDialog() }
 
@@ -686,6 +706,16 @@ class DefectMapController {
         val switchSubstationItem = MenuItem("🔌 Сменить подстанцию")
         switchSubstationItem.setOnAction { showSwitchSubstationDialog() }
         devMenuBtn.items.add(switchSubstationItem)
+
+        // ===== НОВЫЙ ПУНКТ: добавить ПС =====
+        val addSubstationItem = MenuItem("➕ Добавить подстанцию")
+        addSubstationItem.setOnAction { showAddSubstationDialog() }
+        devMenuBtn.items.add(addSubstationItem)
+
+        // Пункт меню "Удалить подстанцию"
+        val removeSubstationItem = MenuItem("🗑️ Удалить подстанцию")
+        removeSubstationItem.setOnAction { showRemoveSubstationDialog() }
+        devMenuBtn.items.add(removeSubstationItem)
 
         // ===== Пункты меню для масштаба маркеров =====
         devMenuBtn.items.add(javafx.scene.control.SeparatorMenuItem())
@@ -824,6 +854,173 @@ class DefectMapController {
         }
 
         switchSubstation(newSub)
+    }
+
+    private fun showAddSubstationDialog() {
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "➕ Добавить подстанцию"
+        dialog.headerText = "Введите название новой ПС"
+
+        val content = VBox(12.0)
+        content.style = "-fx-padding: 20px; -fx-pref-width: 540px;"
+
+        val nameField = TextField()
+        nameField.promptText = "Например: Новая ПС"
+        nameField.style = "-fx-padding: 8px; -fx-font-size: 14px;"
+
+        val keyLabel = Label("Ключ: —")
+        keyLabel.style = "-fx-font-family: 'Consolas', monospace; -fx-text-fill: #007bff; -fx-font-size: 13px;"
+
+        val schemaLabel = Label("Файл схемы: —")
+        schemaLabel.style = "-fx-font-family: 'Consolas', monospace; -fx-text-fill: #28a745; -fx-font-size: 13px;"
+
+        val hint = Label(
+            "💡 После добавления положите SVG-файл со схемой в папку schemas/ " +
+                    "рядом с приложением. Имя файла — точь-в-точь как указано выше."
+        )
+        hint.style = "-fx-text-fill: #6c757d; -fx-font-size: 11px; -fx-wrap-text: true;"
+        hint.maxWidth = 500.0
+        hint.isWrapText = true
+
+        // ===== Кнопка «Открыть папку schemas» =====
+        val openSchemasBtn = Button("📂 Открыть папку schemas")
+        openSchemasBtn.style = """
+        -fx-background-color: #17a2b8;
+        -fx-text-fill: white;
+        -fx-padding: 6px 14px;
+        -fx-background-radius: 4px;
+        -fx-font-size: 12px;
+        -fx-cursor: hand;
+    """.trimIndent()
+        openSchemasBtn.setOnAction {
+            AppPaths.schemasDir.mkdirs()
+            val opened = AppPaths.openFolder(AppPaths.schemasDir)
+            if (!opened) {
+                showError("Не удалось открыть папку:\n${AppPaths.schemasDir.absolutePath}")
+            }
+        }
+
+        val schemasPathLabel = Label(AppPaths.schemasDir.absolutePath)
+        schemasPathLabel.style = "-fx-font-family: 'Consolas', monospace; -fx-text-fill: #6c757d; -fx-font-size: 10px;"
+        schemasPathLabel.isWrapText = true
+        schemasPathLabel.maxWidth = 500.0
+
+        val pathBox = VBox(4.0, schemasPathLabel, openSchemasBtn)
+        pathBox.style = "-fx-padding: 8px 0 0 0;"
+
+        // Пересчёт ключа и имени файла «на лету»
+        nameField.textProperty().addListener { _, _, newValue ->
+            val trimmed = newValue.trim()
+            if (trimmed.isEmpty()) {
+                keyLabel.text = "Ключ: —"
+                schemaLabel.text = "Файл схемы: —"
+            } else {
+                val key = Substations.generateKey(trimmed)
+                keyLabel.text = "Ключ: $key"
+                schemaLabel.text = "Файл схемы: schemas${File.separator}schema_$key.svg"
+            }
+        }
+
+        content.children.addAll(
+            Label("Название ПС:"), nameField,
+            keyLabel,
+            schemaLabel,
+            hint,
+            pathBox
+        )
+
+        dialog.dialogPane.content = content
+        dialog.dialogPane.buttonTypes.addAll(ButtonType.OK, ButtonType.CANCEL)
+
+        dialog.showAndWait().ifPresent { result ->
+            if (result == ButtonType.OK) {
+                val displayName = nameField.text.trim()
+                if (displayName.isEmpty()) {
+                    showError("Введите название ПС")
+                    return@ifPresent
+                }
+
+                val key = Substations.generateKey(displayName)
+
+                if (Substations.ALL.any { it.key == key }) {
+                    showError("ПС с ключом '$key' уже существует")
+                    return@ifPresent
+                }
+                if (Substations.ALL.any { it.displayName.equals(displayName, ignoreCase = true) }) {
+                    showError("ПС с названием '$displayName' уже существует")
+                    return@ifPresent
+                }
+
+                val newSub = Substation(key = key, displayName = displayName)
+                val added = Substations.add(newSub)
+                if (!added) {
+                    showError("Не удалось добавить ПС (ключ занят)")
+                    return@ifPresent
+                }
+
+                AppPaths.schemasDir.mkdirs()
+
+                println("➕ Добавлена ПС: ${newSub.displayName} (key=${newSub.key})")
+
+                showSubstationAddedDialog(newSub)
+            }
+        }
+    }
+
+    private fun showRemoveSubstationDialog() {
+        if (Substations.ALL.size <= 1) {
+            showInfo("⚠️ Нельзя удалить единственную ПС")
+            return
+        }
+
+        val choices = Substations.ALL.map { "${it.displayName} (${it.key})" }
+        val dialog = ChoiceDialog(choices.first(), choices)
+        dialog.title = "🗑️ Удалить подстанцию"
+        dialog.headerText = "Выберите ПС для удаления"
+        dialog.contentText = "Подстанция:"
+
+        val result = dialog.showAndWait()
+        if (result.isEmpty) return
+
+        val selected = result.get()
+        val key = selected.substringAfter("(").substringBefore(")").trim()
+        val sub = Substations.byKey(key) ?: return
+
+        if (sub.key == currentSubstation.key) {
+            showError("Нельзя удалить текущую открытую ПС. Сначала переключитесь на другую.")
+            return
+        }
+
+        val confirm = Alert(AlertType.CONFIRMATION)
+        confirm.title = "Удаление ПС"
+        confirm.headerText = "Удалить '${sub.displayName}'?"
+        confirm.contentText = """
+        Будут удалены:
+        • запись из substations.json
+        • файл БД equipment_${sub.key}.db
+        • папка бэкапов backups/${sub.key}
+        • файл схемы schemas/schema_${sub.key}.svg
+
+        Продолжить?
+    """.trimIndent()
+
+        val confirmResult = confirm.showAndWait()
+        if (confirmResult.isEmpty || confirmResult.get() != ButtonType.OK) return
+
+        // 1. Удаляем из списка
+        Substations.remove(sub.key)
+
+        // 2. Удаляем файлы
+        try {
+            File(AppPaths.appDir, "equipment_${sub.key}.db").delete()
+            File(AppPaths.appDir, "backups${File.separator}${sub.key}").deleteRecursively()
+            File(AppPaths.schemasDir, "schema_${sub.key}.svg").delete()
+            println("🗑️ Удалены файлы ПС: ${sub.key}")
+        } catch (e: Exception) {
+            println("⚠️ Ошибка удаления файлов ПС: ${e.message}")
+        }
+
+        showToast("🗑️ ПС удалена: ${sub.displayName}")
     }
 
     private fun switchSubstation(newSub: Substation) {
@@ -1534,10 +1731,33 @@ class DefectMapController {
                         val cardController = EquipmentCardController(
                             equipment = equipment,
                             database = database,
-                            onDefectChanged = { }
+                            onDefectChanged = {
+                                // Обновляем список дефектов, если в карточке что-то поменялось
+                                val freshDefects = mutableListOf<DefectViewItem>()
+                                loadEquipment().forEach { eq ->
+                                    database.getDefectsByEquipment(eq.id).forEach { defect ->
+                                        freshDefects.add(
+                                            DefectViewItem(
+                                                equipmentName = eq.name,
+                                                cell = eq.cell,
+                                                defectName = defect.name,
+                                                description = defect.description,
+                                                status = defect.status,
+                                                equipmentId = eq.id,
+                                                defectId = defect.id
+                                            )
+                                        )
+                                    }
+                                }
+                                // Обновляем исходный список и переприменяем фильтр
+                                allDefects.clear()
+                                allDefects.addAll(freshDefects)
+                                applyFilter()
+                                headerLabel.text = "📊 ВСЕ ДЕФЕКТЫ (${allDefects.size})"
+                            }
                         )
                         cardController.show()
-                        (tableView.scene.window as Stage).close()
+                        // окно списка дефектов НЕ закрываем
                     }
                 }
             }
@@ -3618,6 +3838,78 @@ class DefectMapController {
                 showAndWait()
             }
         }
+    }
+
+    private fun showSubstationAddedDialog(newSub: Substation) {
+        val schemaPath = File(AppPaths.schemasDir, "schema_${newSub.key}.svg")
+
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "✅ ПС добавлена"
+        dialog.headerText = "Подстанция «${newSub.displayName}» добавлена"
+
+        val content = VBox(12.0)
+        content.style = "-fx-padding: 20px; -fx-pref-width: 580px;"
+
+        val keyLabel = Label("Ключ: ${newSub.key}")
+        keyLabel.style = "-fx-font-family: 'Consolas', monospace; -fx-font-size: 13px; -fx-text-fill: #007bff;"
+
+        val fileLabel = Label("Имя файла схемы: schema_${newSub.key}.svg")
+        fileLabel.style = "-fx-font-family: 'Consolas', monospace; -fx-font-size: 13px; -fx-text-fill: #28a745;"
+
+        val hint = Label(
+            "Положите SVG-файл со схемой в папку schemas/ рядом с приложением. " +
+                    "Файл должен называться точно так, как указано выше."
+        )
+        hint.style = "-fx-text-fill: #6c757d; -fx-font-size: 11px; -fx-wrap-text: true;"
+        hint.maxWidth = 540.0
+        hint.isWrapText = true
+
+        val pathLabel = Label(schemaPath.absolutePath)
+        pathLabel.style = "-fx-font-family: 'Consolas', monospace; -fx-font-size: 11px; -fx-text-fill: #333; -fx-background-color: #f8f9fa; -fx-padding: 8px; -fx-border-color: #dee2e6; -fx-border-radius: 4px; -fx-background-radius: 4px;"
+        pathLabel.isWrapText = true
+        pathLabel.maxWidth = 540.0
+
+        val openSchemasBtn = Button("📂 Открыть папку schemas")
+        openSchemasBtn.style = """
+        -fx-background-color: #17a2b8;
+        -fx-text-fill: white;
+        -fx-padding: 8px 18px;
+        -fx-background-radius: 4px;
+        -fx-font-size: 13px;
+        -fx-font-weight: bold;
+        -fx-cursor: hand;
+    """.trimIndent()
+        openSchemasBtn.setOnAction {
+            AppPaths.schemasDir.mkdirs()
+            val opened = AppPaths.openFolder(AppPaths.schemasDir)
+            if (!opened) {
+                showError("Не удалось открыть папку:\n${AppPaths.schemasDir.absolutePath}")
+            }
+        }
+
+        val nextSteps = Label(
+            "После того как схема будет на месте:\n" +
+                    "1. Закройте это окно\n" +
+                    "2. Меню → 🔌 Сменить подстанцию\n" +
+                    "3. Выберите «${newSub.displayName}»"
+        )
+        nextSteps.style = "-fx-text-fill: #6c757d; -fx-font-size: 11px; -fx-wrap-text: true;"
+        nextSteps.maxWidth = 540.0
+        nextSteps.isWrapText = true
+
+        content.children.addAll(
+            keyLabel,
+            fileLabel,
+            hint,
+            pathLabel,
+            openSchemasBtn,
+            nextSteps
+        )
+
+        dialog.dialogPane.content = content
+        dialog.dialogPane.buttonTypes.add(ButtonType.OK)
+
+        dialog.showAndWait()
     }
 
     private fun showError(message: String) {

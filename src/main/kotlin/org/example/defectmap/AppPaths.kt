@@ -1,5 +1,6 @@
 package org.example.defectmap
 
+import java.awt.Desktop
 import java.io.File
 
 object AppPaths {
@@ -30,4 +31,29 @@ object AppPaths {
 
     fun schemaFile(substationKey: String): File = File(schemasDir, "schema_$substationKey.svg")
     fun fallbackSchemaFile(): File = File(schemasDir, "schema.svg")
+
+    /**
+     * Открывает папку в системном проводнике.
+     * Если папки нет — создаёт её.
+     * Возвращает true, если удалось открыть.
+     */
+    fun openFolder(folder: File): Boolean {
+        return try {
+            if (!folder.exists()) folder.mkdirs()
+            if (!Desktop.isDesktopSupported()) {
+                println("⚠️ Desktop API не поддерживается")
+                return false
+            }
+            val desktop = Desktop.getDesktop()
+            if (!desktop.isSupported(Desktop.Action.OPEN)) {
+                println("⚠️ Desktop.OPEN не поддерживается")
+                return false
+            }
+            desktop.open(folder)
+            true
+        } catch (e: Exception) {
+            println("⚠️ Не удалось открыть папку ${folder.absolutePath}: ${e.message}")
+            false
+        }
+    }
 }
