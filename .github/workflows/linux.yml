@@ -129,6 +129,13 @@ jobs:
               apt-get update
               apt-get install -y java-17-openjdk-devel git curl tar gzip fontconfig xvfb || true
 
+              # Инструменты, без которых jpackage не соберёт пакеты (проверено на ALT):
+              # binutils -> objcopy для jlink, dpkg+fakeroot -> тип deb,
+              # xdg-utils -> зависимость .deb
+              for pkg in binutils dpkg fakeroot xdg-utils; do
+                apt-get install -y "$pkg" >/dev/null 2>&1 || echo "нет пакета: $pkg"
+              done
+
               # GUI-стек для JavaFX/WebView: имена пакетов в релизах ALT различаются,
               # поэтому пробуем известные варианты, ошибки не фатальны.
               for pkg in libgtk+3 libgtk+3-devel libnss libnss3 libXtst libXrender \
@@ -151,7 +158,9 @@ jobs:
                 || echo "GUI-проверка недоступна в этом контейнере"
 
               echo "=== пакеты, собранные на ALT ==="
-              ./gradlew buildDeb buildRpm buildPortable --console=plain
+              # rpm через jpackage на ALT не поддерживается (см. docs/LINUX-ALT.md),
+              # поэтому rpm не требуем: собираем app-image и .deb.
+              ./gradlew buildPortable buildDeb --console=plain
               ls -la build/dist
             '
 

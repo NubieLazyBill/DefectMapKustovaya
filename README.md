@@ -45,6 +45,43 @@ xvfb-run -a java -jar build/libs/DefectMap.jar --appsmoke --snapshot /tmp/app.pn
 В каталоге данных: `equipment_<ПС>.db`, `substations.json`, `app_settings.json`,
 `backups/`, `schemas/`, `images/`.
 
+## Как получить запускаемый файл
+
+**Windows** (ничего устанавливать не нужно):
+
+```powershell
+.\gradlew shadowJar        # build/libs/DefectMap.jar → java -jar build\libs\DefectMap.jar
+.\gradlew buildPortable    # build/dist/DefectMap/DefectMap.exe (свой runtime)
+```
+
+**Linux — без установки (самое простое):**
+
+| Вариант | Что делать |
+|---|---|
+| AppImage (один файл) | `chmod +x DefectMap-1.1.0-x86_64.AppImage && ./DefectMap-1.1.0-x86_64.AppImage` |
+| без FUSE | `APPIMAGE_EXTRACT_AND_RUN=1 ./DefectMap-1.1.0-x86_64.AppImage` |
+| папка app-image | `build/dist/DefectMap/bin/DefectMap` — просто запустить |
+
+AppImage/app-image ничего не ставят в систему: нужны только базовые
+GTK3/NSS, которые на любом десктопном дистрибутиве уже есть.
+
+**Linux — с установкой (ярлык в меню, `/opt/defectmap`):**
+
+```bash
+sudo apt-get install -y ./build/dist/defectmap_*.deb     # Debian/Ubuntu
+sudo dpkg -i --force-depends build/dist/defectmap_*.deb  # ALT (dpkg не видит rpm-пакеты)
+```
+
+**Совсем без Linux:** CI собирает `.deb`, AppImage и JAR — их можно скачать
+из артефактов прогона GitHub Actions (`.github/workflows/linux.yml`).
+
+**Если маркеры «съехали» после обновления** (старые координаты в БД):
+
+```bash
+./gradlew fixMarkersDryRun   # посмотреть, что изменится
+./gradlew fixMarkers         # применить, бэкап в backups/marker-fix-*
+```
+
 ## Документация
 
 * [docs/LINUX-ALT.md](docs/LINUX-ALT.md) — перенос на ALT Linux: пакеты, сборка `.deb`/`.rpm`/AppImage,

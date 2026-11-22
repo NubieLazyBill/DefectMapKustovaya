@@ -417,3 +417,36 @@ val runAppSmoke by tasks.registering {
         requireCommand(command, "App smoke-test")
     }
 }
+
+// ======================== МИГРАЦИЯ КООРДИНАТ МАРКЕРОВ ========================
+//
+// Старые версии сохраняли `top` маркеров в процентах от окна, а не от схемы
+// (в данных встречаются значения до 190%). Эти задачи пересчитывают координаты
+// в БД, лежащих рядом с проектом, с резервной копией в backups/marker-fix-*.
+
+private fun JavaExec.configureMarkerFix(dryRun: Boolean) {
+    group = "verification"
+    mainClass.set(appMainClass)
+    workingDir = projectDir
+    classpath = sourceSets["main"].runtimeClasspath
+    args = buildList {
+        add("--fix-markers")
+        if (dryRun) add("--dry-run")
+    }
+    description = if (dryRun) {
+        "Показать, какие координаты маркеров будут исправлены (--fix-markers --dry-run)"
+    } else {
+        "Пересчитать координаты старых маркеров в БД проекта (--fix-markers, с бэкапом)"
+    }
+    javaLauncher.set(
+        javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(17)) }
+    )
+}
+
+val fixMarkersDryRun by tasks.registering(JavaExec::class) {
+    configureMarkerFix(dryRun = true)
+}
+
+val fixMarkers by tasks.registering(JavaExec::class) {
+    configureMarkerFix(dryRun = false)
+}
