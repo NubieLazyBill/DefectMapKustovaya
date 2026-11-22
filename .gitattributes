@@ -1,0 +1,17 @@
+* text=auto
+
+# Скрипты обязаны иметь LF — иначе bash падает с "bad interpreter: /bin/bash^M"
+*.sh    text eol=lf
+gradlew text eol=lf
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# Бинарные файлы
+*.png   binary
+*.jpg   binary
+*.jfif  binary
+*.ico   binary
+*.icns  binary
+*.jar   binary
+*.db    binary
+*.xlsx  binary

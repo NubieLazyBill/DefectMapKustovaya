@@ -1,0 +1,30 @@
+[
+  {
+    "key": "kustovaya",
+    "displayName": "Кустовая"
+  },
+  {
+    "key": "mirnaya",
+    "displayName": "Мирная"
+  },
+  {
+    "key": "orbita",
+    "displayName": "Орбита"
+  },
+  {
+    "key": "kometa",
+    "displayName": "Комета"
+  },
+  {
+    "key": "kvarts",
+    "displayName": "Кварц"
+  },
+  {
+    "key": "topaz",
+    "displayName": "Топаз"
+  },
+  {
+    "key": "nadezhda",
+    "displayName": "Надежда"
+  }
+]

@@ -11,8 +11,10 @@ import kotlin.io.use
 class Database(private val substationKey: String = "kustovaya") {
     private var connection: Connection? = null
 
-    // ===== ПОРТАТИВНЫЙ ПУТЬ: БД В ПАПКЕ С JAR =====
-    private val APP_DIR: String by lazy { getAppDirectory() }
+    // ===== КРОССПЛАТФОРМЕННЫЙ ПУТЬ: каталог данных из AppPaths =====
+    // На Windows это папка рядом с JAR (портативно), на Linux при установке
+    // из .deb/AppImage — ~/.local/share/defectmap (папка приложения read-only).
+    private val APP_DIR: File by lazy { AppPaths.dataDir }
 
     // Путь к БД зависит от подстанции
     private val DB_PATH: String by lazy {
@@ -48,22 +50,6 @@ class Database(private val substationKey: String = "kustovaya") {
     }
 
     // ======================== ОПРЕДЕЛЕНИЕ ПАПКИ ПРИЛОЖЕНИЯ ========================
-
-    private fun getAppDirectory(): String {
-        return try {
-            val codeSource = Database::class.java.protectionDomain.codeSource
-            val location = codeSource.location.toURI().path
-            val jarFile = File(location)
-
-            if (jarFile.isFile) {
-                jarFile.parent
-            } else {
-                System.getProperty("user.dir")
-            }
-        } catch (e: Exception) {
-            System.getProperty("user.dir")
-        }
-    }
 
     // ======================== ПОДКЛЮЧЕНИЕ ========================
 

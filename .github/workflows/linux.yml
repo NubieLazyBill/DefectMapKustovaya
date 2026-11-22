@@ -1,0 +1,159 @@
+name: Linux build & smoke test
+
+# Собирает и проверяет Linux-артефакты на ubuntu-22.04 (ближайшее к ALT
+# окружение, доступное в GitHub Actions). Для сборки именно под ALT
+# используйте контейнер alt:p10 — см. docs/LINUX-ALT.md.
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'src/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle/**'
+      - 'packaging/**'
+      - '.github/workflows/linux.yml'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    name: Fat JAR + .deb + AppImage
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: JDK 17 (Temurin, с jpackage)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Юнит-тесты
+        run: ./gradlew test --console=plain
+
+      - name: Fat JAR
+        run: ./gradlew shadowJar --console=plain
+
+      - name: Самопроверка без графики (--selftest)
+        run: java -jar build/libs/DefectMap.jar --selftest
+
+      - name: Зависимости для GUI/WebView
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xvfb libgtk-3-0 libnss3 libxrender1 libxtst6 \
+            fonts-liberation fonts-dejavu-core file
+
+      - name: Проверка JavaFX/WebView под Xvfb (--uicheck)
+        run: |
+          mkdir -p build/tmp
+          xvfb-run -a -s "-screen 0 1280x800x24" \
+            java -jar build/libs/DefectMap.jar --uicheck --show --snapshot build/tmp/uicheck.png
+
+      - name: Дымовой тест реального окна (--appsmoke)
+        run: |
+          xvfb-run -a -s "-screen 0 1280x800x24" \
+            java -jar build/libs/DefectMap.jar --appsmoke --snapshot build/tmp/app-smoke.png
+
+      - name: Портативная сборка + .deb
+        run: ./gradlew buildPortable buildDeb --console=plain
+
+      - name: Установка .deb и проверка установленного приложения
+        run: |
+          ls -la build/dist
+          sudo apt-get install -y ./build/dist/defectmap_*.deb
+          echo "--- selftest установленного приложения ---"
+          /opt/defectmap/bin/DefectMap --selftest
+          echo "--- uicheck установленного приложения ---"
+          xvfb-run -a -s "-screen 0 1280x800x24" /opt/defectmap/bin/DefectMap --uicheck
+          echo "--- appsmoke установленного приложения ---"
+          xvfb-run -a -s "-screen 0 1280x800x24" /opt/defectmap/bin/DefectMap --appsmoke
+
+      - name: AppImage
+        run: ./gradlew buildAppImage --console=plain
+
+      - name: Артефакты
+        uses: actions/upload-artifact@v4
+        with:
+          name: defectmap-linux-x86_64
+          path: |
+            build/dist/*.deb
+            build/dist/*.AppImage
+            build/libs/DefectMap.jar
+            build/tmp/uicheck.png
+            build/tmp/app-smoke.png
+          if-no-files-found: error
+
+      - name: Логи при падении
+        if: failure()
+        run: |
+          echo "--- java ---"; java -version || true
+          echo "--- printers ---"; lpstat -p -d || true
+          echo "--- fonts ---"; fc-list | head -n 20 || true
+          echo "--- build dir ---"; ls -la build/dist || true
+
+  # Независимая проверка на настоящем ALT Linux p10 (официальный образ alt:p10).
+  # Ловит то, чего нет в ubuntu-джобе: пакеты ALT, .rpm, glibc/GTK/WebKit ALT.
+  # Нужен только push/PR — локальный Linux не требуется.
+  alt-p10:
+    name: ALT Linux p10 — .deb/.rpm и проверки
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Сборка, selftest и пакеты внутри alt:p10
+        run: |
+          docker run --rm --shm-size=1g \
+            -v "$PWD":/work -w /work \
+            alt:p10 bash -euxo pipefail -c '
+              . /etc/os-release
+              echo "=== $PRETTY_NAME ==="
+              uname -a
+
+              apt-get update
+              apt-get install -y java-17-openjdk-devel git curl tar gzip fontconfig xvfb || true
+
+              # GUI-стек для JavaFX/WebView: имена пакетов в релизах ALT различаются,
+              # поэтому пробуем известные варианты, ошибки не фатальны.
+              for pkg in libgtk+3 libgtk+3-devel libnss libnss3 libXtst libXrender \
+                         libfreetype libfontconfig1 libxcb libXi libXext; do
+                apt-get install -y "$pkg" >/dev/null 2>&1 || echo "нет пакета: $pkg"
+              done
+
+              java -version
+              chmod +x gradlew
+
+              echo "=== тесты и fat JAR на ALT ==="
+              ./gradlew test shadowJar --console=plain
+
+              echo "=== selftest на ALT ==="
+              java -jar build/libs/DefectMap.jar --selftest
+
+              echo "=== GUI-проверка (best-effort: в контейнере может не быть GTK) ==="
+              xvfb-run -a java -jar build/libs/DefectMap.jar --appsmoke \
+                --snapshot build/tmp/app-smoke-alt.png \
+                || echo "GUI-проверка недоступна в этом контейнере"
+
+              echo "=== пакеты, собранные на ALT ==="
+              ./gradlew buildDeb buildRpm buildPortable --console=plain
+              ls -la build/dist
+            '
+
+      - name: Артефакты ALT
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: defectmap-alt-p10
+          path: |
+            build/dist/*.deb
+            build/dist/*.rpm
+            build/tmp/app-smoke-alt.png
+          if-no-files-found: warn

@@ -16,6 +16,9 @@ import javafx.stage.Stage
 import javafx.scene.control.Button
 import javafx.geometry.Pos
 import javafx.scene.input.KeyCode
+import javafx.scene.input.KeyEvent
+import javafx.scene.input.KeyCombination
+import javafx.scene.input.KeyCodeCombination
 import javafx.scene.control.TextInputDialog
 import javafx.scene.control.ChoiceDialog
 import javafx.scene.layout.HBox
@@ -51,6 +54,10 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.ZoneId
 import java.time.Instant
+import org.example.defectmap.platform.UiFonts
+import org.example.defectmap.report.ExcelReportWriter
+import org.example.defectmap.report.ReportItem
+import org.example.defectmap.report.ReportPrinter
 
 class DefectMapController {
     @FXML
@@ -335,11 +342,31 @@ class DefectMapController {
             saveReportToExcel(filtered)
         }
 
+        val printBtn = Button("🖨️ Печать")
+        printBtn.style = "-fx-background-color: #007bff; -fx-text-fill: white; -fx-padding: 8px 20px; -fx-background-radius: 4px; -fx-font-weight: bold; -fx-font-size: 13px;"
+        printBtn.setOnAction {
+            val filtered = filterReportData(
+                reportData,
+                statusCombo.value,
+                typeCombo.value,
+                cellCombo.value ?: "Все ячейки",
+                defectTypeCombo.value,
+                dateFrom.value,
+                dateTo.value
+            )
+            if (filtered.isEmpty()) {
+                showInfo("⚠️ Нет дефектов по выбранным фильтрам")
+                return@setOnAction
+            }
+            // Печать работает и без сети, и без Excel: нужен только принтер в системе
+            printReport(filtered, reportStage)
+        }
+
         val cancelBtn = Button("✕ Закрыть")
         cancelBtn.style = "-fx-background-color: #6c757d; -fx-text-fill: white; -fx-padding: 8px 20px; -fx-background-radius: 4px; -fx-font-size: 13px;"
         cancelBtn.setOnAction { reportStage.close() }
 
-        buttonBox.children.addAll(createBtn, cancelBtn)
+        buttonBox.children.addAll(createBtn, printBtn, cancelBtn)
 
         // ======================== СБОРКА ========================
         root.children.addAll(
@@ -406,224 +433,77 @@ class DefectMapController {
         }
     }
 
+    // ======================== ЭКСПОРТ И ПЕЧАТЬ ОТЧЁТА ========================
+
+    /** Последняя папка сохранения отчёта (на Linux GTK-диалог не запоминает её сам). */
+    private var lastExportDirPath: String? = null
+
     private fun saveReportToExcel(data: List<ReportItem>) {
         try {
-            val sortedData = data.sortedByDescending { it.defectStatus == "Обнаружен" }
-
             val fileChooser = javafx.stage.FileChooser()
             fileChooser.title = "Сохранить отчёт"
             fileChooser.initialFileName = "report_defects_${LocalDate.now()}.xlsx"
+            fileChooser.initialDirectory = lastExportDir()
             fileChooser.extensionFilters.add(
                 javafx.stage.FileChooser.ExtensionFilter("Excel files (*.xlsx)", "*.xlsx")
             )
 
-            val file = fileChooser.showSaveDialog(webView.scene.window)
-            if (file == null) {
+            val owner = webView.scene?.window
+            val chosen = fileChooser.showSaveDialog(owner)
+            if (chosen == null) {
                 println("❌ Сохранение отменено")
                 return
             }
 
-            val workbook = org.apache.poi.xssf.usermodel.XSSFWorkbook()
-            val sheet = workbook.createSheet("Дефекты")
+            // GTK-диалог в Linux не дописывает расширение — делаем это сами
+            val target = ensureXlsxExtension(chosen)
+            lastExportDirPath = target.parentFile?.absolutePath
 
-            val headerStyle = workbook.createCellStyle().apply {
-                val font = workbook.createFont()
-                font.setBold(true)
-                font.fontHeightInPoints = 12
-                font.color = org.apache.poi.ss.usermodel.IndexedColors.WHITE.index
-                setFont(font)
+            ExcelReportWriter.write(data, target)
 
-                fillForegroundColor = org.apache.poi.ss.usermodel.IndexedColors.DARK_BLUE.index
-                fillPattern = org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND
-                alignment = org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER
-                borderBottom = org.apache.poi.ss.usermodel.BorderStyle.THIN
-                borderTop = org.apache.poi.ss.usermodel.BorderStyle.THIN
-                borderLeft = org.apache.poi.ss.usermodel.BorderStyle.THIN
-                borderRight = org.apache.poi.ss.usermodel.BorderStyle.THIN
-            }
-
-            val dataStyle = workbook.createCellStyle().apply {
-                borderBottom = org.apache.poi.ss.usermodel.BorderStyle.THIN
-                borderTop = org.apache.poi.ss.usermodel.BorderStyle.THIN
-                borderLeft = org.apache.poi.ss.usermodel.BorderStyle.THIN
-                borderRight = org.apache.poi.ss.usermodel.BorderStyle.THIN
-                wrapText = true
-                alignment = org.apache.poi.ss.usermodel.HorizontalAlignment.LEFT
-                verticalAlignment = org.apache.poi.ss.usermodel.VerticalAlignment.CENTER
-            }
-
-            val headers = arrayOf(
-                "№", "Оборудование", "В составе", "Тип оборудования", "Ячейка",
-                "Вид дефекта", "Описание", "Статус", "Дата создания", "X%", "Y%"
+            val total = data.size
+            val fixed = data.count { it.defectStatus == "Устранён" }
+            val open = total - fixed
+            showInfo(
+                "✅ Отчёт сохранён:\n${target.absolutePath}\n\n" +
+                    "Всего дефектов: $total\nОбнаружено: $open\nУстранено: $fixed"
             )
-
-            val headerRow = sheet.createRow(0)
-            headers.forEachIndexed { i, title ->
-                val cell = headerRow.createCell(i)
-                cell.setCellValue(title)
-                cell.cellStyle = headerStyle
-            }
-
-            sortedData.forEachIndexed { index, item ->
-                val row = sheet.createRow(index + 1)
-
-                row.createCell(0).apply {
-                    setCellValue((index + 1).toDouble())
-                    cellStyle = dataStyle
-                }
-                row.createCell(1).apply {
-                    setCellValue(item.equipmentName)
-                    cellStyle = dataStyle
-                }
-                // ===== НОВАЯ КОЛОНКА: "В составе" =====
-                row.createCell(2).apply {
-                    setCellValue(item.parentEquipmentName ?: "—")
-                    val parentStyle = if (item.parentEquipmentName != null) {
-                        workbook.createCellStyle().apply {
-                            cloneStyleFrom(dataStyle)
-                            val font = workbook.createFont()
-                            font.italic = true
-                            font.color = org.apache.poi.ss.usermodel.IndexedColors.GREY_50_PERCENT.index
-                            setFont(font)
-                        }
-                    } else {
-                        dataStyle
-                    }
-                    cellStyle = parentStyle
-                }
-                row.createCell(3).apply {
-                    setCellValue(item.equipmentType)
-                    cellStyle = dataStyle
-                }
-                row.createCell(4).apply {
-                    setCellValue(item.equipmentCell)
-                    cellStyle = dataStyle
-                }
-                row.createCell(5).apply {
-                    setCellValue(item.defectName)
-                    cellStyle = dataStyle
-                }
-                row.createCell(6).apply {
-                    setCellValue(item.defectDescription)
-                    cellStyle = dataStyle
-                }
-                row.createCell(7).apply {
-                    setCellValue(item.defectStatus)
-                    val statusStyle = if (item.defectStatus == "Устранён") {
-                        workbook.createCellStyle().apply {
-                            cloneStyleFrom(dataStyle)
-                            val font = workbook.createFont()
-                            font.setBold(true)
-                            font.color = org.apache.poi.ss.usermodel.IndexedColors.GREEN.index
-                            setFont(font)
-                        }
-                    } else {
-                        workbook.createCellStyle().apply {
-                            cloneStyleFrom(dataStyle)
-                            val font = workbook.createFont()
-                            font.setBold(true)
-                            font.color = org.apache.poi.ss.usermodel.IndexedColors.RED.index
-                            setFont(font)
-                        }
-                    }
-                    cellStyle = statusStyle
-                }
-                row.createCell(8).apply {
-                    val dateStr = item.detectionDate?.let {
-                        Instant.ofEpochMilli(it)
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
-                            .format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
-                    } ?: "—"
-                    setCellValue(dateStr)
-                    cellStyle = dataStyle
-                }
-                row.createCell(9).apply {
-                    setCellValue(item.markerLeft?.let { String.format("%.1f", it) } ?: "-")
-                    cellStyle = dataStyle
-                }
-                row.createCell(10).apply {
-                    setCellValue(item.markerTop?.let { String.format("%.1f", it) } ?: "-")
-                    cellStyle = dataStyle
-                }
-            }
-
-            val totalDefects = sortedData.size
-            val fixedDefects = sortedData.count { it.defectStatus == "Устранён" }
-            val openDefects = totalDefects - fixedDefects
-
-            val statsRow = sheet.createRow(sortedData.size + 2)
-            val statsStyle = workbook.createCellStyle().apply {
-                cloneStyleFrom(dataStyle)
-                val font = workbook.createFont()
-                font.setBold(true)
-                font.fontHeightInPoints = 12
-                setFont(font)
-            }
-
-            statsRow.createCell(0).apply {
-                setCellValue("ИТОГО:")
-                cellStyle = statsStyle
-            }
-            statsRow.createCell(1).apply {
-                setCellValue("Всего дефектов: $totalDefects")
-                cellStyle = statsStyle
-            }
-            statsRow.createCell(2).apply {
-                setCellValue("Обнаружено: $openDefects")
-                val style = workbook.createCellStyle().apply {
-                    cloneStyleFrom(statsStyle)
-                    val font = workbook.createFont()
-                    font.setBold(true)
-                    font.color = org.apache.poi.ss.usermodel.IndexedColors.RED.index
-                    setFont(font)
-                }
-                cellStyle = style
-            }
-            statsRow.createCell(3).apply {
-                setCellValue("Устранено: $fixedDefects")
-                val style = workbook.createCellStyle().apply {
-                    cloneStyleFrom(statsStyle)
-                    val font = workbook.createFont()
-                    font.setBold(true)
-                    font.color = org.apache.poi.ss.usermodel.IndexedColors.GREEN.index
-                    setFont(font)
-                }
-                cellStyle = style
-            }
-
-            for (i in 0..10) {
-                sheet.autoSizeColumn(i)
-                val width = sheet.getColumnWidth(i)
-                if (width > 8000) sheet.setColumnWidth(i, 8000)
-                if (width < 3000) sheet.setColumnWidth(i, 3000)
-            }
-
-            workbook.write(file.outputStream())
-            workbook.close()
-
-            showInfo("✅ Отчёт сохранён:\n${file.absolutePath}\n\nВсего дефектов: $totalDefects\nОбнаружено: $openDefects\nУстранено: $fixedDefects")
-            println("✅ Отчёт сохранён: ${file.absolutePath}")
-
+            println("✅ Отчёт сохранён: ${target.absolutePath} ($total записей)")
         } catch (e: Exception) {
             showError("Ошибка сохранения отчёта: ${e.message}")
             e.printStackTrace()
         }
     }
 
-    data class ReportItem(
-        val equipmentName: String,
-        val equipmentType: String,
-        val equipmentCell: String,
-        val defectName: String,
-        val defectDescription: String,
-        val defectStatus: String,
-        val markerLeft: Double?,
-        val markerTop: Double?,
-        val detectionDate: Long?,
-        val parentEquipmentName: String? = null,
-        val rootEquipmentType: String? = null,
-    )
+    /** Печать отчёта через JavaFX PrinterJob: CUPS на Linux, winspool на Windows. */
+    private fun printReport(data: List<ReportItem>, owner: javafx.stage.Window?) {
+        when (val outcome = ReportPrinter.print(data, owner)) {
+            is ReportPrinter.PrintOutcome.Printed ->
+                showInfo("🖨️ Отправлено на печать: ${outcome.pages} стр.\nПринтер: ${outcome.printer}")
+
+            is ReportPrinter.PrintOutcome.NoPrinters ->
+                showError(
+                    "В системе не найден ни один принтер.\n\n" +
+                        "Linux: установите и настройте CUPS (пакет cups, принтер — http://localhost:631).\n" +
+                        "Проверка из консоли: lpstat -p -d"
+                )
+
+            is ReportPrinter.PrintOutcome.Cancelled ->
+                println("ℹ️ Печать отменена пользователем")
+
+            is ReportPrinter.PrintOutcome.Failed ->
+                showError("Не удалось напечатать отчёт:\n${outcome.message}")
+        }
+    }
+
+    private fun ensureXlsxExtension(file: File): File =
+        if (file.name.endsWith(".xlsx", ignoreCase = true)) file
+        else File(file.parentFile ?: AppPaths.dataDir, file.name + ".xlsx")
+
+    private fun lastExportDir(): File {
+        val saved = lastExportDirPath?.let { File(it) }
+        return if (saved != null && saved.isDirectory) saved else AppPaths.documentsDir
+    }
 
     // ======================== ИНИЦИАЛИЗАЦИЯ ========================
 
@@ -681,10 +561,18 @@ class DefectMapController {
         }
 
         webView.setOnKeyPressed { event ->
-            if (event.isControlDown && event.code == KeyCode.S) {
-                saveEquipment()
-                showToast("✅ Данные сохранены")
-                event.consume()
+            when {
+                event.isControlDown && event.code == KeyCode.S -> {
+                    saveEquipment()
+                    showToast("✅ Данные сохранены")
+                    event.consume()
+                }
+                // Запасной путь для Ctrl+0: акселератор может перехватываться WebView
+                event.isControlDown &&
+                    (event.code == KeyCode.DIGIT0 || event.code == KeyCode.NUMPAD0) -> {
+                    resetView()
+                    event.consume()
+                }
             }
         }
 
@@ -699,6 +587,51 @@ class DefectMapController {
                 AppSettings.setLastSubstationKey(currentSubstation.key)
                 database.close()
                 println("✅ Завершено")
+            }
+
+            // Горячие клавиши масштаба схемы. Работают на уровне сцены,
+            // поэтому не зависят от того, перехватывает ли WebView клавиатуру.
+            val accelerators = stage?.scene?.accelerators
+            if (accelerators != null) {
+                accelerators[KeyCodeCombination(KeyCode.PLUS, KeyCombination.CONTROL_DOWN)] =
+                    Runnable { zoomBy(ZOOM_STEP) }
+                accelerators[KeyCodeCombination(KeyCode.EQUALS, KeyCombination.CONTROL_DOWN)] =
+                    Runnable { zoomBy(ZOOM_STEP) }
+                accelerators[KeyCodeCombination(KeyCode.ADD, KeyCombination.CONTROL_DOWN)] =
+                    Runnable { zoomBy(ZOOM_STEP) }
+                accelerators[KeyCodeCombination(KeyCode.MINUS, KeyCombination.CONTROL_DOWN)] =
+                    Runnable { zoomBy(-ZOOM_STEP) }
+                accelerators[KeyCodeCombination(KeyCode.SUBTRACT, KeyCombination.CONTROL_DOWN)] =
+                    Runnable { zoomBy(-ZOOM_STEP) }
+                accelerators[KeyCodeCombination(KeyCode.DIGIT0, KeyCombination.CONTROL_DOWN)] =
+                    Runnable { resetView() }
+                accelerators[KeyCodeCombination(KeyCode.NUMPAD0, KeyCombination.CONTROL_DOWN)] =
+                    Runnable { resetView() }
+                println("⌨️ Горячие клавиши масштаба зарегистрированы: Ctrl + , Ctrl - , Ctrl 0")
+            } else {
+                println("⚠️ Не удалось зарегистрировать горячие клавиши масштаба (нет сцены)")
+            }
+
+            // Фильтр фазы перехвата: WebView забирает Ctrl+0 себе, поэтому
+            // обрабатываем масштаб раньше, чем событие дойдёт до страницы.
+            stage?.scene?.addEventFilter(KeyEvent.KEY_PRESSED) { e ->
+                if (e.isControlDown) {
+                    when (e.code) {
+                        KeyCode.DIGIT0, KeyCode.NUMPAD0 -> {
+                            resetView()
+                            e.consume()
+                        }
+                        KeyCode.PLUS, KeyCode.EQUALS, KeyCode.ADD -> {
+                            zoomBy(ZOOM_STEP)
+                            e.consume()
+                        }
+                        KeyCode.MINUS, KeyCode.SUBTRACT -> {
+                            zoomBy(-ZOOM_STEP)
+                            e.consume()
+                        }
+                        else -> Unit
+                    }
+                }
             }
         }
 
@@ -728,9 +661,24 @@ class DefectMapController {
         decreaseMarkersItem.setOnAction { applyMarkerScale(markerScale - 0.2) }
         devMenuBtn.items.add(decreaseMarkersItem)
 
-        val resetMarkersItem = MenuItem("🔍 Сбросить масштаб (100%)")
+        val resetMarkersItem = MenuItem("🔍 Сбросить масштаб маркеров (100%)")
         resetMarkersItem.setOnAction { applyMarkerScale(1.0) }
         devMenuBtn.items.add(resetMarkersItem)
+
+        // ===== Масштаб схемы: надёжные способы кроме колеса мыши =====
+        devMenuBtn.items.add(javafx.scene.control.SeparatorMenuItem())
+
+        val zoomInItem = MenuItem("🔎 Приблизить схему (Ctrl +)")
+        zoomInItem.setOnAction { zoomBy(ZOOM_STEP) }
+        devMenuBtn.items.add(zoomInItem)
+
+        val zoomOutItem = MenuItem("🔎 Отдалить схему (Ctrl −)")
+        zoomOutItem.setOnAction { zoomBy(-ZOOM_STEP) }
+        devMenuBtn.items.add(zoomOutItem)
+
+        val zoomResetItem = MenuItem("🔎 Масштаб схемы 100% (Ctrl 0)")
+        zoomResetItem.setOnAction { resetView() }
+        devMenuBtn.items.add(zoomResetItem)
     }
 
     // ======================== РЕЖИМ РЕДАКТИРОВАНИЯ ========================
@@ -766,67 +714,35 @@ class DefectMapController {
 
     private fun loadSvgIntoWebViewForSubstation(substationKey: String) {
         try {
-            val fileName = "schema_$substationKey.svg"
-
-            // 1. schemas/ рядом с JAR — ПРИОРИТЕТ
-            val externalFile = AppPaths.schemaFile(substationKey)
-            if (externalFile.exists()) {
-                val svgContent = externalFile.readText()
-                webView.engine.loadContent(buildSvgHtml(svgContent))
-                println("✅ SVG загружен из schemas/: ${externalFile.absolutePath}")
+            // Порядок поиска: dataDir/schemas → appDir/schemas → ресурсы JAR → src/... (IDE)
+            val schema = Schemas.find(substationKey)
+            if (schema != null) {
+                webView.engine.loadContent(buildSvgHtml(schema.content))
+                println("✅ SVG загружен: ${schema.source} (${schema.sizeKb} КБ)")
                 return
             }
-
-            // 2. Ресурсы JAR (зашито при сборке — для совместимости)
-            val svgResource = javaClass.getResource("/org/example/defectmap/$fileName")
-            if (svgResource != null) {
-                val svgContent = svgResource.readText()
-                webView.engine.loadContent(buildSvgHtml(svgContent))
-                println("✅ SVG загружен из ресурсов JAR: $fileName")
-                return
-            }
-
-            // 3. Файловая система проекта (для отладки из IDE)
-            val projectFile = File("src/main/resources/org/example/defectmap/$fileName")
-            if (projectFile.exists()) {
-                val svgContent = projectFile.readText()
-                webView.engine.loadContent(buildSvgHtml(svgContent))
-                println("✅ SVG загружен из проекта: ${projectFile.absolutePath}")
-                return
-            }
-
-            // 4. Fallback — schemas/schema.svg рядом с JAR
-            val fallbackApp = AppPaths.fallbackSchemaFile()
-            if (fallbackApp.exists()) {
-                val svgContent = fallbackApp.readText()
-                webView.engine.loadContent(buildSvgHtml(svgContent))
-                println("✅ SVG загружен из schemas/schema.svg: ${fallbackApp.absolutePath}")
-                return
-            }
-
-            // 5. Fallback — schema.svg из ресурсов JAR
-            val fallbackResource = javaClass.getResource("/org/example/defectmap/schema.svg")
-            if (fallbackResource != null) {
-                val svgContent = fallbackResource.readText()
-                webView.engine.loadContent(buildSvgHtml(svgContent))
-                println("✅ SVG загружен из fallback (ресурсы JAR): schema.svg")
-                return
-            }
-
             println("❌ Не найдена ни одна схема для ПС '$substationKey'")
         } catch (e: Exception) {
             println("❌ Ошибка загрузки SVG: ${e.message}")
             e.printStackTrace()
         }
 
-        // 6. Совсем ничего не нашли — заглушка
+        // 6. Совсем ничего не нашли — заглушка с подсказкой, куда положить файл
+        val schemasPath = AppPaths.schemasDir.absolutePath
         val emptyHtml = """
     <!DOCTYPE html>
     <html>
-      <head><style>body { font-family: sans-serif; padding: 40px; color: #999; }</style></head>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: ${UiFonts.cssSans}; padding: 40px; color: #999; }
+          code { color: #333; background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+        </style>
+      </head>
       <body>
         <h2>⚠️ Схема для ПС '$substationKey' не найдена</h2>
-        <p>Положите файл <code>schema_${substationKey}.svg</code> в папку <code>schemas/</code> рядом с приложением.</p>
+        <p>Положите файл <code>schema_${substationKey}.svg</code> в папку <code>schemas/</code>:</p>
+        <p><code>$schemasPath</code></p>
       </body>
     </html>
 """.trimIndent()
@@ -1012,8 +928,8 @@ class DefectMapController {
 
         // 2. Удаляем файлы
         try {
-            File(AppPaths.appDir, "equipment_${sub.key}.db").delete()
-            File(AppPaths.appDir, "backups${File.separator}${sub.key}").deleteRecursively()
+            File(AppPaths.dataDir, "equipment_${sub.key}.db").delete()
+            File(AppPaths.backupsDir, sub.key).deleteRecursively()
             File(AppPaths.schemasDir, "schema_${sub.key}.svg").delete()
             println("🗑️ Удалены файлы ПС: ${sub.key}")
         } catch (e: Exception) {
@@ -1140,13 +1056,30 @@ class DefectMapController {
             width: 100%;
             height: 100%;
           }
+          #image {
+            width: 100%;
+            height: 100%;
+          }
           #image svg {
             display: block;
             width: 100%;
             height: 100%;
-            object-fit: contain;
             transform-origin: center center;
             will-change: transform;
+          }
+          /*
+           * Слой маркеров должен совпадать не с окном, а с реально видимым
+           * прямоугольником схемы: SVG вписывается с сохранением пропорций
+           * (preserveAspectRatio="xMidYMid meet"), поэтому по краям остаются поля.
+           * Геометрию выставляет JS-функция fitMarkerLayer() (см. <script> ниже)
+           * при загрузке, ресайзе окна и пересоздании слоя.
+           */
+          #equipment-container {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
           }
           /* Превью оборудования при наведении */
           .marker-preview {
@@ -1171,7 +1104,7 @@ class DefectMapController {
           .marker-preview .preview-label {
               text-align: center;
               font-size: 11px;
-              font-family: Arial, sans-serif;
+              font-family: ${UiFonts.cssSans};
               color: #333;
               margin-top: 4px;
               font-weight: bold;
@@ -1211,7 +1144,7 @@ class DefectMapController {
             color: white;
             font-weight: bold;
             font-size: 11px;
-            font-family: Arial, sans-serif;
+            font-family: ${UiFonts.cssSans};
             background: rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(2px);
             transition: all 0.2s ease;
@@ -1237,7 +1170,7 @@ class DefectMapController {
             padding: 4px 12px;
             border-radius: 4px;
             font-size: 11px;
-            font-family: Arial, sans-serif;
+            font-family: ${UiFonts.cssSans};
             white-space: nowrap;
             pointer-events: none;
             transition: all 0.25s ease;
@@ -1352,6 +1285,67 @@ class DefectMapController {
             <div id="equipment-container"></div>
           </div>
         </div>
+        <script>
+          (function () {
+            // Подгоняет слой маркеров под реально видимый прямоугольник схемы:
+            // SVG вписан с сохранением пропорций, по краям остаются поля.
+            function fitMarkerLayer() {
+              var wrapper = document.getElementById('image-wrapper');
+              var layer = document.getElementById('equipment-container');
+              var svg = document.querySelector('#image svg');
+              if (!wrapper || !layer) return;
+
+              var W = wrapper.clientWidth || 0;
+              var H = wrapper.clientHeight || 0;
+              if (!W || !H) return;
+
+              var ar = 1;
+              if (svg) {
+                var vb = svg.viewBox && svg.viewBox.baseVal;
+                if (vb && vb.width > 0 && vb.height > 0) {
+                  ar = vb.width / vb.height;
+                } else if (svg.width && svg.height && svg.width.baseVal && svg.height.baseVal &&
+                           svg.width.baseVal.value > 0 && svg.height.baseVal.value > 0) {
+                  ar = svg.width.baseVal.value / svg.height.baseVal.value;
+                }
+              }
+
+              var w = W, h = W / ar;
+              if (h > H) { h = H; w = H * ar; }
+
+              layer.style.position = 'absolute';
+              layer.style.left = ((W - w) / 2) + 'px';
+              layer.style.top = ((H - h) / 2) + 'px';
+              layer.style.width = w + 'px';
+              layer.style.height = h + 'px';
+            }
+
+            window.fitMarkerLayer = fitMarkerLayer;
+
+            // Прямоугольник, в котором реально нарисована схема.
+            // По нему считаются проценты координат маркеров (клик, перетаскивание),
+            // иначе при полях вокруг схемы координаты "уезжают".
+            window.dmBoxRect = function () {
+              var layer = document.getElementById('equipment-container');
+              if (layer) {
+                var r = layer.getBoundingClientRect();
+                if (r.width > 0 && r.height > 0) return r;
+              }
+              var wrapper = document.getElementById('image-wrapper');
+              return wrapper.getBoundingClientRect();
+            };
+
+            window.addEventListener('resize', function () { setTimeout(fitMarkerLayer, 0); });
+
+            // Контейнер маркеров пересоздаётся из Kotlin — следим за этим
+            var root = document.getElementById('image-wrapper');
+            if (root && window.MutationObserver) {
+              new MutationObserver(function () { setTimeout(fitMarkerLayer, 0); })
+                .observe(root, { childList: true });
+            }
+            setTimeout(fitMarkerLayer, 0);
+          })();
+        </script>
       </body>
     </html>
 """.trimIndent()
@@ -1582,19 +1576,83 @@ class DefectMapController {
 
     private fun setupZoom() {
         webView.setOnScroll { event: ScrollEvent ->
-            val delta = if (event.deltaY > 0) ZOOM_STEP else -ZOOM_STEP
-            val newZoom = (zoomLevel + delta).coerceIn(MIN_ZOOM, MAX_ZOOM)
-            if (newZoom != zoomLevel) {
-                zoomLevel = newZoom
-                webView.engine.executeScript("""
-                    var wrapper = document.getElementById('image-wrapper');
-                    wrapper.style.transform = 'translate(${currentTranslateX}px, ${currentTranslateY}px) scale($zoomLevel)';
-                    wrapper.style.transformOrigin = 'center center';
-                """.trimIndent())
+            val now = System.currentTimeMillis()
+            val dy = event.deltaY
+
+            if (debugScroll) {
+                println(
+                    "🖱️ wheel deltaY=${"%.1f".format(dy)} deltaX=${"%.1f".format(event.deltaX)}" +
+                        " zoom=${"%.0f".format(zoomLevel * 100)}% dt=${now - lastAppliedAt}ms" +
+                        " (invert=$wheelInvert)"
+                )
             }
+
+            // В X11/VirtualBox на каждый щелчок приходит ещё и «фантомное» событие
+            // с deltaY = 0. Раньше оно трактовалось как прокрутка вниз и уменьшало
+            // масштаб — из-за этого колесо вверх тоже отдаляло. Такие события игнорируем.
+            if (dy == 0.0) {
+                event.consume()
+                return@setOnScroll
+            }
+
+            // Защита от дублей одного и того же щелчка
+            if ((now - lastAppliedAt) < WHEEL_THROTTLE_MS) {
+                if (debugScroll) println("🖱️ wheel: дубль подавлен троттлингом")
+                event.consume()
+                return@setOnScroll
+            }
+            lastAppliedAt = now
+
+            // Колесо от себя (deltaY > 0) — приблизить
+            val step = if (dy > 0) ZOOM_STEP else -ZOOM_STEP
+            zoomBy(if (wheelInvert) -step else step)
             event.consume()
         }
     }
+
+    /** true, если приложение запущено с -Ddefectmap.debugScroll=true */
+    private val debugScroll: Boolean =
+        System.getProperty("defectmap.debugScroll") == "true"
+
+    /** Направление колеса можно инвертировать: -Ddefectmap.wheelInvert=true */
+    private val wheelInvert: Boolean =
+        System.getProperty("defectmap.wheelInvert") == "true"
+
+    private companion object {
+        /** Минимальный интервал между шагами зума колесом, мс. */
+        const val WHEEL_THROTTLE_MS = 40L
+    }
+
+    /** Изменяет масштаб схемы на [delta] и применяет трансформацию. */
+    private fun zoomBy(delta: Double) {
+        val newZoom = (zoomLevel + delta).coerceIn(MIN_ZOOM, MAX_ZOOM)
+        if (newZoom == zoomLevel) return
+        zoomLevel = newZoom
+        applyViewTransform()
+        println("🔍 Масштаб схемы: ${"%.0f".format(zoomLevel * 100)}%")
+    }
+
+    private fun applyViewTransform() {
+        webView.engine.executeScript("""
+            (function() {
+                var wrapper = document.getElementById('image-wrapper');
+                if (!wrapper) return;
+                wrapper.style.transform = 'translate(${currentTranslateX}px, ${currentTranslateY}px) scale($zoomLevel)';
+                wrapper.style.transformOrigin = 'center center';
+            })();
+        """.trimIndent())
+    }
+
+    /** Сброс масштаба и сдвига к 100%. */
+    private fun resetView() {
+        zoomLevel = 1.0
+        currentTranslateX = 0.0
+        currentTranslateY = 0.0
+        applyViewTransform()
+        println("🔍 Масштаб схемы сброшен")
+    }
+
+    private var lastAppliedAt = 0L
 
     // ======================== СПИСОК ДЕФЕКТОВ ========================
 
@@ -1847,7 +1905,7 @@ class DefectMapController {
                             
                             if (isNaN(window.dragOrigLeftPercent) || isNaN(window.dragOrigTopPercent)) {
                                 var wrapper = document.getElementById('image-wrapper');
-                                var wrapperRect = wrapper.getBoundingClientRect();
+                                var wrapperRect = (window.dmBoxRect ? window.dmBoxRect() : wrapper.getBoundingClientRect());
                                 var markerRect = marker.getBoundingClientRect();
                                 var leftPx = markerRect.left - wrapperRect.left + markerRect.width / 2;
                                 var topPx = markerRect.top - wrapperRect.top + markerRect.height / 2;
@@ -1893,7 +1951,7 @@ class DefectMapController {
                         if (!marker) return;
                         
                         var wrapper = document.getElementById('image-wrapper');
-                        var wrapperRect = wrapper.getBoundingClientRect();
+                        var wrapperRect = (window.dmBoxRect ? window.dmBoxRect() : wrapper.getBoundingClientRect());
                         
                         var deltaX = ${event.x} - window.dragStartX;
                         var deltaY = ${event.y} - window.dragStartY;
@@ -1955,7 +2013,7 @@ class DefectMapController {
                             
                             var rect = marker.getBoundingClientRect();
                             var wrapper = document.getElementById('image-wrapper');
-                            var wrapperRect = wrapper.getBoundingClientRect();
+                            var wrapperRect = (window.dmBoxRect ? window.dmBoxRect() : wrapper.getBoundingClientRect());
                             
                             var leftPx = rect.left - wrapperRect.left + rect.width / 2;
                             var topPx = rect.top - wrapperRect.top + rect.height / 2;
@@ -2428,7 +2486,7 @@ class DefectMapController {
         val result = webView.engine.executeScript("""
         (function() {
             var wrapper = document.getElementById('image-wrapper');
-            var rect = wrapper.getBoundingClientRect();
+            var rect = (window.dmBoxRect ? window.dmBoxRect() : wrapper.getBoundingClientRect());
             var cx = (($x - rect.left) / rect.width * 100).toFixed(1);
             var cy = (($y - rect.top) / rect.height * 100).toFixed(1);
             return cx + ',' + cy;
@@ -2685,7 +2743,7 @@ class DefectMapController {
         val result = webView.engine.executeScript("""
         (function() {
             var wrapper = document.getElementById('image-wrapper');
-            var rect = wrapper.getBoundingClientRect();
+            var rect = (window.dmBoxRect ? window.dmBoxRect() : wrapper.getBoundingClientRect());
             var cx = (($x - rect.left) / rect.width * 100).toFixed(1);
             var cy = (($y - rect.top) / rect.height * 100).toFixed(1);
             return cx + ',' + cy;

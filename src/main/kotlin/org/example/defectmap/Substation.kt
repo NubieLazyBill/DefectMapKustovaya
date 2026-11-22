@@ -16,7 +16,7 @@ data class Substation(
 
 object Substations {
     private val gson = GsonBuilder().setPrettyPrinting().create()
-    private val file: File get() = File(AppPaths.appDir, "substations.json")
+    private val file: File get() = File(AppPaths.dataDir, "substations.json")
 
     /** Дефолтные ПС — используются только при первом запуске (миграция в JSON). */
     private val DEFAULTS = listOf(

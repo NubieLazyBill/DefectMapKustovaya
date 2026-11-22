@@ -51,5 +51,12 @@ bin/
 *.db-wal
 .defectmap/
 
+# Состояние приложения, создаётся при работе (портативный режим)
+app_settings.json
+backups/
+
+# Кэш нативных библиотек JavaFX при портативном запуске
+.openjfx-cache/
+
 # НО разрешаем коммитить JSON с экспортом
 !equipment_export.json

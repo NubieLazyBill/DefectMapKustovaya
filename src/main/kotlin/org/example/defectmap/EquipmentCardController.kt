@@ -452,7 +452,7 @@ class EquipmentCardController(
         val fallbackUrl = javaClass.getResource("/org/example/defectmap/equipment.jpg")
         if (fallbackUrl != null) return Image(fallbackUrl.toExternalForm())
 
-        val fallbackFile = File("images/equipment.jpg")
+        val fallbackFile = File(AppPaths.imagesDir, "equipment.jpg")
         if (fallbackFile.exists()) return Image(fallbackFile.toURI().toURL().toExternalForm())
 
         return createPlaceholderImage()
@@ -473,7 +473,8 @@ class EquipmentCardController(
 
         // Текст
         graphics.color = java.awt.Color(100, 100, 100)
-        val font = java.awt.Font("Arial", java.awt.Font.BOLD, 24)
+        // Arial есть не везде (ALT Linux) — берём первый доступный аналог
+        val font = org.example.defectmap.platform.UiFonts.awtFont(24, java.awt.Font.BOLD)
         graphics.font = font
         val metrics = graphics.fontMetrics
         val text = "Нет изображения"
@@ -520,7 +521,10 @@ class EquipmentCardController(
 
             // Буква внутри
             gc.fill = Color.WHITE
-            gc.font = javafx.scene.text.Font.font("Arial", javafx.scene.text.FontWeight.BOLD, 11.0)
+            gc.font = org.example.defectmap.platform.UiFonts.fxFont(
+                11.0,
+                javafx.scene.text.FontWeight.BOLD
+            )
             gc.textAlign = javafx.scene.text.TextAlignment.CENTER
             gc.fillText(child.letter, x, y + 4)
         }

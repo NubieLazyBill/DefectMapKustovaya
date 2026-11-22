@@ -16,7 +16,7 @@ echo ✅ Очистка завершена
 echo.
 
 echo 2. Сборка fat JAR...
-call gradlew jar
+call gradlew shadowJar
 if errorlevel 1 (
     echo ❌ Ошибка сборки JAR
     pause
@@ -25,10 +25,9 @@ if errorlevel 1 (
 echo ✅ JAR собран
 echo.
 
-echo 3. Создание EXE с помощью Launch4j...
+echo 3. Создание портативной сборки (jpackage)...
 echo.
-
-call gradlew buildExe
+call gradlew buildPortable
 if errorlevel 1 (
     echo ❌ Ошибка сборки EXE
     pause
@@ -38,6 +37,6 @@ echo.
 
 echo ========================================
 echo ✅ ГОТОВО!
-echo EXE находится в папке: build\exe\
+echo EXE находится в папке: build\dist\DefectMap\
 echo ========================================
 pause

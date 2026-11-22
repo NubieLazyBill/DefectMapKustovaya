@@ -1,9 +1,15 @@
 @echo off
+chcp 65001 >nul
 cd /d "%~dp0"
-echo Запуск из: %CD%
+echo Запуск DefectMap из: %CD%
 
-set JAVA_HOME=%CD%\runtime
-set PATH=%JAVA_HOME%\bin;%PATH%
+set "JAR=build\libs\DefectMap.jar"
+if not exist "%JAR%" (
+    echo Не найден %JAR%
+    echo Соберите: gradlew shadowJar
+    pause
+    exit /b 1
+)
 
-"%JAVA_HOME%\bin\java" -Dprism.order=sw -Dprism.forceGPU=true --module-path "%JAVA_HOME%\lib" --add-modules javafx.controls,javafx.fxml,javafx.web,javafx.media,javafx.swing -jar app\DefectMap.jar
-pause
+java -Dfile.encoding=UTF-8 -Dprism.order=sw -jar "%JAR%" %*
+if errorlevel 1 pause

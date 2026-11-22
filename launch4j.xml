@@ -6,7 +6,7 @@
     <outfile>build/exe/DefectMap.exe</outfile>
     <errTitle>DefectMap</errTitle>
     <classPath>
-        <mainClass>org.example.defectmap.DefectMapApp</mainClass>
+        <mainClass>org.example.defectmap.Launcher</mainClass>
     </classPath>
     <jre>
         <minVersion>17.0.0</minVersion>
