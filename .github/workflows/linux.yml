@@ -21,6 +21,7 @@ jobs:
   build-linux:
     name: Fat JAR + .deb + AppImage
     runs-on: ubuntu-22.04
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -49,7 +50,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             xvfb libgtk-3-0 libnss3 libxrender1 libxtst6 \
-            fonts-liberation fonts-dejavu-core file
+            fonts-liberation fonts-dejavu-core file \
+            fakeroot binutils
 
       - name: Проверка JavaFX/WebView под Xvfb (--uicheck)
         run: |
@@ -69,12 +71,14 @@ jobs:
         run: |
           ls -la build/dist
           sudo apt-get install -y ./build/dist/defectmap_*.deb
+          APP_BIN=$(ls /opt/defectmap/*/bin/DefectMap 2>/dev/null | head -n1)
+          echo "Установлено: $APP_BIN"
           echo "--- selftest установленного приложения ---"
-          /opt/defectmap/bin/DefectMap --selftest
+          "$APP_BIN" --selftest
           echo "--- uicheck установленного приложения ---"
-          xvfb-run -a -s "-screen 0 1280x800x24" /opt/defectmap/bin/DefectMap --uicheck
+          xvfb-run -a -s "-screen 0 1280x800x24" "$APP_BIN" --uicheck
           echo "--- appsmoke установленного приложения ---"
-          xvfb-run -a -s "-screen 0 1280x800x24" /opt/defectmap/bin/DefectMap --appsmoke
+          xvfb-run -a -s "-screen 0 1280x800x24" "$APP_BIN" --appsmoke
 
       - name: AppImage
         run: ./gradlew buildAppImage --console=plain
@@ -99,12 +103,16 @@ jobs:
           echo "--- fonts ---"; fc-list | head -n 20 || true
           echo "--- build dir ---"; ls -la build/dist || true
 
-  # Независимая проверка на настоящем ALT Linux p10 (официальный образ alt:p10).
-  # Ловит то, чего нет в ubuntu-джобе: пакеты ALT, .rpm, glibc/GTK/WebKit ALT.
-  # Нужен только push/PR — локальный Linux не требуется.
+  # Проверка на настоящем ALT Linux p10 (официальный образ alt:p10).
+  # ВНИМАНИЕ: запускается ТОЛЬКО вручную (workflow_dispatch) — прогон тяжёлый
+  # (сборка внутри контейнера), и на push/PR он не должен блокировать CI.
+  # Статус: экспериментальный (continue-on-error), подробности — docs/LINUX-ALT.md.
   alt-p10:
-    name: ALT Linux p10 — .deb/.rpm и проверки
+    name: ALT Linux p10 — .deb/.rpm и проверки (вручную)
     runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    continue-on-error: true
+    if: github.event_name == 'workflow_dispatch'
 
     steps:
       - uses: actions/checkout@v4

@@ -36,4 +36,31 @@ class DefectMapApp : Application() {
             println("🔤 Базовый шрифт интерфейса: $family")
         }
     }
+
+    companion object {
+        /**
+         * Точка входа на случай, если IDE или другой лаунчер запускает именно
+         * класс `DefectMapApp`. Делегируем в [Launcher], чтобы сохранить единое
+         * поведение (аргументы, баннер, кэш нативов).
+         *
+         * Для `java -jar` по-прежнему используется [Launcher]: JDK не разрешает
+         * запускать класс-наследник Application из classpath.
+         */
+        @JvmStatic
+        fun main(args: Array<String>) {
+            Launcher.main(args)
+        }
+    }
+}
+
+/**
+ * Точка входа для запуска из IDE.
+ *
+ * IntelliJ IDEA создаёт run-конфигурацию на top-level `main` (класс
+ * `DefectMapAppKt`), поэтому функция сохранена для совместимости и просто
+ * делегирует в [Launcher]. Именно по этой причине файл называется
+ * DefectMapApp.kt, хотя основной класс приложения — DefectMapApp.
+ */
+fun main(args: Array<String>) {
+    Launcher.main(args)
 }

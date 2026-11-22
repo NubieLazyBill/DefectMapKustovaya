@@ -311,3 +311,52 @@ src/test/kotlin/org/example/defectmap/{DataSeeder,DatabaseCrud,ExcelReportWriter
 
 **Удалено:** зависимость `de.codecentric:javafxsvg` (код приложения не менялся —
 её просто не использовали), `javafx.media`/`javafx.swing` из модулей.
+
+---
+
+## 12. Проверено на реальном ALT Linux 10.4
+
+Стенд: VirtualBox, «Альт Рабочая станция 10.4» x86_64, JDK 17 (`javac 17.0.21`).
+
+| Проверка | Команда | Результат |
+|---|---|---|
+| Сборка | `./gradlew clean test shadowJar` | BUILD SUCCESSFUL, 34 теста |
+| Окружение | `java -jar … --selftest` | 18 OK / 1 WARN / 0 FAIL |
+| Окно и схема | `java -jar … --appsmoke` | окно открылось, сцена 1200×800 |
+| БД | `--appsmoke` | загружено 186 единиц оборудования |
+| Маркеры | `--appsmoke` | 196 маркеров, `область схемы: 676×653 center=50.0,50.0` |
+| Координаты | `--fix-markers --dry-run` | `top > 100` нет → миграция применена |
+| Функциональная проверка | `FunctionalCheck` | **РЕЗУЛЬТАТ: OK** (БД, Excel, печать) |
+| Печать | `ReportPrinter` → Cups-PDF | PDF 133 КБ создан |
+| Пакеты | `buildPortable`, `buildDeb`, `buildAppImage` | app-image, `.deb` 107 МБ, AppImage 120 МБ |
+| Установка | `dpkg -i --force-depends` | `/opt/defectmap/defectmap/bin/DefectMap`, `--selftest` OK |
+
+### Найденные на ALT особенности
+
+1. **JDK**: в системе был только JRE (`java-17-openjdk`). Для сборки нужен
+   `java-17-openjdk-devel` (или Temurin 17 в домашний каталог).
+2. **`jpackage` не в PATH** — он лежит внутри JDK, Gradle находит его через
+   `java.home`; `which jpackage` ничего не покажет, это нормально.
+3. **`sudo` отключён для `wheel`** (правило в `/etc/sudoers` закомментировано).
+   Либо `su -`, либо один раз добавить `%wheel ALL=(ALL) ALL` в
+   `/etc/sudoers.d/wheel`.
+4. **`jpackage` требует инструменты**: `binutils` (objcopy для jlink),
+   `dpkg` + `fakeroot` (тип `deb`), `xdg-utils` (зависимость пакета),
+   `rpm-build` (тип `rpm`). Без них ошибки «Cannot run program objcopy» и
+   «Invalid or unsupported type: [deb]».
+5. **`.deb` ставится с `--force-depends`**: `dpkg` не видит пакеты ALT
+   (они rpm-ные), поэтому зависимость `xdg-utils` считается отсутствующей.
+6. **Маркеры**: старая версия сохраняла `top` в процентах от окна, а не от
+   схемы — в данных встречались значения до 190%. Лечится `--fix-markers`.
+7. **Колесо мыши в VirtualBox** присылает фантомные события с `deltaY = 0`,
+   из-за чего приближение не работало. В коде такие события игнорируются,
+   плюс есть `Ctrl + / − / 0` и пункты меню.
+8. **Cups-PDF сохраняет PDF на рабочий стол**, а не в `~/PDF` — проверка
+   `FunctionalCheck` ищет файл в нескольких каталогах.
+
+### CI: первый запуск на GitHub
+
+Первый прогон после пуша упал на шаге «Юнит-тесты» за секунду: в репозитории у
+`gradlew` не было бита исполнения (хранился как `100644`), а в ВМ запускалось
+`bash gradlew`. Исправлено: `git update-index --chmod=+x` для `gradlew` и всех
+`*.sh`, а в workflow добавлены `fakeroot`/`binutils` и таймауты.

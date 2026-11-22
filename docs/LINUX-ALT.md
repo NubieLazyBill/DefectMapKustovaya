@@ -324,8 +324,12 @@ apt-get update && apt-get install -y java-17-openjdk-devel curl
 То же самое автоматизировано в CI: job **`alt-p10`** (`.github/workflows/linux.yml`)
 поднимает официальный образ `alt:p10`, ставит в нём JDK 17 и собирает `.deb` + `.rpm`
 **настоящим ALT**, прогоняет `--selftest` и, если в контейнере есть GTK/Xvfb —
-`--appsmoke`. Артефакты складываются в `defectmap-alt-p10`. Локальный Linux для этого
-не нужен — достаточно `git push`.
+`--appsmoke`. Артефакты складываются в `defectmap-alt-p10`.
+
+Важно: этот job помечен `continue-on-error` и запускается **только вручную**
+(`Actions → Linux build & smoke test → Run workflow`), потому что сборка внутри
+контейнера тяжёлая и на push/PR не должна блокировать остальные проверки.
+Основной job `build-linux` идёт на каждый push и должен быть зелёным.
 
 ### Стенд без установки ALT: WSL2 + Ubuntu
 
