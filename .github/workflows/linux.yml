@@ -70,9 +70,13 @@ jobs:
       - name: Установка .deb и проверка установленного приложения
         run: |
           ls -la build/dist
-          sudo apt-get install -y ./build/dist/defectmap_*.deb
+          # apt-get install ./deb на раннере возвращает 100 (не тянет xdg-utils),
+          # поэтому ставим так же, как на ALT: dpkg + отдельная зависимость.
+          sudo apt-get install -y xdg-utils || true
+          sudo dpkg -i --force-depends build/dist/defectmap_*.deb
           APP_BIN=$(ls /opt/defectmap/*/bin/DefectMap 2>/dev/null | head -n1)
           echo "Установлено: $APP_BIN"
+          test -n "$APP_BIN"
           echo "--- selftest установленного приложения ---"
           "$APP_BIN" --selftest
           echo "--- uicheck установленного приложения ---"
