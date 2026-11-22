@@ -43,6 +43,16 @@ object Launcher {
                 println(PlatformInfo.describe())
                 return
             }
+            "--paths", "paths" -> {
+                println("DefectMap $VERSION")
+                println("  ${AppPaths.describe()}")
+                println("  каталог данных: ${AppPaths.dataDir.absolutePath}")
+                println("  appDir доступен для записи: ${AppPaths.appDir.canWrite()}")
+                println("  APPIMAGE=${System.getenv("APPIMAGE")}")
+                println("  APPDIR=${System.getenv("APPDIR")}")
+                println("  HOME=${System.getProperty("user.home")}")
+                return
+            }
             "--help", "-h", "help", "/?" -> {
                 printHelp()
                 return
@@ -101,7 +111,6 @@ object Launcher {
             Параметры --selftest:
               --in-place   проверять живые данные (по умолчанию — временная копия)
               --keep       не удалять временный каталог проверки
-
             Параметры --uicheck:
               --show                  показать окно (иначе проверка без окна)
               --snapshot <файл.png>   сохранить снимок отрисованной схемы

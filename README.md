@@ -36,14 +36,30 @@ xvfb-run -a java -jar build/libs/DefectMap.jar --appsmoke --snapshot /tmp/app.pn
 
 ## Где лежат данные
 
-| Режим | Каталог |
+| Как запущено | Каталог данных |
 |---|---|
-| Портативный (Windows, распакованный AppImage) | рядом с JAR |
-| Установка из пакета | `~/.local/share/defectmap` (Linux XDG), `%LOCALAPPDATA%\DefectMap` (Windows) |
-| Переопределение | `-Ddefectmap.home=/path` или `DEFECTMAP_HOME=/path` |
+| Портативная папка (`build/dist/DefectMap/`), Windows-JAR рядом с папкой | рядом с JAR (`lib/app` в app-image) |
+| AppImage (двойной клик или `APPIMAGE_EXTRACT_AND_RUN=1`) | `~/.local/share/defectmap` |
+| Установка из `.deb` / `.rpm` | `~/.local/share/defectmap` (Linux), `%LOCALAPPDATA%\DefectMap` (Windows) |
+| Переопределение | `-Ddefectmap.home=/path`, `DEFECTMAP_HOME=/path` или `--dir` для `--fix-markers` |
+
+Признак «портативного» режима — можно ли писать рядом с JAR. AppImage и `.deb`
+всегда пишут в пользовательский каталог: внутри AppImage папка только для
+чтения (а при `APPIMAGE_EXTRACT_AND_RUN=1` — временная, её удалят).
+
+Посмотреть фактические пути:
+
+```bash
+./DefectMap-1.1.0-x86_64.AppImage --paths
+# DefectMap 1.1.0
+#   appDir=/tmp/.mount_XXXX/lib/app, dataDir=/home/user/.local/share/defectmap, ...
+```
+
+В приложении: меню «Для разработчиков» → «📂 Открыть папку данных (БД)».
 
 В каталоге данных: `equipment_<ПС>.db`, `substations.json`, `app_settings.json`,
-`backups/`, `schemas/`, `images/`.
+`backups/`, `schemas/`, `images/`. Чтобы перенести данные на другой компьютер,
+достаточно скопировать эту папку (или только `equipment_*.db` + `substations.json`).
 
 ## Как получить запускаемый файл
 

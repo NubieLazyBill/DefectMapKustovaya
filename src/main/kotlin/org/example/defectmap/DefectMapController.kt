@@ -544,6 +544,26 @@ class DefectMapController {
         }
         devMenuBtn.items.add(openImagesItem)
 
+        val openDataItem = MenuItem("📂 Открыть папку данных (БД)")
+        openDataItem.setOnAction {
+            val dir = AppPaths.dataDir
+            dir.mkdirs()
+            val opened = AppPaths.openFolder(dir)
+            if (!opened) {
+                showError("Не удалось открыть папку:\n${dir.absolutePath}")
+            } else {
+                println("📂 Каталог данных: ${dir.absolutePath}")
+            }
+        }
+        devMenuBtn.items.add(openDataItem)
+
+        val showPathsItem = MenuItem("ℹ️ Где лежат данные (в консоль)")
+        showPathsItem.setOnAction {
+            println("Каталог данных: ${AppPaths.dataDir.absolutePath}")
+            println(AppPaths.describe())
+        }
+        devMenuBtn.items.add(showPathsItem)
+
         // ===== ОБРАБОТЧИК ДЛЯ УПРАВЛЕНИЯ ТИПАМИ =====
         manageTypesMenuItem.setOnAction { showManageTypesDialog() }
 

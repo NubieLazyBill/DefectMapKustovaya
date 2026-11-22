@@ -39,10 +39,33 @@ object AppPaths {
     /** Папка, рядом с которой лежит JAR (или каталог проекта при запуске из IDE). */
     val appDir: File by lazy { overrideAppDir ?: overrideDir ?: detectAppDir() }
 
+    /**
+     * Запуск из AppImage. Обычный запуск монтирует образ в read-only каталог,
+     * а `APPIMAGE_EXTRACT_AND_RUN=1` распаковывает его во **временную** папку,
+     * которая доступна для записи. Если в этом случае писать рядом с JAR,
+     * данные окажутся в /tmp и пропадут после закрытия приложения, поэтому
+     * для AppImage всегда используем пользовательский каталог.
+     */
+    private val launchedFromAppImage: Boolean by lazy {
+        PlatformInfo.env("APPIMAGE") != null || PlatformInfo.env("APPDIR") != null
+    }
+
+    /**
+     * Приложение запущено из временного каталога (распакованный AppImage,
+     * установщик, тесты). Данные там хранить нельзя: каталог удалят.
+     */
+    private val appDirInTemp: Boolean by lazy {
+        val tmp = File(System.getProperty("java.io.tmpdir") ?: "/tmp").absolutePath
+        val path = appDir.absolutePath
+        path.startsWith(tmp + File.separator, ignoreCase = PlatformInfo.isWindows) ||
+            path.startsWith("/tmp/") || path.startsWith("/var/tmp/")
+    }
+
     /** Папка для записи: БД, схемы, бэкапы, настройки. */
     private val dataDirBase: File by lazy {
         val dir = overrideDir ?: run {
-            if (isWritable(appDir)) appDir else userDataDir()
+            val portable = !launchedFromAppImage && !appDirInTemp && isWritable(appDir)
+            if (portable) appDir else userDataDir()
         }
         dir.mkdirs()
         if (!dir.isDirectory) {
