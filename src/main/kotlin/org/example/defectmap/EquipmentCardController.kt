@@ -303,7 +303,10 @@ class EquipmentCardController(
         }
 
         // ===== ИНФО-ЛЕЙБЛ =====
-        val infoLabel = Label("${equipment.type} | ${equipment.size}")
+        val typeName = EquipmentTypes.getTypeName(equipment.type)
+        val modelName = EquipmentModels.displayName(equipment.modelId)
+        val typeLine = if (modelName != null) "$typeName · $modelName" else typeName
+        val infoLabel = Label("$typeLine | ${equipment.size}")
         infoLabel.style = "-fx-font-size: 13px; -fx-text-fill: #6c757d;"
         imageContainer.children.add(infoLabel)
 
@@ -337,7 +340,16 @@ class EquipmentCardController(
      * Если ничего нет — создаёт заглушку.
      */
     private fun createEquipmentImage(): Image {
-        // Определяем путь к картинке по типу оборудования
+        // 1. Фото, назначенное типу изделия (модели) в справочнике типов
+        EquipmentModels.photoName(equipment.modelId)?.let { name ->
+            loadImage(name)?.let {
+                println("🖼️ Фото по типу изделия: $name")
+                return it
+            }
+            println("⚠️ Фото типа изделия не найдено: $name")
+        }
+
+        // 2. Совместимость: старое сопоставление по категории оборудования
         val imagePath = when (equipment.type) {
             "v_500" -> "ВВБК-500.jfif"
             "v_500_ABB" -> "В-500 элегаз"
@@ -361,55 +373,32 @@ class EquipmentCardController(
             "compressor" -> "compressor.jpg"
             else -> null
         }
+        imagePath?.let { path -> loadImage(path)?.let { return it } }
 
-        // 1. Пробуем загрузить из ресурсов JAR
-        imagePath?.let {
-            val resourcePath = "/org/example/defectmap/$it"
-            try {
-                val url = javaClass.getResource(resourcePath)
-                if (url != null) {
-                    return Image(url.toExternalForm())
-                }
-            } catch (e: Exception) {
-                println("⚠️ Не удалось загрузить из ресурсов $it: ${e.message}")
-            }
-        }
+        // 3. Заглушка
+        loadImage("equipment.jpg")?.let { return it }
+        println("⚠️ Нет ни одной картинки, создаю заглушку")
+        return createPlaceholderImage()
+    }
 
-        // 2. Пробуем загрузить из папки images рядом с JAR (для портативной версии)
-        imagePath?.let {
-            try {
-                val file = File(AppPaths.imagesDir, it)
-                if (file.exists()) {
-                    return Image(file.toURI().toURL().toExternalForm())
-                }
-            } catch (e: Exception) {
-                println("⚠️ Не удалось загрузить из файла images/$it: ${e.message}")
-            }
-        }
-
-        // 3. Fallback: equipment.jpg из ресурсов
+    /** Ищет картинку в ресурсах JAR, затем в каталоге images/ рядом с данными. */
+    private fun loadImage(name: String): Image? {
         try {
-            val url = javaClass.getResource("/org/example/defectmap/equipment.jpg")
-            if (url != null) {
-                return Image(url.toExternalForm())
+            javaClass.getResource("/org/example/defectmap/$name")?.let {
+                return Image(it.toExternalForm())
             }
         } catch (e: Exception) {
-            println("⚠️ Не удалось загрузить equipment.jpg из ресурсов: ${e.message}")
+            println("⚠️ Не удалось загрузить из ресурсов $name: ${e.message}")
         }
-
-        // 4. Fallback: equipment.jpg из папки images
         try {
-            val file = File(AppPaths.imagesDir, "equipment.jpg")
+            val file = File(AppPaths.imagesDir, name)
             if (file.exists()) {
                 return Image(file.toURI().toURL().toExternalForm())
             }
         } catch (e: Exception) {
-            println("⚠️ Не удалось загрузить images/equipment.jpg: ${e.message}")
+            println("⚠️ Не удалось загрузить images/$name: ${e.message}")
         }
-
-        // 5. Заглушка
-        println("⚠️ Нет ни одной картинки, создаю заглушку")
-        return createPlaceholderImage()
+        return null
     }
 
     /**

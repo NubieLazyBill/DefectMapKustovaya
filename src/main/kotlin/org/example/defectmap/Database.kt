@@ -34,6 +34,9 @@ class Database(private val substationKey: String = "kustovaya") {
         createTypesTable()
         addSizeColumnIfNotExists()
         addMarkersColumnIfNotExists()
+        createModelsTable()
+        addModelIdColumnIfNotExists()
+        migrateModelsIfNeeded()
         migrateMarkerIds()
         createDefectTypesTable()
         addParentIdColumnIfNotExists()
@@ -134,6 +137,145 @@ class Database(private val substationKey: String = "kustovaya") {
         }
     }
 
+    // ======================== ТИПЫ ИЗДЕЛИЙ (МОДЕЛИ) ========================
+
+    private fun createModelsTable() {
+        val sql = """
+            CREATE TABLE IF NOT EXISTS equipment_models (
+                id TEXT PRIMARY KEY,
+                type_key TEXT NOT NULL,
+                name TEXT NOT NULL,
+                photo TEXT,
+                sort_order INTEGER DEFAULT 0,
+                created_at INTEGER DEFAULT (strftime('%s', 'now')),
+                UNIQUE(type_key, name)
+            )
+        """.trimIndent()
+        executeUpdate(sql)
+        println("✅ Таблица equipment_models создана")
+    }
+
+    private fun addModelIdColumnIfNotExists() {
+        try {
+            executeUpdate("ALTER TABLE equipment ADD COLUMN model_id TEXT DEFAULT NULL")
+            println("✅ Колонка model_id добавлена")
+        } catch (e: Exception) {
+            println("ℹ️ Колонка model_id уже существует")
+        }
+    }
+
+    /**
+     * Первый запуск на БД версии 1: создаём модели по умолчанию (там, где были
+     * фотографии) и привязываем к ним существующее оборудование, чтобы фото
+     * не пропали до того, как пользователь назначит типы вручную.
+     */
+    private fun migrateModelsIfNeeded() {
+        try {
+            if (countRows("equipment_models") > 0) return
+
+            var order = 0
+            var created = 0
+            EquipmentModels.DEFAULT_PHOTO_MODELS.forEach { (typeKey, list) ->
+                list.forEach { (name, photo) ->
+                    val model = EquipmentModelData(
+                        id = EquipmentModels.makeId(typeKey, name),
+                        typeKey = typeKey,
+                        name = name,
+                        photo = photo.ifBlank { null },
+                        sortOrder = order++
+                    )
+                    saveModel(model)
+                    created++
+                }
+            }
+
+            executeUpdate(
+                """
+                UPDATE equipment SET model_id = (
+                    SELECT m.id FROM equipment_models m
+                    WHERE m.type_key = equipment.type
+                    ORDER BY m.sort_order LIMIT 1
+                )
+                WHERE model_id IS NULL
+                """.trimIndent()
+            )
+
+            val bound = countRows("equipment", "model_id IS NOT NULL")
+            println("✅ Типы изделий: создано $created, привязано к оборудованию: $bound")
+        } catch (e: Exception) {
+            println("⚠️ Не удалось подготовить типы изделий: ${e.message}")
+        }
+    }
+
+    private fun countRows(table: String, where: String? = null): Int {
+        val sql = "SELECT COUNT(*) FROM $table" + (where?.let { " WHERE $it" } ?: "")
+        connection?.prepareStatement(sql)?.use { stmt ->
+            val rs = stmt.executeQuery()
+            if (rs.next()) return rs.getInt(1)
+        }
+        return 0
+    }
+
+    fun loadAllModels(): List<EquipmentModelData> {
+        val result = mutableListOf<EquipmentModelData>()
+        val sql = "SELECT * FROM equipment_models ORDER BY type_key, sort_order, name"
+        connection?.prepareStatement(sql)?.use { stmt ->
+            val rs = stmt.executeQuery()
+            while (rs.next()) {
+                result.add(
+                    EquipmentModelData(
+                        id = rs.getString("id"),
+                        typeKey = rs.getString("type_key"),
+                        name = rs.getString("name"),
+                        photo = rs.getString("photo"),
+                        sortOrder = rs.getInt("sort_order")
+                    )
+                )
+            }
+        }
+        return result
+    }
+
+    fun saveModel(model: EquipmentModelData) {
+        val sql = """
+            INSERT OR REPLACE INTO equipment_models (id, type_key, name, photo, sort_order)
+            VALUES (?, ?, ?, ?, ?)
+        """.trimIndent()
+        connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.setString(1, model.id)
+            stmt.setString(2, model.typeKey)
+            stmt.setString(3, model.name)
+            if (model.photo.isNullOrBlank()) stmt.setNull(4, java.sql.Types.VARCHAR)
+            else stmt.setString(4, model.photo)
+            stmt.setInt(5, model.sortOrder)
+            stmt.executeUpdate()
+        }
+        println("💾 Тип изделия сохранён: ${model.name} (${model.typeKey})")
+    }
+
+    fun deleteModel(id: String) {
+        connection?.prepareStatement("DELETE FROM equipment_models WHERE id = ?")?.use { stmt ->
+            stmt.setString(1, id)
+            stmt.executeUpdate()
+        }
+        println("🗑️ Тип изделия удалён: $id")
+    }
+
+    /** Сколько единиц оборудования используют модель (для безопасного удаления). */
+    fun countEquipmentByModel(modelId: String): Int =
+        countRows("equipment", "model_id = '$modelId'")
+
+    /** Сколько единиц оборудования используют категорию. */
+    fun countEquipmentByType(typeKey: String): Int =
+        countRows("equipment", "type = '$typeKey'")
+
+    /** Сколько единиц оборудования имеют назначенный тип изделия. */
+    fun countEquipmentWithModel(): Int = countRows("equipment", "model_id IS NOT NULL")
+
+    /** Модели указанной категории, доступные в БД. */
+    fun loadModelsForType(typeKey: String): List<EquipmentModelData> =
+        loadAllModels().filter { it.typeKey == typeKey }
+
     // ======================== БЭКАП ========================
 
     fun autoBackup() {
@@ -158,9 +300,19 @@ class Database(private val substationKey: String = "kustovaya") {
 
         val gson = GsonBuilder().create()
         val sql = """
-        INSERT OR REPLACE INTO equipment 
-        (id, type, name, letter, cell, size, markers, parent_id, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+        INSERT INTO equipment
+        (id, type, name, letter, cell, size, markers, parent_id, model_id, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+        ON CONFLICT(id) DO UPDATE SET
+            type = excluded.type,
+            name = excluded.name,
+            letter = excluded.letter,
+            cell = excluded.cell,
+            size = excluded.size,
+            markers = excluded.markers,
+            parent_id = excluded.parent_id,
+            model_id = COALESCE(excluded.model_id, equipment.model_id),
+            updated_at = excluded.updated_at
     """.trimIndent()
 
         connection?.prepareStatement(sql)?.use { stmt ->
@@ -180,6 +332,7 @@ class Database(private val substationKey: String = "kustovaya") {
                 stmt.setString(6, item.size)
                 stmt.setString(7, markersJson)
                 stmt.setString(8, item.parentId)  // ← может быть null
+                stmt.setString(9, item.modelId)
                 stmt.addBatch()
             }
             stmt.executeBatch()
@@ -198,6 +351,23 @@ class Database(private val substationKey: String = "kustovaya") {
             }
         }
         return result
+    }
+
+    /**
+     * Назначает оборудованию тип изделия (модель).
+     *
+     * Отдельный метод нужен потому, что оборудование сохраняется из JavaScript
+     * (`window.equipment`), где поля `model_id` может не быть: при обычном
+     * сохранении старое значение не затирается (COALESCE в UPSERT).
+     */
+    fun setEquipmentModel(equipmentId: String, modelId: String?) {
+        val sql = "UPDATE equipment SET model_id = ?, updated_at = strftime('%s', 'now') WHERE id = ?"
+        connection?.prepareStatement(sql)?.use { stmt ->
+            if (modelId.isNullOrBlank()) stmt.setNull(1, java.sql.Types.VARCHAR)
+            else stmt.setString(1, modelId)
+            stmt.setString(2, equipmentId)
+            stmt.executeUpdate()
+        }
     }
 
     fun deleteById(id: String): Boolean {
@@ -264,7 +434,8 @@ class Database(private val substationKey: String = "kustovaya") {
             cell = rs.getString("cell") ?: "",
             size = rs.getString("size") ?: "normal",
             markers = markers,
-            parentId = rs.getString("parent_id")  // ← ДОБАВЛЕНО
+            parentId = rs.getString("parent_id"),  // ← ДОБАВЛЕНО
+            modelId = rs.getString("model_id")
         )
     }
 
@@ -727,6 +898,8 @@ data class EquipmentData(
     val size: String = "normal",
     val markers: List<MarkerPosition> = listOf(),
     val parentId: String? = null,
+    /** Тип изделия (модель) внутри категории [type]; null — не задан. */
+    val modelId: String? = null,
 )
 
 data class MarkerPosition(

@@ -1,4 +1,4 @@
-package org.example.defectmap
+﻿package org.example.defectmap
 
 import javafx.fxml.FXML
 import javafx.scene.web.WebView
@@ -50,6 +50,7 @@ import javafx.animation.FadeTransition
 import javafx.scene.control.DatePicker
 import javafx.util.Duration
 import javafx.scene.control.Dialog
+import javafx.stage.FileChooser
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.ZoneId
@@ -513,6 +514,7 @@ class DefectMapController {
 
         // ===== ЗАГРУЖАЕМ ТИПЫ ИЗ БД =====
         EquipmentTypes.loadFromDatabase(database)
+        EquipmentModels.loadFromDatabase(database)
         DefectTypes.loadFromDatabase(database)
 
         // ===== Загружаем масштаб маркеров для текущей ПС =====
@@ -981,6 +983,7 @@ class DefectMapController {
         AppSettings.setLastSubstationKey(newSub.key)
 
         EquipmentTypes.loadFromDatabase(database)
+        EquipmentModels.loadFromDatabase(database)
         DefectTypes.loadFromDatabase(database)
 
         markerScale = database.getMarkerScale()
@@ -2550,6 +2553,12 @@ class DefectMapController {
                             val type = EquipmentTypes.ALL_TYPES.find { it.second == typeName }?.first ?: "other"
                             val typeLabel = EquipmentTypes.getLetter(type)
 
+                            val (modelConfirmed, modelId) = askEquipmentModel(type, typeName, null)
+                            if (!modelConfirmed) {
+                                println("❌ Выбор типа изделия отменён")
+                                return@runLater
+                            }
+
                             val sizeDialog = ChoiceDialog("normal", listOf("small", "normal", "large"))
                             sizeDialog.title = "Размер метки"
                             sizeDialog.headerText = "Выберите размер метки на схеме"
@@ -2606,6 +2615,7 @@ class DefectMapController {
                             """.trimIndent())
 
                                 saveEquipmentDirect()
+                                database.setEquipmentModel(id, modelId)
                                 syncWindowEquipment()
 
                                 currentEditingEquipmentId = null
@@ -3023,6 +3033,12 @@ class DefectMapController {
                         val newType = EquipmentTypes.ALL_TYPES.find { it.second == typeName }?.first ?: "other"
                         val newLetter = EquipmentTypes.getLetter(newType)
 
+                        val (modelConfirmed, newModelId) = askEquipmentModel(newType, typeName, null)
+                        if (!modelConfirmed) {
+                            println("❌ Выбор типа изделия отменён")
+                            return@runLater
+                        }
+
                         val sizeDialog = ChoiceDialog(currentSize, listOf("small", "normal", "large"))
                         sizeDialog.title = "Размер метки"
                         sizeDialog.headerText = "Выберите размер метки на схеме"
@@ -3052,6 +3068,7 @@ class DefectMapController {
                             }
 
                             database.saveEquipment(updatedList)
+                            database.setEquipmentModel(equipmentId, newModelId)
                             syncWindowEquipment()
                             val updatedListForWindow = loadEquipment()
                             val equipmentJson = gson.toJson(updatedListForWindow)
@@ -4003,6 +4020,48 @@ class DefectMapController {
 
     // ======================== УПРАВЛЕНИЕ ТИПАМИ ========================
 
+    /**
+     * Спрашивает тип изделия (модель) для категории [typeKey].
+     *
+     * Возвращает пару: подтвердил ли пользователь и id модели (null — без типа).
+     * Введённое название модели при необходимости создаётся в справочнике.
+     */
+    private fun askEquipmentModel(
+        typeKey: String,
+        typeName: String,
+        currentModelId: String?
+    ): Pair<Boolean, String?> {
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "Тип изделия"
+        dialog.headerText = "Оборудование: $typeName"
+
+        val combo = ComboBox<String>()
+        combo.isEditable = true
+        combo.items.addAll(EquipmentModels.names(typeKey))
+        combo.value = EquipmentModels.displayName(currentModelId)
+            ?: EquipmentModels.names(typeKey).firstOrNull().orEmpty()
+        combo.promptText = "Например, ВВБК-220 — можно ввести свой"
+        combo.prefWidth = 340.0
+
+        val content = VBox(
+            8.0,
+            Label("Тип изделия (модель):"),
+            combo,
+            Label("Можно выбрать из списка или ввести новый — он сохранится в справочнике.")
+        )
+        content.style = "-fx-padding: 10px;"
+        dialog.dialogPane.content = content
+        dialog.dialogPane.buttonTypes.addAll(ButtonType.OK, ButtonType.CANCEL)
+
+        val result = dialog.showAndWait()
+        if (result.isEmpty || result.get() != ButtonType.OK) return false to null
+
+        val name = combo.value?.trim().orEmpty()
+        if (name.isEmpty()) return true to null
+        val model = EquipmentModels.ensureModel(database, typeKey, name)
+        return true to model?.id
+    }
+
     private fun showManageTypesDialog() {
         val dialog = Stage()
         dialog.title = "📋 Управление типами оборудования"
@@ -4127,12 +4186,144 @@ class DefectMapController {
 
         buttonPanel.children.addAll(addBtn, editBtn, deleteBtn, restoreBtn, closeBtn)
 
-        val infoLabel = Label("💡 Типы загружаются из БД. При добавлении нового типа он сразу становится доступен в списке оборудования.")
+        // ===== ТИПЫ ИЗДЕЛИЙ (МОДЕЛИ) ВЫБРАННОЙ КАТЕГОРИИ =====
+        val modelsLabel = Label("🔧 Типы изделий: выберите категорию в таблице выше")
+        modelsLabel.style = "-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #333; -fx-padding: 8px 0 0 0;"
+
+        val modelsTable = TableView<EquipmentModelData>()
+        modelsTable.style = "-fx-font-size: 13px;"
+        modelsTable.prefHeight = 200.0
+
+        val colModelName = TableColumn<EquipmentModelData, String>("Тип изделия")
+        colModelName.cellValueFactory = PropertyValueFactory("name")
+        colModelName.prefWidth = 220.0
+
+        val colModelPhoto = TableColumn<EquipmentModelData, String>("Фото")
+        colModelPhoto.cellValueFactory = PropertyValueFactory("photo")
+        colModelPhoto.prefWidth = 260.0
+
+        modelsTable.columns.addAll(colModelName, colModelPhoto)
+        val modelItems = FXCollections.observableArrayList<EquipmentModelData>()
+        modelsTable.items = modelItems
+
+        fun refreshModels(typeKey: String?) {
+            modelItems.clear()
+            if (typeKey == null) {
+                modelsLabel.text = "🔧 Типы изделий: выберите категорию в таблице выше"
+                return
+            }
+            val typeName = EquipmentTypes.getTypeName(typeKey)
+            modelsLabel.text = "🔧 Типы изделий для «$typeName» (${EquipmentModels.forType(typeKey).size})"
+            modelItems.addAll(EquipmentModels.forType(typeKey))
+        }
+
+        tableView.selectionModel.selectedItemProperty().addListener { _, _, sel ->
+            refreshModels(sel?.key)
+        }
+
+        val modelButtons = HBox(10.0)
+        modelButtons.alignment = Pos.CENTER_RIGHT
+
+        val addModelBtn = Button("➕ Тип изделия")
+        addModelBtn.style = "-fx-background-color: #17a2b8; -fx-text-fill: white; -fx-padding: 6px 14px; -fx-background-radius: 4px;"
+        addModelBtn.setOnAction {
+            val category = tableView.selectionModel.selectedItem
+            if (category == null) {
+                showInfo("⚠️ Сначала выберите категорию в таблице выше")
+                return@setOnAction
+            }
+            val input = TextInputDialog()
+            input.title = "Новый тип изделия"
+            input.headerText = "Категория: ${category.displayName}"
+            input.contentText = "Название типа изделия (модель):"
+            input.editor.promptText = "Например, ВВБК-220"
+            val res = input.showAndWait()
+            if (res.isPresent && res.get().isNotBlank()) {
+                val model = EquipmentModels.ensureModel(database, category.key, res.get())
+                refreshModels(category.key)
+                showToast("✅ Тип изделия добавлен: ${model?.name}")
+            }
+        }
+
+        val photoBtn = Button("🖼️ Назначить фото")
+        photoBtn.style = "-fx-background-color: #007bff; -fx-text-fill: white; -fx-padding: 6px 14px; -fx-background-radius: 4px;"
+        photoBtn.setOnAction {
+            val model = modelsTable.selectionModel.selectedItem
+            if (model == null) {
+                showInfo("⚠️ Выберите тип изделия")
+                return@setOnAction
+            }
+            val chooser = FileChooser()
+            chooser.title = "Фото для «${model.name}»"
+            chooser.extensionFilters.addAll(
+                FileChooser.ExtensionFilter("Изображения", "*.jpg", "*.jpeg", "*.png", "*.jfif"),
+                FileChooser.ExtensionFilter("Все файлы", "*.*")
+            )
+            AppPaths.imagesDir.mkdirs()
+            chooser.initialDirectory = AppPaths.imagesDir
+            val file = chooser.showOpenDialog(dialog) ?: return@setOnAction
+            try {
+                val safeName = file.name.replace(Regex("[^\\p{L}\\p{N}._() -]"), "_")
+                val target = File(AppPaths.imagesDir, safeName)
+                if (file.absolutePath != target.absolutePath) file.copyTo(target, overwrite = true)
+                val updated = model.copy(photo = safeName)
+                database.saveModel(updated)
+                EquipmentModels.addLocal(updated)
+                refreshModels(model.typeKey)
+                showToast("✅ Фото назначено: $safeName")
+            } catch (t: Throwable) {
+                showError("Не удалось скопировать файл:\n${t.message}")
+            }
+        }
+
+        val clearPhotoBtn = Button("🚫 Без фото")
+        clearPhotoBtn.style = "-fx-background-color: #6c757d; -fx-text-fill: white; -fx-padding: 6px 14px; -fx-background-radius: 4px;"
+        clearPhotoBtn.setOnAction {
+            val model = modelsTable.selectionModel.selectedItem
+            if (model == null) {
+                showInfo("⚠️ Выберите тип изделия")
+                return@setOnAction
+            }
+            val updated = model.copy(photo = null)
+            database.saveModel(updated)
+            EquipmentModels.addLocal(updated)
+            refreshModels(model.typeKey)
+            showToast("Фото убрано у «${model.name}»")
+        }
+
+        val deleteModelBtn = Button("🗑️ Удалить тип изделия")
+        deleteModelBtn.style = "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-padding: 6px 14px; -fx-background-radius: 4px;"
+        deleteModelBtn.setOnAction {
+            val model = modelsTable.selectionModel.selectedItem
+            if (model == null) {
+                showInfo("⚠️ Выберите тип изделия")
+                return@setOnAction
+            }
+            val used = database.countEquipmentByModel(model.id)
+            if (used > 0) {
+                showInfo("⚠️ Тип «${model.name}» используется оборудованием ($used шт.).\nСначала смените тип у этих единиц.")
+                return@setOnAction
+            }
+            val confirm = Alert(AlertType.CONFIRMATION)
+            confirm.title = "Удаление типа изделия"
+            confirm.headerText = "Удалить «${model.name}»?"
+            val res = confirm.showAndWait()
+            if (res.isPresent && res.get() == ButtonType.OK) {
+                database.deleteModel(model.id)
+                EquipmentModels.removeLocal(model.id)
+                refreshModels(model.typeKey)
+                showToast("🗑️ Тип изделия удалён: ${model.name}")
+            }
+        }
+
+        modelButtons.children.addAll(addModelBtn, photoBtn, clearPhotoBtn, deleteModelBtn)
+
+        val infoLabel = Label("💡 Типы изделий назначаются оборудованию в карточке/диалоге типа. Фото берётся по типу изделия, иначе — по категории, иначе заглушка.")
         infoLabel.style = "-fx-text-fill: #6c757d; -fx-font-size: 12px; -fx-wrap-text: true;"
 
-        root.children.addAll(headerLabel, tableView, buttonPanel, infoLabel)
+        root.children.addAll(headerLabel, tableView, buttonPanel, modelsLabel, modelsTable, modelButtons, infoLabel)
 
-        val scene = Scene(root, 680.0, 480.0)
+        val scene = Scene(root, 760.0, 700.0)
         dialog.scene = scene
         dialog.showAndWait()
     }

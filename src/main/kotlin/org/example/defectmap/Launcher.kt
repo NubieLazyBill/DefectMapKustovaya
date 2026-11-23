@@ -1,7 +1,8 @@
-package org.example.defectmap
+﻿package org.example.defectmap
 
 import javafx.application.Application
 import org.example.defectmap.diagnostics.AppSmoke
+import org.example.defectmap.diagnostics.DbMigrate
 import org.example.defectmap.diagnostics.MarkerMigration
 import org.example.defectmap.diagnostics.SelfTest
 import org.example.defectmap.diagnostics.UiCheck
@@ -38,6 +39,7 @@ object Launcher {
             "--uicheck", "uicheck" -> UiCheck.run(args.drop(1))
             "--appsmoke", "appsmoke" -> exitProcess(AppSmoke.run(args.drop(1).toTypedArray()))
             "--fix-markers" -> exitProcess(MarkerMigration.run(args.drop(1)))
+            "--migrate-db", "migrate-db" -> exitProcess(DbMigrate.run(args.drop(1)))
             "--version", "-v" -> {
                 println("DefectMap $VERSION")
                 println(PlatformInfo.describe())
