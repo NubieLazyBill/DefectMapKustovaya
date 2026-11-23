@@ -340,6 +340,14 @@ class EquipmentCardController(
      * Если ничего нет — создаёт заглушку.
      */
     private fun createEquipmentImage(): Image {
+        // 0. Индивидуальное фото единицы оборудования
+        equipment.photo?.takeIf { it.isNotBlank() }?.let { name ->
+            loadImage(name)?.let {
+                println("🖼️ Индивидуальное фото оборудования: $name")
+                return it
+            }
+        }
+
         // 1. Фото, назначенное типу изделия (модели) в справочнике типов
         EquipmentModels.photoName(equipment.modelId)?.let { name ->
             loadImage(name)?.let {

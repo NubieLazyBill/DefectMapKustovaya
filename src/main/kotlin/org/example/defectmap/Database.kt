@@ -36,6 +36,7 @@ class Database(private val substationKey: String = "kustovaya") {
         addMarkersColumnIfNotExists()
         createModelsTable()
         addModelIdColumnIfNotExists()
+        addPhotoColumnIfNotExists()
         migrateModelsIfNeeded()
         migrateMarkerIds()
         createDefectTypesTable()
@@ -161,6 +162,16 @@ class Database(private val substationKey: String = "kustovaya") {
             println("✅ Колонка model_id добавлена")
         } catch (e: Exception) {
             println("ℹ️ Колонка model_id уже существует")
+        }
+    }
+
+    /** Индивидуальное фото конкретной единицы оборудования (перекрывает фото типа). */
+    private fun addPhotoColumnIfNotExists() {
+        try {
+            executeUpdate("ALTER TABLE equipment ADD COLUMN photo TEXT DEFAULT NULL")
+            println("✅ Колонка photo добавлена")
+        } catch (e: Exception) {
+            println("ℹ️ Колонка photo уже существует")
         }
     }
 
@@ -301,8 +312,8 @@ class Database(private val substationKey: String = "kustovaya") {
         val gson = GsonBuilder().create()
         val sql = """
         INSERT INTO equipment
-        (id, type, name, letter, cell, size, markers, parent_id, model_id, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+        (id, type, name, letter, cell, size, markers, parent_id, model_id, photo, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
         ON CONFLICT(id) DO UPDATE SET
             type = excluded.type,
             name = excluded.name,
@@ -312,6 +323,7 @@ class Database(private val substationKey: String = "kustovaya") {
             markers = excluded.markers,
             parent_id = excluded.parent_id,
             model_id = COALESCE(excluded.model_id, equipment.model_id),
+            photo = COALESCE(excluded.photo, equipment.photo),
             updated_at = excluded.updated_at
     """.trimIndent()
 
@@ -333,6 +345,7 @@ class Database(private val substationKey: String = "kustovaya") {
                 stmt.setString(7, markersJson)
                 stmt.setString(8, item.parentId)  // ← может быть null
                 stmt.setString(9, item.modelId)
+                stmt.setString(10, item.photo)
                 stmt.addBatch()
             }
             stmt.executeBatch()
@@ -365,6 +378,17 @@ class Database(private val substationKey: String = "kustovaya") {
         connection?.prepareStatement(sql)?.use { stmt ->
             if (modelId.isNullOrBlank()) stmt.setNull(1, java.sql.Types.VARCHAR)
             else stmt.setString(1, modelId)
+            stmt.setString(2, equipmentId)
+            stmt.executeUpdate()
+        }
+    }
+
+    /** Индивидуальное фото единицы оборудования (перекрывает фото типа изделия). */
+    fun setEquipmentPhoto(equipmentId: String, photo: String?) {
+        val sql = "UPDATE equipment SET photo = ?, updated_at = strftime('%s', 'now') WHERE id = ?"
+        connection?.prepareStatement(sql)?.use { stmt ->
+            if (photo.isNullOrBlank()) stmt.setNull(1, java.sql.Types.VARCHAR)
+            else stmt.setString(1, photo)
             stmt.setString(2, equipmentId)
             stmt.executeUpdate()
         }
@@ -435,7 +459,8 @@ class Database(private val substationKey: String = "kustovaya") {
             size = rs.getString("size") ?: "normal",
             markers = markers,
             parentId = rs.getString("parent_id"),  // ← ДОБАВЛЕНО
-            modelId = rs.getString("model_id")
+            modelId = rs.getString("model_id"),
+            photo = try { rs.getString("photo") } catch (e: Exception) { null }
         )
     }
 
@@ -900,6 +925,8 @@ data class EquipmentData(
     val parentId: String? = null,
     /** Тип изделия (модель) внутри категории [type]; null — не задан. */
     val modelId: String? = null,
+    /** Индивидуальное фото единицы оборудования (имя файла в images/). */
+    val photo: String? = null,
 )
 
 data class MarkerPosition(
@@ -916,7 +943,9 @@ data class EquipmentTableItem(
     val left: Double,
     val top: Double,
     val cell: String,
-    val size: String = "normal"
+    val size: String = "normal",
+    /** Тип изделия (модель), например «ТФЗМ-220». */
+    val model: String = ""
 )
 
 // ===== В КОНЦЕ ФАЙЛА, ПОСЛЕ ЗАКРЫТИЯ КЛАССА Database =====

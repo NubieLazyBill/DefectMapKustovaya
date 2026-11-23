@@ -1,4 +1,4 @@
-﻿package org.example.defectmap
+package org.example.defectmap
 
 import javafx.fxml.FXML
 import javafx.scene.web.WebView
@@ -21,6 +21,7 @@ import javafx.scene.input.KeyCombination
 import javafx.scene.input.KeyCodeCombination
 import javafx.scene.control.TextInputDialog
 import javafx.scene.control.ChoiceDialog
+import javafx.scene.layout.GridPane
 import javafx.scene.layout.HBox
 import javafx.scene.control.TextArea
 import javafx.scene.control.TextField
@@ -2460,7 +2461,7 @@ class DefectMapController {
 
         val editItem = MenuItem("✏️ Редактировать")
         editItem.setOnAction {
-            editEquipment(equipment.id)
+            editEquipmentDialog(equipment.id)
             contextMenu.hide()
         }
 
@@ -2982,6 +2983,269 @@ class DefectMapController {
         showInfo("🗑️ Маркер удалён")
     }
 
+    // ======================== ЕДИНОЕ ОКНО РЕДАКТИРОВАНИЯ ========================
+
+    /** Результат единого окна параметров оборудования. */
+    private data class EquipmentEditorResult(
+        val name: String,
+        val typeKey: String,
+        val modelId: String?,
+        val cell: String,
+        val size: String,
+        val photo: String?,
+        val pickCell: Boolean = false
+    )
+
+    /**
+     * Одно окно со всеми параметрами оборудования: ДН, категория, тип изделия,
+     * ячейка, размер метки и индивидуальное фото. Используется для
+     * редактирования (добавление по-прежнему идёт через клик по схеме).
+     */
+    private fun showEquipmentEditor(
+        dialogTitle: String,
+        initial: EquipmentEditorResult
+    ): EquipmentEditorResult? {
+        val stage = Stage()
+        stage.title = dialogTitle
+        stage.initModality(javafx.stage.Modality.WINDOW_MODAL)
+        stage.initOwner(webView.scene.window)
+
+        var photoName: String? = initial.photo
+
+        val nameField = TextField(initial.name)
+        nameField.promptText = "Диспетчерское наименование (ДН)"
+        nameField.prefWidth = 380.0
+
+        val typeCombo = ComboBox<String>()
+        typeCombo.items.addAll(EquipmentTypes.ALL_TYPES.map { it.second })
+        typeCombo.value = EquipmentTypes.getTypeName(initial.typeKey)
+        typeCombo.prefWidth = 380.0
+
+        val modelCombo = ComboBox<String>()
+        modelCombo.isEditable = true
+        modelCombo.prefWidth = 380.0
+        modelCombo.promptText = "Например, ТФЗМ-220 — можно ввести новый"
+
+        val cellField = TextField(initial.cell)
+        cellField.promptText = "Ячейка"
+
+        val sizeCombo = ComboBox<String>()
+        sizeCombo.items.addAll(listOf("small", "normal", "large"))
+        sizeCombo.value = initial.size
+
+        val photoLabel = Label(photoName ?: "не задано — будет фото типа изделия")
+        photoLabel.style = "-fx-text-fill: #6c757d; -fx-font-size: 12px;"
+        photoLabel.isWrapText = true
+
+        fun refreshModels() {
+            val typeKey = EquipmentTypes.ALL_TYPES.find { it.second == typeCombo.value }?.first ?: initial.typeKey
+            modelCombo.items.setAll(EquipmentModels.names(typeKey))
+            if (modelCombo.value.isNullOrBlank()) {
+                modelCombo.value = EquipmentModels.displayName(initial.modelId) ?: ""
+            }
+        }
+        typeCombo.valueProperty().addListener { _, _, _ -> refreshModels() }
+        refreshModels()
+
+        val pickCellBtn = Button("🗺️ Выбрать на схеме")
+        pickCellBtn.setOnAction {
+            stage.close()
+        }
+
+        val photoBtn = Button("🖼️ Фото оборудования…")
+        photoBtn.setOnAction {
+            val chooser = FileChooser()
+            chooser.title = "Фото оборудования"
+            chooser.extensionFilters.addAll(
+                FileChooser.ExtensionFilter("Изображения", "*.jpg", "*.jpeg", "*.png", "*.jfif"),
+                FileChooser.ExtensionFilter("Все файлы", "*.*")
+            )
+            AppPaths.imagesDir.mkdirs()
+            chooser.initialDirectory = AppPaths.imagesDir
+            val file = chooser.showOpenDialog(stage) ?: return@setOnAction
+            try {
+                val safeName = file.name.replace(Regex("[^\\p{L}\\p{N}._() -]"), "_")
+                val target = File(AppPaths.imagesDir, safeName)
+                if (file.absolutePath != target.absolutePath) file.copyTo(target, overwrite = true)
+                photoName = safeName
+                photoLabel.text = safeName
+            } catch (t: Throwable) {
+                showError("Не удалось скопировать файл:\n${t.message}")
+            }
+        }
+
+        val clearPhotoBtn = Button("🚫 Без фото")
+        clearPhotoBtn.setOnAction {
+            photoName = null
+            photoLabel.text = "не задано — будет фото типа изделия"
+        }
+
+        val grid = GridPane()
+        grid.hgap = 10.0
+        grid.vgap = 10.0
+        grid.style = "-fx-padding: 15px;"
+        grid.add(Label("ДН:"), 0, 0); grid.add(nameField, 1, 0)
+        grid.add(Label("Оборудование:"), 0, 1); grid.add(typeCombo, 1, 1)
+        grid.add(Label("Тип изделия:"), 0, 2); grid.add(modelCombo, 1, 2)
+        grid.add(Label("Ячейка:"), 0, 3)
+        grid.add(HBox(8.0, cellField, pickCellBtn), 1, 3)
+        grid.add(Label("Размер метки:"), 0, 4); grid.add(sizeCombo, 1, 4)
+        grid.add(Label("Фото:"), 0, 5)
+        grid.add(HBox(8.0, photoBtn, clearPhotoBtn), 1, 5)
+        grid.add(photoLabel, 1, 6)
+
+        val okBtn = Button("💾 Сохранить")
+        val cancelBtn = Button("Отмена")
+        val buttons = HBox(10.0, okBtn, cancelBtn)
+        buttons.alignment = Pos.CENTER_RIGHT
+        buttons.style = "-fx-padding: 10px 15px;"
+
+        val root = VBox(10.0, grid, buttons)
+        root.style = "-fx-background-color: white;"
+        stage.scene = Scene(root)
+        stage.isResizable = false
+
+        var result: EquipmentEditorResult? = null
+        var pickCellRequested = false
+
+        okBtn.setOnAction {
+            val name = nameField.text.trim()
+            if (name.isEmpty()) {
+                showInfo("⚠️ Укажите диспетчерское наименование")
+                return@setOnAction
+            }
+            val typeName = typeCombo.value ?: ""
+            val typeKey = EquipmentTypes.ALL_TYPES.find { it.second == typeName }?.first ?: "other"
+            val modelText = modelCombo.value?.trim().orEmpty()
+            val model = if (modelText.isEmpty()) null else EquipmentModels.ensureModel(database, typeKey, modelText)
+            result = EquipmentEditorResult(
+                name = name,
+                typeKey = typeKey,
+                modelId = model?.id,
+                cell = cellField.text.trim(),
+                size = sizeCombo.value ?: "normal",
+                photo = photoName
+            )
+            stage.close()
+        }
+
+        pickCellBtn.setOnAction {
+            pickCellRequested = true
+            stage.close()
+        }
+        cancelBtn.setOnAction { stage.close() }
+
+        stage.showAndWait()
+        if (pickCellRequested) {
+            return EquipmentEditorResult(
+                name = nameField.text.trim(),
+                typeKey = EquipmentTypes.ALL_TYPES.find { it.second == typeCombo.value }?.first ?: initial.typeKey,
+                modelId = EquipmentModels.find(
+                    EquipmentTypes.ALL_TYPES.find { it.second == typeCombo.value }?.first ?: initial.typeKey,
+                    modelCombo.value ?: ""
+                )?.id,
+                cell = cellField.text.trim(),
+                size = sizeCombo.value ?: "normal",
+                photo = photoName,
+                pickCell = true
+            )
+        }
+        return result
+    }
+
+    /**
+     * Редактирование оборудования в одном окне: все параметры сохраняются
+     * сразу, маркер на схеме обновляется, фото применяется в карточке.
+     */
+    private fun editEquipmentDialog(equipmentId: String) {
+        val allEquipment = loadEquipment()
+        val equipment = allEquipment.find { it.id == equipmentId }
+        if (equipment == null) {
+            println("❌ Оборудование не найдено: $equipmentId")
+            showToast("⚠️ Оборудование не найдено")
+            return
+        }
+
+        var state = EquipmentEditorResult(
+            name = equipment.name,
+            typeKey = equipment.type,
+            modelId = equipment.modelId,
+            cell = equipment.cell,
+            size = equipment.size,
+            photo = equipment.photo
+        )
+
+        val edited: EquipmentEditorResult
+        while (true) {
+            val r = showEquipmentEditor("✏️ Редактирование: ${equipment.name}", state)
+                ?: run {
+                    println("❌ Редактирование отменено")
+                    return
+                }
+            if (r.pickCell) {
+                val picked = selectCell(state.cell) ?: return
+                state = r.copy(cell = picked, pickCell = false)
+                continue
+            }
+            edited = r
+            break
+        }
+
+        val letter = EquipmentTypes.getLetter(edited.typeKey)
+        val updated = equipment.copy(
+            name = edited.name,
+            type = edited.typeKey,
+            letter = letter,
+            cell = edited.cell,
+            size = edited.size,
+            modelId = edited.modelId,
+            photo = edited.photo
+        )
+        val updatedList = allEquipment.map { if (it.id == equipment.id) updated else it }
+        database.saveEquipment(updatedList)
+        database.setEquipmentModel(equipment.id, edited.modelId)
+        database.setEquipmentPhoto(equipment.id, edited.photo)
+
+        val escapedName = edited.name.replace("'", "\\'")
+        val escapedCell = edited.cell.replace("'", "\\'")
+        val escapedType = edited.typeKey.replace("'", "\\'")
+        val escapedLetter = letter.replace("'", "\\'")
+        val escapedSize = edited.size.replace("'", "\\'")
+
+        webView.engine.executeScript(
+            """
+            (function() {
+                var marker = document.getElementById('$equipmentId');
+                if (marker) {
+                    marker.className = 'equipment-marker $escapedType $escapedSize';
+                    var dot = marker.querySelector('.dot');
+                    if (dot) dot.textContent = '$escapedLetter';
+                    var tip = marker.querySelector('.tooltip-text');
+                    if (tip) tip.textContent = '$escapedName';
+                    marker.style.left = '${updated.left}%';
+                    marker.style.top = '${updated.top}%';
+                }
+                var all = window.equipment || [];
+                for (var i = 0; i < all.length; i++) {
+                    if (all[i].id === '$equipmentId') {
+                        all[i].name = '$escapedName';
+                        all[i].type = '$escapedType';
+                        all[i].letter = '$escapedLetter';
+                        all[i].cell = '$escapedCell';
+                        all[i].size = '$escapedSize';
+                        break;
+                    }
+                }
+                console.log('✅ Оборудование обновлено из единого окна');
+            })();
+            """.trimIndent()
+        )
+        syncWindowEquipment()
+
+        showToast("✅ Сохранено: ${edited.name}")
+        println("✅ Оборудование обновлено: ${edited.name} (${edited.typeKey}, ${edited.modelId ?: "без типа"})")
+    }
+
     private fun editEquipment(equipmentId: String) {
         println("=".repeat(60))
         println("✏️ РЕДАКТИРОВАНИЕ ОБОРУДОВАНИЯ")
@@ -3131,6 +3395,7 @@ class DefectMapController {
                                                         id = eq.id,
                                                         name = eq.name,
                                                         type = typeDisplayName,
+                                                        model = EquipmentModels.displayName(eq.modelId) ?: "",
                                                         cell = eq.cell,
                                                         left = eq.left,
                                                         top = eq.top
@@ -3337,6 +3602,11 @@ class DefectMapController {
                 colType.prefWidth = 300.0
                 colType.minWidth = 150.0
 
+                val colModel = TableColumn<EquipmentTableItem, String>("Тип изделия")
+                colModel.cellValueFactory = PropertyValueFactory("model")
+                colModel.prefWidth = 190.0
+                colModel.minWidth = 120.0
+
                 val colCell = TableColumn<EquipmentTableItem, String>("Ячейка")
                 colCell.cellValueFactory = PropertyValueFactory("cell")
                 colCell.prefWidth = 120.0
@@ -3386,6 +3656,7 @@ class DefectMapController {
                                                 id = eq.id,
                                                 name = eq.name,
                                                 type = typeDisplayName,
+                                                model = EquipmentModels.displayName(eq.modelId) ?: "",
                                                 cell = eq.cell,
                                                 left = eq.left,
                                                 top = eq.top
@@ -3430,7 +3701,7 @@ class DefectMapController {
                 }
 
                 tableView.columns.addAll(
-                    colNumber, colName, colType, colCell, colActions
+                    colNumber, colName, colType, colModel, colCell, colActions
                 )
 
                 // ===== РАСТЯГИВАЕМ ТАБЛИЦУ ПО ШИРИНЕ =====
@@ -3445,6 +3716,7 @@ class DefectMapController {
                             id = item.id,
                             name = item.name,
                             type = typeDisplayName,
+                            model = EquipmentModels.displayName(item.modelId) ?: "",
                             cell = item.cell,
                             left = item.left,
                             top = item.top
@@ -3475,7 +3747,8 @@ class DefectMapController {
                         filtered = filtered.filter {
                             it.name.contains(searchText, ignoreCase = true) ||
                                     it.id.contains(searchText, ignoreCase = true) ||
-                                    it.type.contains(searchText, ignoreCase = true)
+                                    it.type.contains(searchText, ignoreCase = true) ||
+                                    (EquipmentModels.displayName(it.modelId) ?: "").contains(searchText, ignoreCase = true)
                         }
                     }
 
@@ -3542,7 +3815,7 @@ class DefectMapController {
                 editMenuItem.setOnAction {
                     val selected = tableView.selectionModel.selectedItem
                     if (selected != null) {
-                        editEquipmentFromList(selected.id)
+                        editEquipmentDialog(selected.id)
                     }
                 }
 
@@ -3575,6 +3848,7 @@ class DefectMapController {
                                                 id = eq.id,
                                                 name = eq.name,
                                                 type = typeDisplayName,
+                                                model = EquipmentModels.displayName(eq.modelId) ?: "",
                                                 cell = eq.cell,
                                                 left = eq.left,
                                                 top = eq.top
