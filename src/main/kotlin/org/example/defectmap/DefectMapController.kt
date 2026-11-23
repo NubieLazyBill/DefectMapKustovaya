@@ -214,6 +214,12 @@ class DefectMapController {
         statusCombo.value = "Все"
         statusCombo.style = "-fx-pref-width: 220px;"
 
+        val reportSearchLabel = Label("Поиск по ДН:")
+        reportSearchLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
+        val reportSearch = javafx.scene.control.TextField()
+        reportSearch.promptText = "ДН, оборудование, тип, ячейка"
+        reportSearch.style = "-fx-pref-width: 220px; -fx-padding: 5px 8px; -fx-background-radius: 4px; -fx-border-color: #ced4da; -fx-border-radius: 4px;"
+
         val typeLabel = Label("Тип оборудования:")
         typeLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val typeCombo = ComboBox<String>()
@@ -270,6 +276,9 @@ class DefectMapController {
         filtersGrid.add(dateLabel, 0, 4)
         filtersGrid.add(dateBox, 0, 5)
 
+        filtersGrid.add(reportSearchLabel, 1, 4)
+        filtersGrid.add(reportSearch, 1, 5)
+
         // ======================== СЧЁТЧИК + ПРЕВЬЮ ========================
         val countLabel = Label("Найдено: ${reportData.size} дефектов")
         countLabel.style = "-fx-font-size: 15px; -fx-text-fill: #28a745; -fx-font-weight: bold; -fx-padding: 5px 0;"
@@ -286,8 +295,15 @@ class DefectMapController {
         previewText.minHeight = 200.0    // ← минимальная высота
 
         fun updatePreview() {
+            val searchText = reportSearch.text.trim()
+            val searched = if (searchText.isEmpty()) reportData else reportData.filter { item ->
+                item.equipmentName.contains(searchText, ignoreCase = true) ||
+                    item.equipmentType.contains(searchText, ignoreCase = true) ||
+                    item.equipmentModel.contains(searchText, ignoreCase = true) ||
+                    item.equipmentCell.contains(searchText, ignoreCase = true)
+            }
             val filtered = filterReportData(
-                reportData,
+                searched,
                 statusCombo.value,
                 typeCombo.value,
                 cellCombo.value,
@@ -298,15 +314,31 @@ class DefectMapController {
             countLabel.text = "Найдено: ${filtered.size} дефектов"
 
             if (filtered.isNotEmpty()) {
-                val preview = filtered.joinToString("\n") { item ->
-                    val dateStr = item.detectionDate?.let {
-                        Instant.ofEpochMilli(it)
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
-                            .format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
-                    } ?: "—"
-                    val parentStr = item.parentEquipmentName?.let { " (в составе: $it)" } ?: ""
-                    "${item.equipmentName}$parentStr | ${item.defectName} | ${item.defectStatus} | $dateStr"
+                val header = "%-30s %-20s %-14s %-7s %-24s %-11s %s".format(
+                    "ДН", "Оборудование", "Тип", "Ячейка", "Вид дефекта", "Статус", "Дата"
+                )
+                val preview = buildString {
+                    appendLine(header)
+                    appendLine("-".repeat(header.length))
+                    filtered.forEach { item ->
+                        val dateStr = item.detectionDate?.let {
+                            Instant.ofEpochMilli(it)
+                                .atZone(ZoneId.systemDefault())
+                                .toLocalDate()
+                                .format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                        } ?: "—"
+                        appendLine(
+                            "%-30s %-20s %-14s %-7s %-24s %-11s %s".format(
+                                item.equipmentName.take(30),
+                                item.equipmentType.take(20),
+                                item.equipmentModel.ifBlank { "—" }.take(14),
+                                item.equipmentCell.take(7),
+                                item.defectName.take(24),
+                                item.defectStatus,
+                                dateStr
+                            )
+                        )
+                    }
                 }
                 previewText.text = preview
             } else {
@@ -318,6 +350,7 @@ class DefectMapController {
         typeCombo.valueProperty().addListener { _, _, _ -> updatePreview() }
         cellCombo.valueProperty().addListener { _, _, _ -> updatePreview() }
         defectTypeCombo.valueProperty().addListener { _, _, _ -> updatePreview() }
+        reportSearch.textProperty().addListener { _, _, _ -> updatePreview() }
         dateFrom.valueProperty().addListener { _, _, _ -> updatePreview() }
         dateTo.valueProperty().addListener { _, _, _ -> updatePreview() }
 
@@ -1693,6 +1726,9 @@ class DefectMapController {
                 allDefects.add(
                     DefectViewItem(
                         equipmentName = eq.name,
+                        equipmentType = EquipmentTypes.getTypeName(eq.type),
+                        equipmentModel = EquipmentModels.displayName(eq.modelId) ?: "",
+                        detectionDate = defect.detectionDate,
                         cell = eq.cell,
                         defectName = defect.name,
                         description = defect.description,
@@ -1728,16 +1764,24 @@ class DefectMapController {
         statusFilter.style = "-fx-pref-width: 150px; -fx-padding: 4px; -fx-font-size: 13px;"
 
         val searchField = TextField()
-        searchField.promptText = "🔍 Поиск по оборудованию..."
+        searchField.promptText = "🔍 Поиск: ДН, оборудование, тип, ячейка..."
         searchField.style = "-fx-pref-width: 250px; -fx-padding: 6px 10px; -fx-border-color: #ced4da; -fx-border-radius: 4px;"
 
         val tableView = TableView<DefectViewItem>()
         tableView.style = "-fx-font-size: 13px; -fx-border-color: #dee2e6;"
         tableView.prefHeight = 600.0  // ← ВЫСОТА ТАБЛИЦЫ
 
-        val colEquipment = TableColumn<DefectViewItem, String>("Оборудование")
+        val colEquipment = TableColumn<DefectViewItem, String>("ДН")
         colEquipment.cellValueFactory = PropertyValueFactory("equipmentName")
-        colEquipment.prefWidth = 250.0
+        colEquipment.prefWidth = 240.0
+
+        val colEquipType = TableColumn<DefectViewItem, String>("Оборудование")
+        colEquipType.cellValueFactory = PropertyValueFactory("equipmentType")
+        colEquipType.prefWidth = 170.0
+
+        val colModel = TableColumn<DefectViewItem, String>("Тип")
+        colModel.cellValueFactory = PropertyValueFactory("equipmentModel")
+        colModel.prefWidth = 140.0
 
         val colCell = TableColumn<DefectViewItem, String>("Ячейка")
         colCell.cellValueFactory = PropertyValueFactory("cell")
@@ -1750,7 +1794,7 @@ class DefectMapController {
 
         val colDescription = TableColumn<DefectViewItem, String>("Описание")
         colDescription.cellValueFactory = PropertyValueFactory("description")
-        colDescription.prefWidth = 350.0  // ← ШИРЕ
+        colDescription.prefWidth = 300.0  // ← ШИРЕ
 
         val colStatus = TableColumn<DefectViewItem, String>("Статус")
         colStatus.cellValueFactory = PropertyValueFactory("status")
@@ -1769,7 +1813,27 @@ class DefectMapController {
             }
         }
 
-        tableView.columns.addAll(colEquipment, colCell, colDefect, colDescription, colStatus)
+        val colDate = TableColumn<DefectViewItem, String>("Дата")
+        colDate.cellValueFactory = PropertyValueFactory("detectionDate")
+        colDate.prefWidth = 95.0
+        colDate.style = "-fx-alignment: CENTER;"
+        colDate.setCellFactory {
+            object : TableCell<DefectViewItem, String>() {
+                override fun updateItem(item: String?, empty: Boolean) {
+                    super.updateItem(item, empty)
+                    text = if (empty || item.isNullOrBlank()) {
+                        null
+                    } else {
+                        ExcelReportWriter.formatDate(item.toLongOrNull())
+                    }
+                }
+            }
+        }
+
+        tableView.columns.addAll(
+            colEquipment, colEquipType, colModel, colCell,
+            colDefect, colDescription, colStatus, colDate
+        )
 
         val observableData = FXCollections.observableArrayList(allDefects)
         tableView.items = observableData
@@ -1782,7 +1846,12 @@ class DefectMapController {
                 val statusMatch = status == "Все статусы" ||
                         (status == "🟡 Обнаружен" && item.status != "fixed") ||
                         (status == "✅ Устранён" && item.status == "fixed")
-                val searchMatch = search.isEmpty() || item.equipmentName.lowercase().contains(search)
+                val searchMatch = search.isEmpty() ||
+                        item.equipmentName.lowercase().contains(search) ||
+                        item.equipmentType.lowercase().contains(search) ||
+                        item.equipmentModel.lowercase().contains(search) ||
+                        item.cell.lowercase().contains(search) ||
+                        item.defectName.lowercase().contains(search)
                 statusMatch && searchMatch
             }
             tableView.items = FXCollections.observableArrayList(filtered)
@@ -5026,6 +5095,9 @@ class DefectMapController {
 
 data class DefectViewItem(
     val equipmentName: String,
+    val equipmentType: String = "",
+    val equipmentModel: String = "",
+    val detectionDate: Long? = null,
     val cell: String,
     val defectName: String,
     val description: String,
