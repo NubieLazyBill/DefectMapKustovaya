@@ -49,6 +49,7 @@ object Launcher {
                 println("DefectMap $VERSION")
                 println("  ${AppPaths.describe()}")
                 println("  каталог данных: ${AppPaths.dataDir.absolutePath}")
+                println("  каталог отчётов: ${AppPaths.reportsDir.absolutePath}")
                 println("  appDir доступен для записи: ${AppPaths.appDir.canWrite()}")
                 println("  APPIMAGE=${System.getenv("APPIMAGE")}")
                 println("  APPDIR=${System.getenv("APPDIR")}")

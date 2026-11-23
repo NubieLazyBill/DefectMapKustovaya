@@ -359,23 +359,23 @@ class DefectMapController {
         buttonBox.alignment = Pos.CENTER_RIGHT
         buttonBox.style = "-fx-padding: 10px 0 0 0;"
 
-        val createBtn = Button("📊 Создать отчёт")
+        val createBtn = Button("📄 Сформировать отчёт")
         createBtn.style = "-fx-background-color: #28a745; -fx-text-fill: white; -fx-padding: 8px 20px; -fx-background-radius: 4px; -fx-font-weight: bold; -fx-font-size: 13px;"
         createBtn.setOnAction {
-            val status = statusCombo.value
-            val typeName = typeCombo.value
-            val cell = cellCombo.value ?: "Все ячейки"
-            val defectType = defectTypeCombo.value
-            val from = dateFrom.value
-            val to = dateTo.value
-
-            val filtered = filterReportData(reportData, status, typeName, cell, defectType, from, to)
+            val filtered = filterReportData(
+                reportData,
+                statusCombo.value,
+                typeCombo.value,
+                cellCombo.value ?: "Все ячейки",
+                defectTypeCombo.value,
+                dateFrom.value,
+                dateTo.value
+            )
             if (filtered.isEmpty()) {
                 showInfo("⚠️ Нет дефектов по выбранным фильтрам")
                 return@setOnAction
             }
-            reportStage.close()
-            saveReportToExcel(filtered)
+            generateReportFile(filtered, reportStage)
         }
 
         val printBtn = Button("🖨️ Печать")
@@ -473,6 +473,42 @@ class DefectMapController {
 
     /** Последняя папка сохранения отчёта (на Linux GTK-диалог не запоминает её сам). */
     private var lastExportDirPath: String? = null
+
+    /**
+     * «Сформировать отчёт»: пишет xlsx в каталог «отчёты» рядом с приложением
+     * и предлагает сразу напечатать или открыть папку.
+     */
+    private fun generateReportFile(data: List<ReportItem>, owner: javafx.stage.Window?) {
+        try {
+            val dir = AppPaths.reportsDir
+            val stamp = java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
+            val target = File(dir, "report_defects_" + stamp + ".xlsx")
+
+            ExcelReportWriter.write(data, target)
+            lastExportDirPath = dir.absolutePath
+            println("✅ Отчёт сформирован: " + target.absolutePath)
+
+            val alert = Alert(AlertType.INFORMATION)
+            alert.title = "Отчёт сформирован"
+            alert.headerText = "Файл сохранён в папку «отчёты»"
+            alert.contentText = target.absolutePath + "\n\nВсего дефектов: " + data.size
+
+            val printBtn = ButtonType("🖨️ Напечатать", javafx.scene.control.ButtonBar.ButtonData.OK_DONE)
+            val folderBtn = ButtonType("📂 Открыть папку", javafx.scene.control.ButtonBar.ButtonData.OTHER)
+            alert.buttonTypes.setAll(folderBtn, printBtn, ButtonType.CLOSE)
+            if (owner != null) alert.initOwner(owner)
+
+            when (alert.showAndWait().orElse(ButtonType.CLOSE)) {
+                printBtn -> printReport(data, owner)
+                folderBtn -> AppPaths.openFolder(dir)
+                else -> Unit
+            }
+        } catch (t: Throwable) {
+            showError("Не удалось сформировать отчёт:\n" + t.message)
+            t.printStackTrace()
+        }
+    }
 
     private fun saveReportToExcel(data: List<ReportItem>) {
         try {

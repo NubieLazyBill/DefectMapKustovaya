@@ -109,6 +109,36 @@ object AppPaths {
     /** Каталог автобэкапов БД. */
     val backupsDir: File get() = File(dataDir, "backups")
 
+    /**
+     * Каталог готовых отчётов — папка «отчёты» рядом с приложением.
+     *
+     * Для AppImage образ смонтирован только для чтения, поэтому берём путь к
+     * самому файлу .AppImage (`APPIMAGE`) и кладём отчёты рядом с ним. Если
+     * рядом писать нельзя — отчёты уходят в каталог данных.
+     */
+    val reportsDir: File by lazy {
+        val candidates = buildList {
+            PlatformInfo.env("APPIMAGE")?.let { appImage ->
+                File(appImage).absoluteFile.parentFile?.let { add(File(it, "отчёты")) }
+            }
+            add(File(appDir, "отчёты"))
+            add(File(dataDir, "отчёты"))
+        }
+        for (dir in candidates) {
+            try {
+                dir.mkdirs()
+                if (dir.isDirectory) {
+                    val probe = File.createTempFile(".probe-", ".tmp", dir)
+                    probe.delete()
+                    return@lazy dir
+                }
+            } catch (_: Throwable) {
+                // пробуем следующий вариант
+            }
+        }
+        File(dataDir, "отчёты").also { it.mkdirs() }
+    }
+
     /** Куда открывать диалоги сохранения файлов. */
     val documentsDir: File by lazy {
         val docs = File(PlatformInfo.userHome, "Documents")
