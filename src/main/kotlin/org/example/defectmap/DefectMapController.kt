@@ -3592,17 +3592,17 @@ class DefectMapController {
                 colNumber.maxWidth = 50.0
                 colNumber.style = "-fx-alignment: CENTER;"
 
-                val colName = TableColumn<EquipmentTableItem, String>("Наименование")
+                val colName = TableColumn<EquipmentTableItem, String>("ДН")
                 colName.cellValueFactory = PropertyValueFactory("name")
                 colName.prefWidth = 420.0
                 colName.minWidth = 200.0
 
-                val colType = TableColumn<EquipmentTableItem, String>("Тип")
+                val colType = TableColumn<EquipmentTableItem, String>("Оборудование")
                 colType.cellValueFactory = PropertyValueFactory("type")
                 colType.prefWidth = 300.0
                 colType.minWidth = 150.0
 
-                val colModel = TableColumn<EquipmentTableItem, String>("Тип изделия")
+                val colModel = TableColumn<EquipmentTableItem, String>("Тип")
                 colModel.cellValueFactory = PropertyValueFactory("model")
                 colModel.prefWidth = 190.0
                 colModel.minWidth = 120.0
