@@ -19,4 +19,6 @@ data class ReportItem(
     val detectionDate: Long?,
     val parentEquipmentName: String? = null,
     val rootEquipmentType: String? = null,
+    /** Тип изделия (модель), например «ТФЗМ-220». */
+    val equipmentModel: String = "",
 )

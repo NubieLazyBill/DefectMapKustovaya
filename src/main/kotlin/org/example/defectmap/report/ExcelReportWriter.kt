@@ -29,7 +29,7 @@ object ExcelReportWriter {
 
     private val HEADERS = arrayOf(
         "№", "Оборудование", "В составе", "Тип оборудования", "Ячейка",
-        "Вид дефекта", "Описание", "Статус", "Дата создания", "X%", "Y%",
+        "Вид дефекта", "Описание", "Статус", "Дата создания", "X%", "Y%", "Тип", "Тип",
     )
 
     /** Пишет отчёт в [target]. Запись атомарная (через временный файл рядом). */
@@ -174,6 +174,10 @@ object ExcelReportWriter {
             }
             row.createCell(10).apply {
                 setCellValue(item.markerTop?.let { formatPercent(it) } ?: "-")
+                cellStyle = dataStyle
+            }
+            row.createCell(11).apply {
+                setCellValue(item.equipmentModel.ifBlank { "-" })
                 cellStyle = dataStyle
             }
         }

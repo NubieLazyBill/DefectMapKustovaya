@@ -152,6 +152,7 @@ object ReportPrinter {
         "Описание" to 0.20,
         "Статус" to 0.09,
         "Дата" to 0.09,
+        "Тип" to 0.10,
     )
 
     private fun buildPage(
@@ -215,6 +216,7 @@ object ReportPrinter {
                 item.defectDescription,
                 item.defectStatus,
                 ExcelReportWriter.formatDate(item.detectionDate),
+                item.equipmentModel.ifBlank { "—" },
             )
             COLUMNS.forEachIndexed { index, (_, fraction) ->
                 row.children.add(

@@ -155,6 +155,7 @@ class DefectMapController {
                         ReportItem(
                             equipmentName = eq.name,
                             equipmentType = EquipmentTypes.getTypeName(eq.type),
+                            equipmentModel = EquipmentModels.displayName(eq.modelId) ?: "",
                             equipmentCell = effectiveCell,
                             defectName = defect.name,
                             defectDescription = defect.description,
