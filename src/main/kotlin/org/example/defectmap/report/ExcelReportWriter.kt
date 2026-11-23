@@ -28,8 +28,8 @@ object ExcelReportWriter {
     val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
 
     private val HEADERS = arrayOf(
-        "№", "Оборудование", "В составе", "Тип оборудования", "Ячейка",
-        "Вид дефекта", "Описание", "Статус", "Дата создания", "X%", "Y%", "Тип", "Тип",
+        "№", "ДН", "Оборудование", "Тип", "В составе", "Ячейка",
+        "Вид дефекта", "Описание", "Статус", "Дата создания", "X%", "Y%",
     )
 
     /** Пишет отчёт в [target]. Запись атомарная (через временный файл рядом). */
@@ -62,20 +62,6 @@ object ExcelReportWriter {
             return target
         } finally {
             runCatching { workbook.close() }
-        }
-    }
-
-    /** Сдвиг колонок [from]..[to] на одну вправо (для вставки колонки «Тип»). */
-    private fun shiftRight(row: org.apache.poi.ss.usermodel.Row, from: Int, to: Int) {
-        for (i in to downTo from) {
-            val src = row.getCell(i) ?: continue
-            val dst = row.createCell(i + 1)
-            dst.cellStyle = src.cellStyle
-            when (src.cellType) {
-                org.apache.poi.ss.usermodel.CellType.NUMERIC -> dst.setCellValue(src.numericCellValue)
-                org.apache.poi.ss.usermodel.CellType.STRING -> dst.setCellValue(src.stringCellValue)
-                else -> dst.setCellValue(src.toString())
-            }
         }
     }
 
@@ -143,11 +129,6 @@ object ExcelReportWriter {
             }
         }
 
-        // Порядок колонок: № | ДН | Оборудование | Тип | В составе | ...
-
-        shiftRight(headerRow, 2, 10)
-
-        headerRow.createCell(2).apply { setCellValue("Тип"); cellStyle = headerStyle }
 
         items.forEachIndexed { index, item ->
             val row = sheet.createRow(index + 1)
@@ -161,48 +142,43 @@ object ExcelReportWriter {
                 cellStyle = dataStyle
             }
             row.createCell(2).apply {
-                setCellValue(item.parentEquipmentName ?: "—")
-                cellStyle = if (item.parentEquipmentName != null) italicStyle else dataStyle
-            }
-            row.createCell(3).apply {
                 setCellValue(item.equipmentType)
                 cellStyle = dataStyle
             }
+            row.createCell(3).apply {
+                setCellValue(item.equipmentModel.ifBlank { "-" })
+                cellStyle = dataStyle
+            }
             row.createCell(4).apply {
+                setCellValue(item.parentEquipmentName ?: "—")
+                cellStyle = if (item.parentEquipmentName != null) italicStyle else dataStyle
+            }
+            row.createCell(5).apply {
                 setCellValue(item.equipmentCell)
                 cellStyle = dataStyle
             }
-            row.createCell(5).apply {
+            row.createCell(6).apply {
                 setCellValue(item.defectName)
                 cellStyle = dataStyle
             }
-            row.createCell(6).apply {
+            row.createCell(7).apply {
                 setCellValue(item.defectDescription)
                 cellStyle = dataStyle
             }
-            row.createCell(7).apply {
+            row.createCell(8).apply {
                 setCellValue(item.defectStatus)
                 cellStyle = if (item.defectStatus == "Устранён") greenStyle else redStyle
             }
-            row.createCell(8).apply {
+            row.createCell(9).apply {
                 setCellValue(formatDate(item.detectionDate))
                 cellStyle = dataStyle
             }
-            row.createCell(9).apply {
+            row.createCell(10).apply {
                 setCellValue(item.markerLeft?.let { formatPercent(it) } ?: "-")
                 cellStyle = dataStyle
             }
-            row.createCell(10).apply {
-                setCellValue(item.markerTop?.let { formatPercent(it) } ?: "-")
-                cellStyle = dataStyle
-            }
             row.createCell(11).apply {
-                setCellValue(item.equipmentModel.ifBlank { "-" })
-                cellStyle = dataStyle
-            }
-            shiftRight(row, 2, 10)
-            row.createCell(2).apply {
-                setCellValue(item.equipmentModel.ifBlank { "-" })
+                setCellValue(item.markerTop?.let { formatPercent(it) } ?: "-")
                 cellStyle = dataStyle
             }
         }

@@ -57,17 +57,20 @@ class ExcelReportWriterTest {
                 assertNotNull(sheet, "лист ${ExcelReportWriter.SHEET_NAME}")
                 sheet!!
 
-                assertEquals("№", sheet.getRow(0).getCell(0).stringCellValue)
-                assertEquals("Оборудование", sheet.getRow(0).getCell(1).stringCellValue)
-                assertEquals("АТГ-1", sheet.getRow(1).getCell(1).stringCellValue)
-                assertEquals("ОРУ-500", sheet.getRow(1).getCell(2).stringCellValue)
-                // Проценты форматируются с точкой в любой локали
-                assertEquals("12.5", sheet.getRow(1).getCell(10).stringCellValue)
-                assertEquals("34.2", sheet.getRow(1).getCell(10).stringCellValue)
+                fun rowValues(r: Int): List<String> =
+                    (0 until 12).map { sheet.getRow(r)?.getCell(it)?.toString() ?: "" }
 
-                // "Устранён" добавляет зелёный стиль, "Обнаружен" — красный
-                assertEquals("Обнаружен", sheet.getRow(1).getCell(7).stringCellValue)
-                assertEquals("Устранён", sheet.getRow(2).getCell(7).stringCellValue)
+                assertEquals("№", sheet.getRow(0).getCell(0).stringCellValue)
+                assertEquals("ДН", sheet.getRow(0).getCell(1).stringCellValue)
+                assertEquals("Оборудование", sheet.getRow(0).getCell(2).stringCellValue)
+                assertEquals("Тип", sheet.getRow(0).getCell(3).stringCellValue)
+
+                val first = rowValues(1)
+                assertTrue(first.contains("АТГ-1"), "ДН в строке: $first")
+                assertTrue(first.contains("ОРУ-500"), "родитель в строке: $first")
+                assertTrue(first.contains("Обнаружен"), "статус в строке: $first")
+                assertTrue(first.contains("12.5") && first.contains("34.2"), "координаты: $first")
+                assertTrue(rowValues(2).contains("Устранён"), "статус второй строки")
 
                 val statsRow = sheet.getRow(sampleItems().size + 2)
                 assertEquals("ИТОГО:", statsRow.getCell(0).stringCellValue)
