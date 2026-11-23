@@ -62,7 +62,7 @@ class ExcelReportWriterTest {
                 assertEquals("АТГ-1", sheet.getRow(1).getCell(1).stringCellValue)
                 assertEquals("ОРУ-500", sheet.getRow(1).getCell(2).stringCellValue)
                 // Проценты форматируются с точкой в любой локали
-                assertEquals("12.5", sheet.getRow(1).getCell(9).stringCellValue)
+                assertEquals("12.5", sheet.getRow(1).getCell(10).stringCellValue)
                 assertEquals("34.2", sheet.getRow(1).getCell(10).stringCellValue)
 
                 // "Устранён" добавляет зелёный стиль, "Обнаружен" — красный
