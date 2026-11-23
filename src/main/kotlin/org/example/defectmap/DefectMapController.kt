@@ -294,23 +294,29 @@ class DefectMapController {
         VBox.setVgrow(previewText, javafx.scene.layout.Priority.ALWAYS)
         previewText.minHeight = 200.0    // ← минимальная высота
 
-        fun updatePreview() {
-            val searchText = reportSearch.text.trim()
-            val searched = if (searchText.isEmpty()) reportData else reportData.filter { item ->
-                item.equipmentName.contains(searchText, ignoreCase = true) ||
-                    item.equipmentType.contains(searchText, ignoreCase = true) ||
-                    item.equipmentModel.contains(searchText, ignoreCase = true) ||
-                    item.equipmentCell.contains(searchText, ignoreCase = true)
+        fun applySearch(items: List<ReportItem>): List<ReportItem> {
+            val q = reportSearch.text.trim()
+            if (q.isEmpty()) return items
+            return items.filter { item ->
+                item.equipmentName.contains(q, ignoreCase = true) ||
+                    item.equipmentType.contains(q, ignoreCase = true) ||
+                    item.equipmentModel.contains(q, ignoreCase = true) ||
+                    item.equipmentCell.contains(q, ignoreCase = true)
             }
-            val filtered = filterReportData(
-                searched,
-                statusCombo.value,
-                typeCombo.value,
-                cellCombo.value,
-                defectTypeCombo.value,
-                dateFrom.value,
-                dateTo.value
-            )
+        }
+
+        fun filteredItems(): List<ReportItem> = filterReportData(
+            applySearch(reportData),
+            statusCombo.value,
+            typeCombo.value,
+            cellCombo.value ?: "Все ячейки",
+            defectTypeCombo.value,
+            dateFrom.value,
+            dateTo.value
+        )
+
+        fun updatePreview() {
+            val filtered = filteredItems()
             countLabel.text = "Найдено: ${filtered.size} дефектов"
 
             if (filtered.isNotEmpty()) {
@@ -362,15 +368,7 @@ class DefectMapController {
         val createBtn = Button("📄 Сформировать отчёт")
         createBtn.style = "-fx-background-color: #28a745; -fx-text-fill: white; -fx-padding: 8px 20px; -fx-background-radius: 4px; -fx-font-weight: bold; -fx-font-size: 13px;"
         createBtn.setOnAction {
-            val filtered = filterReportData(
-                reportData,
-                statusCombo.value,
-                typeCombo.value,
-                cellCombo.value ?: "Все ячейки",
-                defectTypeCombo.value,
-                dateFrom.value,
-                dateTo.value
-            )
+            val filtered = filteredItems()
             if (filtered.isEmpty()) {
                 showInfo("⚠️ Нет дефектов по выбранным фильтрам")
                 return@setOnAction
@@ -381,15 +379,7 @@ class DefectMapController {
         val printBtn = Button("🖨️ Печать")
         printBtn.style = "-fx-background-color: #007bff; -fx-text-fill: white; -fx-padding: 8px 20px; -fx-background-radius: 4px; -fx-font-weight: bold; -fx-font-size: 13px;"
         printBtn.setOnAction {
-            val filtered = filterReportData(
-                reportData,
-                statusCombo.value,
-                typeCombo.value,
-                cellCombo.value ?: "Все ячейки",
-                defectTypeCombo.value,
-                dateFrom.value,
-                dateTo.value
-            )
+            val filtered = filteredItems()
             if (filtered.isEmpty()) {
                 showInfo("⚠️ Нет дефектов по выбранным фильтрам")
                 return@setOnAction
@@ -2682,7 +2672,7 @@ class DefectMapController {
 
                             val (modelConfirmed, modelId) = askEquipmentModel(type, typeName, null)
                             if (!modelConfirmed) {
-                                println("❌ Выбор типа изделия отменён")
+                                println("❌ Выбор типа оборудования отменён")
                                 return@runLater
                             }
 
@@ -3123,7 +3113,7 @@ class DefectMapController {
     )
 
     /**
-     * Одно окно со всеми параметрами оборудования: ДН, категория, тип изделия,
+     * Одно окно со всеми параметрами оборудования: ДН, категория, тип оборудования,
      * ячейка, размер метки и индивидуальное фото. Используется для
      * редактирования (добавление по-прежнему идёт через клик по схеме).
      */
@@ -3159,7 +3149,7 @@ class DefectMapController {
         sizeCombo.items.addAll(listOf("small", "normal", "large"))
         sizeCombo.value = initial.size
 
-        val photoLabel = Label(photoName ?: "не задано — будет фото типа изделия")
+        val photoLabel = Label(photoName ?: "не задано — будет фото типа оборудования")
         photoLabel.style = "-fx-text-fill: #6c757d; -fx-font-size: 12px;"
         photoLabel.isWrapText = true
 
@@ -3203,7 +3193,7 @@ class DefectMapController {
         val clearPhotoBtn = Button("🚫 Без фото")
         clearPhotoBtn.setOnAction {
             photoName = null
-            photoLabel.text = "не задано — будет фото типа изделия"
+            photoLabel.text = "не задано — будет фото типа оборудования"
         }
 
         val grid = GridPane()
@@ -3212,7 +3202,7 @@ class DefectMapController {
         grid.style = "-fx-padding: 15px;"
         grid.add(Label("ДН:"), 0, 0); grid.add(nameField, 1, 0)
         grid.add(Label("Оборудование:"), 0, 1); grid.add(typeCombo, 1, 1)
-        grid.add(Label("Тип изделия:"), 0, 2); grid.add(modelCombo, 1, 2)
+        grid.add(Label("Тип оборудования:"), 0, 2); grid.add(modelCombo, 1, 2)
         grid.add(Label("Ячейка:"), 0, 3)
         grid.add(HBox(8.0, cellField, pickCellBtn), 1, 3)
         grid.add(Label("Размер метки:"), 0, 4); grid.add(sizeCombo, 1, 4)
@@ -3425,7 +3415,7 @@ class DefectMapController {
 
                         val (modelConfirmed, newModelId) = askEquipmentModel(newType, typeName, null)
                         if (!modelConfirmed) {
-                            println("❌ Выбор типа изделия отменён")
+                            println("❌ Выбор типа оборудования отменён")
                             return@runLater
                         }
 
@@ -4421,7 +4411,7 @@ class DefectMapController {
     // ======================== УПРАВЛЕНИЕ ТИПАМИ ========================
 
     /**
-     * Спрашивает тип изделия (модель) для категории [typeKey].
+     * Спрашивает тип оборудования (модель) для категории [typeKey].
      *
      * Возвращает пару: подтвердил ли пользователь и id модели (null — без типа).
      * Введённое название модели при необходимости создаётся в справочнике.
@@ -4432,7 +4422,7 @@ class DefectMapController {
         currentModelId: String?
     ): Pair<Boolean, String?> {
         val dialog = Dialog<ButtonType>()
-        dialog.title = "Тип изделия"
+        dialog.title = "Тип оборудования"
         dialog.headerText = "Оборудование: $typeName"
 
         val combo = ComboBox<String>()
@@ -4445,7 +4435,7 @@ class DefectMapController {
 
         val content = VBox(
             8.0,
-            Label("Тип изделия (модель):"),
+            Label("Тип оборудования (модель):"),
             combo,
             Label("Можно выбрать из списка или ввести новый — он сохранится в справочнике.")
         )
@@ -4587,14 +4577,14 @@ class DefectMapController {
         buttonPanel.children.addAll(addBtn, editBtn, deleteBtn, restoreBtn, closeBtn)
 
         // ===== ТИПЫ ИЗДЕЛИЙ (МОДЕЛИ) ВЫБРАННОЙ КАТЕГОРИИ =====
-        val modelsLabel = Label("🔧 Типы изделий: выберите категорию в таблице выше")
+        val modelsLabel = Label("🔧 Типы оборудования: выберите категорию в таблице выше")
         modelsLabel.style = "-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #333; -fx-padding: 8px 0 0 0;"
 
         val modelsTable = TableView<EquipmentModelData>()
         modelsTable.style = "-fx-font-size: 13px;"
         modelsTable.prefHeight = 200.0
 
-        val colModelName = TableColumn<EquipmentModelData, String>("Тип изделия")
+        val colModelName = TableColumn<EquipmentModelData, String>("Тип оборудования")
         colModelName.cellValueFactory = PropertyValueFactory("name")
         colModelName.prefWidth = 220.0
 
@@ -4609,11 +4599,11 @@ class DefectMapController {
         fun refreshModels(typeKey: String?) {
             modelItems.clear()
             if (typeKey == null) {
-                modelsLabel.text = "🔧 Типы изделий: выберите категорию в таблице выше"
+                modelsLabel.text = "🔧 Типы оборудования: выберите категорию в таблице выше"
                 return
             }
             val typeName = EquipmentTypes.getTypeName(typeKey)
-            modelsLabel.text = "🔧 Типы изделий для «$typeName» (${EquipmentModels.forType(typeKey).size})"
+            modelsLabel.text = "🔧 Типы оборудования для «$typeName» (${EquipmentModels.forType(typeKey).size})"
             modelItems.addAll(EquipmentModels.forType(typeKey))
         }
 
@@ -4624,7 +4614,7 @@ class DefectMapController {
         val modelButtons = HBox(10.0)
         modelButtons.alignment = Pos.CENTER_RIGHT
 
-        val addModelBtn = Button("➕ Тип изделия")
+        val addModelBtn = Button("➕ Тип оборудования")
         addModelBtn.style = "-fx-background-color: #17a2b8; -fx-text-fill: white; -fx-padding: 6px 14px; -fx-background-radius: 4px;"
         addModelBtn.setOnAction {
             val category = tableView.selectionModel.selectedItem
@@ -4633,15 +4623,15 @@ class DefectMapController {
                 return@setOnAction
             }
             val input = TextInputDialog()
-            input.title = "Новый тип изделия"
+            input.title = "Новый тип оборудования"
             input.headerText = "Категория: ${category.displayName}"
-            input.contentText = "Название типа изделия (модель):"
+            input.contentText = "Название типа оборудования (модель):"
             input.editor.promptText = "Например, ВВБК-220"
             val res = input.showAndWait()
             if (res.isPresent && res.get().isNotBlank()) {
                 val model = EquipmentModels.ensureModel(database, category.key, res.get())
                 refreshModels(category.key)
-                showToast("✅ Тип изделия добавлен: ${model?.name}")
+                showToast("✅ Тип оборудования добавлен: ${model?.name}")
             }
         }
 
@@ -4650,7 +4640,7 @@ class DefectMapController {
         photoBtn.setOnAction {
             val model = modelsTable.selectionModel.selectedItem
             if (model == null) {
-                showInfo("⚠️ Выберите тип изделия")
+                showInfo("⚠️ Выберите тип оборудования")
                 return@setOnAction
             }
             val chooser = FileChooser()
@@ -4681,7 +4671,7 @@ class DefectMapController {
         clearPhotoBtn.setOnAction {
             val model = modelsTable.selectionModel.selectedItem
             if (model == null) {
-                showInfo("⚠️ Выберите тип изделия")
+                showInfo("⚠️ Выберите тип оборудования")
                 return@setOnAction
             }
             val updated = model.copy(photo = null)
@@ -4691,12 +4681,12 @@ class DefectMapController {
             showToast("Фото убрано у «${model.name}»")
         }
 
-        val deleteModelBtn = Button("🗑️ Удалить тип изделия")
+        val deleteModelBtn = Button("🗑️ Удалить тип оборудования")
         deleteModelBtn.style = "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-padding: 6px 14px; -fx-background-radius: 4px;"
         deleteModelBtn.setOnAction {
             val model = modelsTable.selectionModel.selectedItem
             if (model == null) {
-                showInfo("⚠️ Выберите тип изделия")
+                showInfo("⚠️ Выберите тип оборудования")
                 return@setOnAction
             }
             val used = database.countEquipmentByModel(model.id)
@@ -4705,20 +4695,20 @@ class DefectMapController {
                 return@setOnAction
             }
             val confirm = Alert(AlertType.CONFIRMATION)
-            confirm.title = "Удаление типа изделия"
+            confirm.title = "Удаление типа оборудования"
             confirm.headerText = "Удалить «${model.name}»?"
             val res = confirm.showAndWait()
             if (res.isPresent && res.get() == ButtonType.OK) {
                 database.deleteModel(model.id)
                 EquipmentModels.removeLocal(model.id)
                 refreshModels(model.typeKey)
-                showToast("🗑️ Тип изделия удалён: ${model.name}")
+                showToast("🗑️ Тип оборудования удалён: ${model.name}")
             }
         }
 
         modelButtons.children.addAll(addModelBtn, photoBtn, clearPhotoBtn, deleteModelBtn)
 
-        val infoLabel = Label("💡 Типы изделий назначаются оборудованию в карточке/диалоге типа. Фото берётся по типу изделия, иначе — по категории, иначе заглушка.")
+        val infoLabel = Label("💡 Типы оборудования назначаются оборудованию в карточке/диалоге типа. Фото берётся по типу оборудования, иначе — по категории, иначе заглушка.")
         infoLabel.style = "-fx-text-fill: #6c757d; -fx-font-size: 12px; -fx-wrap-text: true;"
 
         root.children.addAll(headerLabel, tableView, buttonPanel, modelsLabel, modelsTable, modelButtons, infoLabel)

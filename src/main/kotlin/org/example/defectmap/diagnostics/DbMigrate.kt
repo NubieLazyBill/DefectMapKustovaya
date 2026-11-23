@@ -19,7 +19,7 @@ object DbMigrate {
 
     fun run(args: List<String>): Int {
         println("=".repeat(70))
-        println("DefectMap — миграция схемы БД (типы изделий)")
+        println("DefectMap — миграция схемы БД (типы оборудования)")
         println("=".repeat(70))
         println("  Каталог данных: ${AppPaths.dataDir.absolutePath}")
 

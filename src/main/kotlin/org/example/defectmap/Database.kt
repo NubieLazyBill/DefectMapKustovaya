@@ -212,9 +212,9 @@ class Database(private val substationKey: String = "kustovaya") {
             )
 
             val bound = countRows("equipment", "model_id IS NOT NULL")
-            println("✅ Типы изделий: создано $created, привязано к оборудованию: $bound")
+            println("✅ Типы оборудования: создано $created, привязано к оборудованию: $bound")
         } catch (e: Exception) {
-            println("⚠️ Не удалось подготовить типы изделий: ${e.message}")
+            println("⚠️ Не удалось подготовить типы оборудования: ${e.message}")
         }
     }
 
@@ -261,7 +261,7 @@ class Database(private val substationKey: String = "kustovaya") {
             stmt.setInt(5, model.sortOrder)
             stmt.executeUpdate()
         }
-        println("💾 Тип изделия сохранён: ${model.name} (${model.typeKey})")
+        println("💾 Тип оборудования сохранён: ${model.name} (${model.typeKey})")
     }
 
     fun deleteModel(id: String) {
@@ -269,7 +269,7 @@ class Database(private val substationKey: String = "kustovaya") {
             stmt.setString(1, id)
             stmt.executeUpdate()
         }
-        println("🗑️ Тип изделия удалён: $id")
+        println("🗑️ Тип оборудования удалён: $id")
     }
 
     /** Сколько единиц оборудования используют модель (для безопасного удаления). */
@@ -280,7 +280,7 @@ class Database(private val substationKey: String = "kustovaya") {
     fun countEquipmentByType(typeKey: String): Int =
         countRows("equipment", "type = '$typeKey'")
 
-    /** Сколько единиц оборудования имеют назначенный тип изделия. */
+    /** Сколько единиц оборудования имеют назначенный тип оборудования. */
     fun countEquipmentWithModel(): Int = countRows("equipment", "model_id IS NOT NULL")
 
     /** Модели указанной категории, доступные в БД. */
@@ -367,7 +367,7 @@ class Database(private val substationKey: String = "kustovaya") {
     }
 
     /**
-     * Назначает оборудованию тип изделия (модель).
+     * Назначает оборудованию тип оборудования (модель).
      *
      * Отдельный метод нужен потому, что оборудование сохраняется из JavaScript
      * (`window.equipment`), где поля `model_id` может не быть: при обычном
@@ -383,7 +383,7 @@ class Database(private val substationKey: String = "kustovaya") {
         }
     }
 
-    /** Индивидуальное фото единицы оборудования (перекрывает фото типа изделия). */
+    /** Индивидуальное фото единицы оборудования (перекрывает фото типа оборудования). */
     fun setEquipmentPhoto(equipmentId: String, photo: String?) {
         val sql = "UPDATE equipment SET photo = ?, updated_at = strftime('%s', 'now') WHERE id = ?"
         connection?.prepareStatement(sql)?.use { stmt ->
@@ -923,7 +923,7 @@ data class EquipmentData(
     val size: String = "normal",
     val markers: List<MarkerPosition> = listOf(),
     val parentId: String? = null,
-    /** Тип изделия (модель) внутри категории [type]; null — не задан. */
+    /** Тип оборудования (модель) внутри категории [type]; null — не задан. */
     val modelId: String? = null,
     /** Индивидуальное фото единицы оборудования (имя файла в images/). */
     val photo: String? = null,
@@ -944,7 +944,7 @@ data class EquipmentTableItem(
     val top: Double,
     val cell: String,
     val size: String = "normal",
-    /** Тип изделия (модель), например «ТФЗМ-220». */
+    /** Тип оборудования (модель), например «ТФЗМ-220». */
     val model: String = ""
 )
 
