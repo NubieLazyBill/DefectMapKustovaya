@@ -65,6 +65,20 @@ object ExcelReportWriter {
         }
     }
 
+    /** Сдвиг колонок [from]..[to] на одну вправо (для вставки колонки «Тип»). */
+    private fun shiftRight(row: org.apache.poi.ss.usermodel.Row, from: Int, to: Int) {
+        for (i in to downTo from) {
+            val src = row.getCell(i) ?: continue
+            val dst = row.createCell(i + 1)
+            dst.cellStyle = src.cellStyle
+            when (src.cellType) {
+                org.apache.poi.ss.usermodel.CellType.NUMERIC -> dst.setCellValue(src.numericCellValue)
+                org.apache.poi.ss.usermodel.CellType.STRING -> dst.setCellValue(src.stringCellValue)
+                else -> dst.setCellValue(src.toString())
+            }
+        }
+    }
+
     private fun fillSheet(workbook: Workbook, sheet: org.apache.poi.ss.usermodel.Sheet, items: List<ReportItem>) {
         val headerStyle = workbook.createCellStyle().apply {
             val font = workbook.createFont()
@@ -129,6 +143,12 @@ object ExcelReportWriter {
             }
         }
 
+        // Порядок колонок: № | ДН | Оборудование | Тип | В составе | ...
+
+        shiftRight(headerRow, 2, 10)
+
+        headerRow.createCell(2).apply { setCellValue("Тип"); cellStyle = headerStyle }
+
         items.forEachIndexed { index, item ->
             val row = sheet.createRow(index + 1)
 
@@ -177,6 +197,11 @@ object ExcelReportWriter {
                 cellStyle = dataStyle
             }
             row.createCell(11).apply {
+                setCellValue(item.equipmentModel.ifBlank { "-" })
+                cellStyle = dataStyle
+            }
+            shiftRight(row, 2, 10)
+            row.createCell(2).apply {
                 setCellValue(item.equipmentModel.ifBlank { "-" })
                 cellStyle = dataStyle
             }

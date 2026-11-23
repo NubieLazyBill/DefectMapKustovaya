@@ -145,14 +145,15 @@ object ReportPrinter {
     /** Доли ширины колонок (в сумме 1.0). */
     private val COLUMNS = listOf(
         "№" to 0.04,
-        "Оборудование" to 0.18,
-        "В составе" to 0.14,
-        "Ячейка" to 0.07,
-        "Вид дефекта" to 0.15,
-        "Описание" to 0.20,
+        "ДН" to 0.16,
+        "Оборудование" to 0.14,
+        "Тип" to 0.11,
+        "В составе" to 0.12,
+        "Ячейка" to 0.06,
+        "Вид дефекта" to 0.13,
+        "Описание" to 0.15,
         "Статус" to 0.09,
         "Дата" to 0.09,
-        "Тип" to 0.10,
     )
 
     private fun buildPage(
@@ -210,13 +211,14 @@ object ReportPrinter {
             val values = listOf(
                 (startIndex + localIndex + 1).toString(),
                 item.equipmentName,
+                item.equipmentType,
+                item.equipmentModel.ifBlank { "—" },
                 item.parentEquipmentName ?: "—",
                 item.equipmentCell,
                 item.defectName,
                 item.defectDescription,
                 item.defectStatus,
                 ExcelReportWriter.formatDate(item.detectionDate),
-                item.equipmentModel.ifBlank { "—" },
             )
             COLUMNS.forEachIndexed { index, (_, fraction) ->
                 row.children.add(
