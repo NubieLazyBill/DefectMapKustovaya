@@ -183,46 +183,50 @@ object AppPaths {
     fun openFolder(folder: File): Boolean {
         if (!folder.exists()) folder.mkdirs()
 
-        // 1. Штатный Desktop API
-        try {
-            if (java.awt.Desktop.isDesktopSupported()) {
-                val desktop = java.awt.Desktop.getDesktop()
-                if (desktop.isSupported(java.awt.Desktop.Action.OPEN)) {
-                    desktop.open(folder)
-                    return true
-                }
-            }
-        } catch (t: Throwable) {
-            println("ℹ️ Desktop.OPEN недоступен (${t.message}), пробуем внешнюю утилиту")
-        }
-
-        // 2. Внешние утилиты платформы
         val commands = when {
             PlatformInfo.isWindows -> listOf(listOf("explorer.exe", folder.absolutePath))
             PlatformInfo.isMac -> listOf(listOf("open", folder.absolutePath))
             else -> listOf(listOf("xdg-open", folder.absolutePath), listOf("gio", "open", folder.absolutePath))
         }
 
-        for (cmd in commands) {
+        // ВАЖНО: всё выполняется в фоновом потоке. Раньше здесь был
+        // process.waitFor(5, SECONDS) прямо в потоке JavaFX — интерфейс
+        // замирал на несколько секунд (а с xdg-open мог и дольше).
+        val worker = Thread {
             try {
-                val process = ProcessBuilder(cmd)
-                    .redirectErrorStream(true)
-                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                    .start()
-                if (process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS) ||
-                    process.isAlive
-                ) {
-                    println("✅ Папка открыта через ${cmd.first()}: ${folder.absolutePath}")
-                    return true
+                if (java.awt.Desktop.isDesktopSupported()) {
+                    val desktop = java.awt.Desktop.getDesktop()
+                    if (desktop.isSupported(java.awt.Desktop.Action.OPEN)) {
+                        desktop.open(folder)
+                        println("✅ Папка открыта: ${folder.absolutePath}")
+                        return@Thread
+                    }
                 }
             } catch (t: Throwable) {
-                println("ℹ️ ${cmd.first()} недоступен: ${t.message}")
+                println("ℹ️ Desktop.OPEN недоступен (${t.message}), пробуем внешнюю утилиту")
             }
-        }
 
-        println("⚠️ Не удалось открыть папку ${folder.absolutePath}")
-        return false
+            for (cmd in commands) {
+                try {
+                    ProcessBuilder(cmd)
+                        .redirectInput(ProcessBuilder.Redirect.DISCARD)
+                        .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                        .redirectError(ProcessBuilder.Redirect.DISCARD)
+                        .start()
+                    println("✅ Папка открыта через ${cmd.first()}: ${folder.absolutePath}")
+                    return@Thread
+                } catch (t: Throwable) {
+                    println("ℹ️ ${cmd.first()} недоступен: ${t.message}")
+                }
+            }
+            println("⚠️ Не удалось открыть папку ${folder.absolutePath}")
+        }
+        worker.isDaemon = true
+        worker.name = "open-folder"
+        worker.start()
+        return true
     }
+
 
     /** Строка для лога/self-test: где лежат данные и почему. */
     fun describe(): String = buildString {
