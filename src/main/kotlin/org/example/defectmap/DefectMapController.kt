@@ -206,7 +206,7 @@ class DefectMapController {
         filtersGrid.vgap = 10.0
         filtersGrid.style = "-fx-padding: 10px 0;"
 
-        // ===== Строка 1: Статус | Тип оборудования =====
+        // ===== Строка 1: Статус | Оборудование =====
         val statusLabel = Label("Статус дефектов:")
         statusLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val statusCombo = ComboBox<String>()
@@ -220,7 +220,7 @@ class DefectMapController {
         reportSearch.promptText = "ДН, оборудование, тип, ячейка"
         reportSearch.style = "-fx-pref-width: 220px; -fx-padding: 5px 8px; -fx-background-radius: 4px; -fx-border-color: #ced4da; -fx-border-radius: 4px;"
 
-        val typeLabel = Label("Тип оборудования:")
+        val typeLabel = Label("Оборудование:")
         typeLabel.style = "-fx-font-weight: bold; -fx-font-size: 13px;"
         val typeCombo = ComboBox<String>()
         val allTypes = listOf("Все") + EquipmentTypes.ALL_TYPES.map { it.second }
@@ -2660,9 +2660,9 @@ class DefectMapController {
                             EquipmentTypes.ALL_TYPES.find { it.first == "v_500" }?.second ?: "Выключатель 500 кВ",
                             EquipmentTypes.ALL_TYPES.map { it.second }
                         )
-                        typeDialog.title = "Тип оборудования"
-                        typeDialog.headerText = "Выберите тип"
-                        typeDialog.contentText = "Тип:"
+                        typeDialog.title = "Оборудование"
+                        typeDialog.headerText = "Выберите оборудование"
+                        typeDialog.contentText = "Оборудование:"
 
                         val typeResult = typeDialog.showAndWait()
                         if (typeResult.isPresent) {
@@ -3403,9 +3403,9 @@ class DefectMapController {
                         EquipmentTypes.ALL_TYPES.find { it.first == currentType }?.second ?: currentType,
                         EquipmentTypes.ALL_TYPES.map { it.second }
                     )
-                    typeDialog.title = "Тип оборудования"
-                    typeDialog.headerText = "Выберите тип"
-                    typeDialog.contentText = "Тип:"
+                    typeDialog.title = "Оборудование"
+                    typeDialog.headerText = "Выберите оборудование"
+                    typeDialog.contentText = "Оборудование:"
 
                     val typeResult = typeDialog.showAndWait()
                     if (typeResult.isPresent) {
@@ -4454,7 +4454,7 @@ class DefectMapController {
 
     private fun showManageTypesDialog() {
         val dialog = Stage()
-        dialog.title = "📋 Управление типами оборудования"
+        dialog.title = "📋 Управление оборудованием"
         dialog.initModality(javafx.stage.Modality.WINDOW_MODAL)
         dialog.initOwner(webView.scene.window)
         dialog.minWidth = 680.0
@@ -4463,7 +4463,7 @@ class DefectMapController {
         val root = VBox(10.0)
         root.style = "-fx-background-color: white; -fx-padding: 20px;"
 
-        val headerLabel = Label("📋 Типы оборудования (${EquipmentTypes.ALL_TYPES.size})")
+        val headerLabel = Label("📋 Оборудование (${EquipmentTypes.ALL_TYPES.size})")
         headerLabel.style = "-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #333;"
 
         val tableView = TableView<EquipmentTypeData>()
@@ -4506,7 +4506,7 @@ class DefectMapController {
                 database.saveType(newType)
                 EquipmentTypes.addType(newType.key, newType.displayName, newType.letter)
                 observableTypes.add(newType)
-                headerLabel.text = "📋 Типы оборудования (${EquipmentTypes.ALL_TYPES.size})"
+                headerLabel.text = "📋 Оборудование (${EquipmentTypes.ALL_TYPES.size})"
                 showToast("✅ Тип добавлен: ${newType.displayName}")
             }
         }
@@ -4544,7 +4544,7 @@ class DefectMapController {
                     database.deleteType(selected.key)
                     EquipmentTypes.removeType(selected.key)
                     observableTypes.remove(selected)
-                    headerLabel.text = "📋 Типы оборудования (${EquipmentTypes.ALL_TYPES.size})"
+                    headerLabel.text = "📋 Оборудование (${EquipmentTypes.ALL_TYPES.size})"
                     showToast("🗑️ Тип удалён: ${selected.displayName}")
                 }
             } else {
@@ -4565,7 +4565,7 @@ class DefectMapController {
                 EquipmentTypes.reloadDefaults()
                 observableTypes.clear()
                 observableTypes.addAll(database.loadAllTypes())
-                headerLabel.text = "📋 Типы оборудования (${EquipmentTypes.ALL_TYPES.size})"
+                headerLabel.text = "📋 Оборудование (${EquipmentTypes.ALL_TYPES.size})"
                 showToast("✅ Дефолтные типы восстановлены")
             }
         }
@@ -4577,7 +4577,7 @@ class DefectMapController {
         buttonPanel.children.addAll(addBtn, editBtn, deleteBtn, restoreBtn, closeBtn)
 
         // ===== ТИПЫ ИЗДЕЛИЙ (МОДЕЛИ) ВЫБРАННОЙ КАТЕГОРИИ =====
-        val modelsLabel = Label("🔧 Типы оборудования: выберите категорию в таблице выше")
+        val modelsLabel = Label("🔧 Тип оборудования: выберите оборудование в таблице выше")
         modelsLabel.style = "-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #333; -fx-padding: 8px 0 0 0;"
 
         val modelsTable = TableView<EquipmentModelData>()
@@ -4599,11 +4599,11 @@ class DefectMapController {
         fun refreshModels(typeKey: String?) {
             modelItems.clear()
             if (typeKey == null) {
-                modelsLabel.text = "🔧 Типы оборудования: выберите категорию в таблице выше"
+                modelsLabel.text = "🔧 Тип оборудования: выберите оборудование в таблице выше"
                 return
             }
             val typeName = EquipmentTypes.getTypeName(typeKey)
-            modelsLabel.text = "🔧 Типы оборудования для «$typeName» (${EquipmentModels.forType(typeKey).size})"
+            modelsLabel.text = "🔧 Тип оборудования для «$typeName» (${EquipmentModels.forType(typeKey).size})"
             modelItems.addAll(EquipmentModels.forType(typeKey))
         }
 
@@ -4708,7 +4708,7 @@ class DefectMapController {
 
         modelButtons.children.addAll(addModelBtn, photoBtn, clearPhotoBtn, deleteModelBtn)
 
-        val infoLabel = Label("💡 Типы оборудования назначаются оборудованию в карточке/диалоге типа. Фото берётся по типу оборудования, иначе — по категории, иначе заглушка.")
+        val infoLabel = Label("💡 Оборудование — это категория (например, «Разъединитель 220 кВ»), тип оборудования — марка («РНДЗ-220»). Фото берётся по марке, иначе по категории, иначе заглушка.")
         infoLabel.style = "-fx-text-fill: #6c757d; -fx-font-size: 12px; -fx-wrap-text: true;"
 
         root.children.addAll(headerLabel, tableView, buttonPanel, modelsLabel, modelsTable, modelButtons, infoLabel)
