@@ -669,6 +669,20 @@ class DefectMapController {
                 println("⚠️ Не удалось зарегистрировать горячие клавиши масштаба (нет сцены)")
             }
 
+            // Быстрый доступ к окну дефектов: Ctrl+D
+            webView.scene?.accelerators?.put(
+                KeyCodeCombination(KeyCode.D, KeyCombination.CONTROL_DOWN),
+                Runnable {
+                    try {
+                        showDefectsList()
+                    } catch (t: Throwable) {
+                        println("❌ Ошибка открытия окна дефектов: $t")
+                        t.printStackTrace()
+                    }
+                }
+            )
+            println("⌨️ Ctrl+D — окно дефектов")
+
             // Фильтр фазы перехвата: WebView забирает Ctrl+0 себе, поэтому
             // обрабатываем масштаб раньше, чем событие дойдёт до страницы.
             stage?.scene?.addEventFilter(KeyEvent.KEY_PRESSED) { e ->
@@ -1594,7 +1608,14 @@ class DefectMapController {
 
     private fun setupButtons() {
         viewEquipmentBtn.setOnAction { viewEquipmentList() }
-        defectsBtn.setOnAction { showDefectsList() }
+        defectsBtn.setOnAction {
+            try {
+                showDefectsList()
+            } catch (t: Throwable) {
+                println("❌ Ошибка открытия окна дефектов: $t")
+                t.printStackTrace()
+            }
+        }
     }
 
     // ======================== ПЕРЕКЛЮЧЕНИЕ РЕЖИМА РЕДАКТИРОВАНИЯ (ИСПРАВЛЕНО) ========================
@@ -1814,21 +1835,13 @@ class DefectMapController {
         }
 
         val colDate = TableColumn<DefectViewItem, String>("Дата")
-        colDate.cellValueFactory = PropertyValueFactory("detectionDate")
+        colDate.cellValueFactory = javafx.util.Callback { cell ->
+            javafx.beans.property.ReadOnlyStringWrapper(
+                ExcelReportWriter.formatDate(cell.value.detectionDate)
+            )
+        }
         colDate.prefWidth = 95.0
         colDate.style = "-fx-alignment: CENTER;"
-        colDate.setCellFactory {
-            object : TableCell<DefectViewItem, String>() {
-                override fun updateItem(item: String?, empty: Boolean) {
-                    super.updateItem(item, empty)
-                    text = if (empty || item.isNullOrBlank()) {
-                        null
-                    } else {
-                        ExcelReportWriter.formatDate(item.toLongOrNull())
-                    }
-                }
-            }
-        }
 
         tableView.columns.addAll(
             colEquipment, colEquipType, colModel, colCell,
@@ -1945,12 +1958,19 @@ class DefectMapController {
         popupStage.isResizable = true
         popupStage.minWidth = 900.0
         popupStage.minHeight = 600.0
+        // Владелец + модальность: окно не теряется позади главного
+        webView.scene?.window?.let { owner ->
+            popupStage.initOwner(owner)
+            popupStage.initModality(javafx.stage.Modality.WINDOW_MODAL)
+        }
 
         defectsListStage = popupStage
         popupStage.setOnHidden {
             defectsListStage = null
         }
 
+        popupStage.toFront()
+        popupStage.requestFocus()
         popupStage.showAndWait()
     }
 
